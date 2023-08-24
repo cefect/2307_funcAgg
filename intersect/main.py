@@ -14,6 +14,9 @@ from rasterstats import zonal_stats
 
 from intersect.osm import retrieve_osm_buildings
 
+from definitions import wrk_dir
+from hp import init_log, today_str
+
 #===============================================================================
 # file indexers
 #===============================================================================
@@ -21,7 +24,7 @@ from intersect.osm import retrieve_osm_buildings
 index_country_fp_d = {
     'BGD':'BGD_tindex_0725.gpkg'}
 
-index_country_fp_d = {k:os.path.join(r'l:\10_IO\2210_AggFSyn\ins\indexes', v) for k,v in index_country_fp_d.items()}
+index_country_fp_d = {k:os.path.join(r'l:\10_IO\2307_funcAgg\ins\indexes', v) for k,v in index_country_fp_d.items()}
 
 #hazard tiles
 index_hazard_fp_d ={
@@ -32,25 +35,38 @@ index_hazard_fp_d = {k:os.path.join(r'd:\05_DATA\2307_funcAgg\fathom\global3', v
 
 
 
-def run_samples_on_country(country_key, hazard_key):
+def run_samples_on_country(country_key, hazard_key,
+                           out_dir=None):
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'samples')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    log = init_log(name=f'samp', fp=os.path.join(out_dir, today_str+'.log'))
+    log.info(f'on {country_key} x {hazard_key}')
     #===========================================================================
     # #load tiles
     #===========================================================================
-    #country
- 
+    #country 
     gdf = gpd.read_file(index_country_fp_d[country_key])
+    log.info(f'loaded country tiles w/ {len(gdf)}')
     
     #hazard
     haz_tile_gdf = gpd.read_file(index_hazard_fp_d[hazard_key])
+    log.info(f'loaded hazard tiles w/ {len(haz_tile_gdf)}')
     
     
-    #loop through each tile 
+    #===========================================================================
+    # #loop through each tile 
+    #===========================================================================
     for i, row in gdf.to_crs(epsg=4326).iterrows():
-        print(f'building for polygon %i'%row['id'])
+        log.info(f'building for polygon %i'%row['id'])
         
         #get the geojson file
         """this retrieves precompiled files if they are available"""
-        poly_fp = retrieve_osm_buildings('BGD', row.geometry.bounds)
+        poly_fp = retrieve_osm_buildings(country_key, row.geometry.bounds)
         
         #retrieve the ratser
         bx = haz_tile_gdf.to_crs(epsg=4326).geometry.intersects(row.geometry.centroid)

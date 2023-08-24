@@ -14,10 +14,10 @@ import geopandas as gpd
 from shapely.geometry import shape
 from rasterstats import zonal_stats
 
-from definitions import root_dir
+from definitions import osm_pbf_basedir
 
 #OSM pbf data directories
-osm_pbf_basedir=r'l:\10_IO\2210_AggFSyn\ins\osm_20230725'
+
 osm_pbf_data = {
     'BGD':'bangladesh-latest.osm.pbf',
     'AUS':'australia-latest.osm.pbf',
@@ -88,6 +88,10 @@ def get_tag_filter(
     filter_fp = os.path.join(lib_dir, f'{uuid}.pbf')
     #filter_fp=os.path.join(lib_dir, f'{os.path.basename(pbf_raw_fp)}_{filter}.pbf'.replace(r'/', '_'))
     
+    """
+    print(os.environ['PATH'])
+    """
+    
     if not os.path.exists(filter_fp):   
         cmd_str = f'osmium tags-filter {pbf_raw_fp} {filter_str} -o {filter_fp}'
         print(f'executing \n    {cmd_str}')
@@ -128,6 +132,7 @@ def get_box_filter(
     if not os.path.exists(filter_fp):   
         cmd_str = f'osmium extract {pbf_fp} -b {bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]} -s simple -o {filter_fp}'
         print(f'executing \n    {cmd_str}')
+        print(os.environ['PATH'])
         result = os.system(cmd_str)
         assert result==0, f'tags-filter failed w/ {result}'
         
