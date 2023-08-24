@@ -1,0 +1,125 @@
+'''
+Created on Aug. 24, 2023
+
+@author: cefect
+'''
+
+#===============================================================================
+# IMPORTS-------
+#===============================================================================
+import os, logging, pprint, webbrowser, sys
+import logging.config
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+
+from definitions import wrk_dir, logcfg_file
+
+
+today_str = datetime.now().strftime('%Y%m%d')
+
+#===============================================================================
+# loggers-----------
+#===============================================================================
+log_format_str = '%(levelname)s.%(name)s.%(asctime)s:  %(message)s'
+def init_root_logger(
+ 
+        log_dir = wrk_dir,
+        ):
+    logger = logging.getLogger() #get the root logger
+    
+    logging.config.fileConfig(logcfg_file,
+                              defaults={'logdir':str(log_dir).replace('\\','/')},
+                              disable_existing_loggers=True,
+                              ) #load the configuration file 
+    
+    logger.info(f'root logger initiated and configured from file: {logcfg_file}\n    logdir={log_dir}')
+    
+    return logger
+
+def get_new_file_logger(
+        name='r',
+        level=logging.DEBUG,
+        fp=None, #file location to log to
+        logger=None,
+        ):
+    
+    #===========================================================================
+    # configure the logger
+    #===========================================================================
+    if logger is None:
+        logger = logging.getLogger(name)
+        
+    logger.setLevel(level)
+    
+    #===========================================================================
+    # configure the handler
+    #===========================================================================
+    assert fp.endswith('.log')
+    
+    formatter = logging.Formatter(log_format_str)        
+    handler = logging.FileHandler(fp, mode='w') #Create a file handler at the passed filename 
+    handler.setFormatter(formatter) #attach teh formater object
+    handler.setLevel(level) #set the level of the handler
+    
+    logger.addHandler(handler) #attach teh handler to the logger
+    
+    logger.info('built new file logger  here \n    %s'%(fp))
+    
+    return logger
+ 
+def init_log(
+ 
+        log_dir=wrk_dir,
+        **kwargs):
+    """wrapper to setup the root loger and create a file logger"""
+    
+    root_logger = init_root_logger(log_dir=log_dir) 
+    
+    #set up the file logger
+    return get_new_file_logger(**kwargs)
+
+
+def get_log_stream(name=None, level=None):
+    """get a logger with stream handler"""
+    if name is None: name=str(os.getpid())
+    if level is None:
+        if __debug__:
+            level=logging.DEBUG
+        else:
+            level=logging.INFO
+    
+    logger = logging.getLogger(name)
+    
+    #see if it has been configured
+    if not logger.handlers:
+        logger.setLevel(level)
+        handler = logging.StreamHandler(
+            stream=sys.stdout, #send to stdout (supports colors)
+            ) #Create a file handler at the passed filename 
+        formatter = logging.Formatter(log_format_str) 
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+    
+#===============================================================================
+# MISC-----------
+#===============================================================================
+def dstr(d,
+         width=100, indent=0.3, compact=True, sort_dicts =False,
+         ):
+    return pprint.pformat(d, width=width, indent=indent, compact=compact, sort_dicts =sort_dicts)
+
+def view(df):
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+    import webbrowser
+    #import pandas as pd
+    from tempfile import NamedTemporaryFile
+
+    with NamedTemporaryFile(delete=False, suffix='.html', mode='w') as f:
+        #type(f)
+        df.to_html(buf=f)
+        
+    webbrowser.open(f.name)
