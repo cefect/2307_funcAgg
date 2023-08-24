@@ -1,4 +1,4 @@
-name: 2307_funcAgg2
+name: funcAgg3
 channels:
   - conda-forge
 dependencies:

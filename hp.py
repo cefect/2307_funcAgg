@@ -13,6 +13,8 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import rasterio as rio
+import geopandas as gpd
 
 from definitions import wrk_dir, logcfg_file
 
@@ -102,6 +104,42 @@ def get_log_stream(name=None, level=None):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     return logger
+
+
+#===============================================================================
+# FILES-------
+#===============================================================================
+
+#===============================================================================
+# GEOPANDAS-------
+#===============================================================================
+def get_raster_point_samples(gser, rlay_fp, colName=None, nodata=None,
+                             ):
+    """sample a raster with some points"""
+    
+    assert isinstance(gser, gpd.geoseries.GeoSeries)
+    assert np.all(gser.geom_type=='Point')
+    
+    with rio.open(rlay_fp) as rlay_ds:
+ 
+        #defaults
+        if colName is None: 
+            colName = os.path.basename(rlay_ds.name)
+            
+        if nodata is None:
+            nodata=rlay_ds.nodata
+        
+        #get points
+        coord_l = [(x,y) for x,y in zip(gser.x , gser.y)]
+        samp_l = [x[0] for x in rlay_ds.sample(coord_l)]
+     
+        
+        #replace nulls
+        samp_ar = np.where(np.array([samp_l])==nodata, np.nan, np.array([samp_l]))[0]        
+        
+        
+    return gpd.GeoDataFrame(data={colName:samp_ar}, index=gser.index, geometry=gser)
+ 
     
 #===============================================================================
 # MISC-----------

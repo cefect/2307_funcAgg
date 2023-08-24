@@ -279,14 +279,7 @@ def retrieve_osm_buildings(
     
     #export data
     osm_filter_fp = export_pbf_to_geojson(filter_tag_box_fp)
-    #extract_geometries(filter_tag_box_fp)
-    
-    
-    
-    #sample rasters
-    #gdf = pbf_to_geodataframe(filter_tag_box_fp)
-    #area_process(filter_tag_box_fp)
-    
+ 
     
     print(f'finished on \n    {osm_filter_fp}')
     
