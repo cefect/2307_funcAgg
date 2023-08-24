@@ -1,0 +1,13 @@
+name: 2307_funcAgg
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11.*
+  - numpy
+  - pandas
+  - pytest=7.4.*
+  - matplotlib=3.7.*
+  - rasterio
+  - pip
+  - pip:
+    - osmium
