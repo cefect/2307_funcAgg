@@ -20,7 +20,7 @@ from rasterstats import zonal_stats
 
 from intersect.osm import retrieve_osm_buildings
 
-from definitions import wrk_dir, lib_dir
+from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d
 from definitions import temp_dir as temp_dirM
 
 #===============================================================================
@@ -40,31 +40,7 @@ from hp import (
 #===============================================================================
 # file indexers
 #===============================================================================
-#country tiles
-index_country_fp_d = {
-    'BGD':'BGD_tindex_0725.gpkg',
-    'AUS':'AUS_tindex_0824.gpkg',
-    'ZAF':'ZAF_tindex_0824.gpkg',
-    'BRA':'BRA_tindex_0824.gpkg',
-    'CAN':'CAN_tindex_0824.gpkg',
-    'DEU':'DEU_tindex_0824.gpkg',    
-    }
 
-index_country_fp_d = {k:os.path.join(r'l:\10_IO\2307_funcAgg\ins\indexes', v) for k,v in index_country_fp_d.items()}
-
-#hazard tiles
-index_hazard_fp_d ={
-    '500_fluvial':r'500_fluvial\tileindex_500_fluvial.gpkg',
-    '500_pluvial':r'500_pluvial\tileindex_500_pluvial.gpkg',
-    '100_pluvial':r'100_pluvial\tileindex_100_pluvial.gpkg',
-    '100_fluvial':r'100_fluvial\tileindex_100_fluvial.gpkg',
-    '050_pluvial':r'050_pluvial\tileindex_050_pluvial.gpkg',
-    '050_fluvial':r'050_fluvial\tileindex_050_fluvial.gpkg',
-    '010_pluvial':r'010_pluvial\tileindex_010_pluvial.gpkg',
-    '010_fluvial':r'010_fluvial\tileindex_010_fluvial.gpkg',    
-    }
-
-index_hazard_fp_d = {k:os.path.join(r'd:\05_DATA\2307_funcAgg\fathom\global3', v) for k,v in index_hazard_fp_d.items()}
 
 
 def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
