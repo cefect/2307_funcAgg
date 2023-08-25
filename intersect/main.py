@@ -172,6 +172,7 @@ def run_samples_on_country(country_key, hazard_key,
     # defaults
     #===========================================================================
     start=datetime.now()
+    assert hazard_key in index_hazard_fp_d, hazard_key
     if out_dir is None:
         out_dir = os.path.join(wrk_dir, 'outs', 'samps', country_key, hazard_key)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
