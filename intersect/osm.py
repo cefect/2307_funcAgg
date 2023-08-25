@@ -54,7 +54,8 @@ def get_lib_dir(lib_dir, suffix):
 def _exe_osmimum(osmium_cmd, *args, log=None):
     if log is None: log=get_log_stream()
     
-    log.info(f'executing \'osmium {osmium_cmd}\' w/ {args}')
+    log.info(f'executing \'osmium {osmium_cmd}\'')
+    log.debug(f'args:{args}')
     
     p = subprocess.run(['osmium', osmium_cmd,*args], stderr=sys.stderr, stdout=sys.stdout, check=True)        
     assert p.returncode==0        
@@ -74,6 +75,8 @@ def get_tag_filter(
     """
     retrieve pbf file with tag filter applied
     
+    filteres entire country pbf to just get buildings
+    
     INPUTS
     ------
     precompiled_index_fp: str
@@ -81,7 +84,7 @@ def get_tag_filter(
     """
     log = logger.getChild('tagFilter')
     log.debug(f'applying filter \'{filter_str}\' to \n    {pbf_raw_fp}')
-    lib_dir = get_lib_dir(lib_dir, 'tag')
+    lib_dir = get_lib_dir(lib_dir, '01_tag')
     
     #===========================================================================
     # load index4
@@ -98,33 +101,24 @@ def get_tag_filter(
     # build 
     #===========================================================================
     #get hex
-    uuid = hashlib.sha256(f'{os.path.basename(pbf_raw_fp)}_{filter_str}'.encode("utf-8")).hexdigest()    
-    filter_fp = os.path.join(lib_dir, f'{uuid}.pbf') 
+  
+    uuid = hashlib.shake_256(f'{pbf_raw_fp}_{filter_str}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+    fnstr = os.path.basename(pbf_raw_fp).replace('.osm.pbf', '').replace('-latest', '') #nice country string
+    filter_fp = os.path.join(lib_dir, f'{fnstr}_{uuid}.pbf') 
     
     log.debug(f'on {filter_fp}')
     
     if not os.path.exists(filter_fp):   
-        #=======================================================================
-        # cmd_str = f'osmium tags-filter {pbf_raw_fp} {filter_str} -o {filter_fp}'
-        # log.debug(f'executing \n    {cmd_str}')
-        # result = os.system(cmd_str)
-        # 
-        # 
-        # assert result==0, f'tags-filter failed w/ {result}'
-        #=======================================================================
+ 
         _ = _exe_osmimum('tags-filter', pbf_raw_fp, filter_str, '-o', filter_fp, '--progress', log=log)
-        #=======================================================================
-        # log.info(f'executing \'osmium tags-filter\' on {filter_fp}')
-        # p = subprocess.run(['osmium', 'tags-filter', pbf_raw_fp, filter_str, '-o', filter_fp, '--progress'], stderr=sys.stderr, stdout=sys.stdout, check=True)        
-        # assert p.returncode==0        
-        # log.debug(f'filtere applied successfully and retrived: \n    {filter_fp}')
-        #=======================================================================
+ 
         
     else:
         log.debug(f'tag_filter already exists')
         
  
     assert os.path.exists(filter_fp)
+    assert os.path.getsize(filter_fp)>1e3, f'bad filesize on {filter_fp}'
     
     return filter_fp        
 
@@ -144,27 +138,18 @@ def get_box_filter(
     log = logger.getChild('boxFilter')
     log.debug(f'applying bounds filter \'{bounds}\' to \n    {pbf_fp}')
     #setup the directory
-    lib_dir = get_lib_dir(lib_dir, 'box')    
+    lib_dir = get_lib_dir(lib_dir, '02_box')    
     
     #get the file
     uuid = hashlib.sha256(f'{pbf_fp}_{bounds}'.encode("utf-8")).hexdigest()    
-    filter_fp = os.path.join(lib_dir, f'{uuid}.pbf')
+    fnstr = os.path.basename(pbf_fp).split('_')[0] #nice countyry string
+    filter_fp = os.path.join(lib_dir, f'{fnstr}_{uuid}.pbf')
  
     
     if not os.path.exists(filter_fp):   
- #==============================================================================
- #        cmd_str = f'osmium extract {pbf_fp} -b {bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]} -s simple -o {filter_fp}'
- #        log.debug(f'executing \n    {cmd_str}')
- # 
- #        result = os.system(cmd_str)
- #        assert result==0, f'tags-filter failed w/ {result}'
- #        
- #        #p = subprocess.run(['osmium', 'tags-filter', pbf_raw_fp, filter, '-o', filter_fp], stderr=sys.stderr, stdout=sys.stdout, check=True)
- #        
- #        log.debug(f'finished on {filter_fp}')
- #==============================================================================
+ 
         
-        _ = _exe_osmimum('extract', pbf_fp, '--bbox', f'{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}','-s','simple','-o',filter_fp, '--progress', log=log)
+        _ = _exe_osmimum('extract', pbf_fp, '--bbox', f'{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}','-s','simple','-o',filter_fp,log=log)
         
     else:
         log.debug(f'box_filter already exists')
@@ -175,7 +160,7 @@ def get_box_filter(
     return filter_fp       
 
 def export_pbf_to_geojson(pbf_fp,
-           lib_dir= osm_cache_dir,
+           lib_dir= None,
            logger=None,
            ):
     """export a pbf file into a GIS file""" 
@@ -184,8 +169,12 @@ def export_pbf_to_geojson(pbf_fp,
     #===========================================================================
     log = logger.getChild('export')    
     
+    #setup the directory
+    lib_dir = get_lib_dir(lib_dir, '03_export') 
+    
     uuid = hashlib.sha256(f'{pbf_fp}'.encode("utf-8")).hexdigest()    
-    ofp = os.path.join(lib_dir, f'{uuid}.geojson')
+    fnstr = os.path.basename(pbf_fp).split('_')[0] #nice countyry string
+    ofp = os.path.join(lib_dir, f'{fnstr}_{uuid}.geojson')
     
     log.debug(f'exporting\n    from:{pbf_fp}\n    to:{ofp}')
     """

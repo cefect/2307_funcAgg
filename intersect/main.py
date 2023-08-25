@@ -18,6 +18,8 @@ import geopandas as gpd
 import rasterstats
 from rasterstats import zonal_stats
 
+from concurrent.futures import ProcessPoolExecutor
+
 from intersect.osm import retrieve_osm_buildings
 
 from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d
@@ -51,7 +53,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     #===========================================================================
     start=datetime.now()
     if log is None: log = get_log_stream()
-    if out_dir is None: out_dir=os.path.join(lib_dir, 'bldg_cent')
+    if out_dir is None: out_dir=os.path.join(lib_dir,'bldg_cent', country_key)
     if not os.path.exists(out_dir): os.makedirs(out_dir)
     
     #get record
@@ -116,7 +118,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
     #===========================================================================
     fnstr = f'{country_key}_{hazard_key}_{i}'
     uuid = hashlib.shake_256(f'{fnstr}_{epsg_id}_{area_thresh}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
-    ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.geojson')
+    ofp = os.path.join(out_dir,f'{fnstr}_{uuid}.geojson')
     
     if not os.path.exists(ofp):
         #=======================================================================
@@ -128,11 +130,13 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         
         log.info(f'loading osm building file {os.path.getsize(bldg_fp)/(1024**3)}GB \n    {bldg_fp}')
         bldg_pts_gdf = gpd.read_file(bldg_fp)
+        
         #apply filter
+        log.debug(f'    applying filter on {len(bldg_pts_gdf)}')
         bx = bldg_pts_gdf['area'] > area_thresh
         bldg_pts_gser = bldg_pts_gdf[bx].geometry
         
-        log.info(f'    filtered {bx.sum()}/{len(bx)} w/ area_tresh={area_thresh}')
+        log.debug(f'    filtered {bx.sum()}/{len(bx)} w/ area_tresh={area_thresh}')
         #=======================================================================
         # #retrieve the corresponding hazard raster
         #=======================================================================
@@ -162,11 +166,24 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
     
     return ofp
 
+def _multi_sample_igrid(i, row, country_key, hazard_key, haz_tile_gdf, area_thresh, epsg_id, out_dir, haz_base_dir):
+    #log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
+    try:
+        res = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir,   haz_base_dir=haz_base_dir, log=None)
+        return (i, res, None)
+    except Exception as e:
+        err = row.copy()
+        err['error'] = str(e)
+        #log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
+        return (i, None, err)
+
+
 def run_samples_on_country(country_key, hazard_key,
                            out_dir=None,
                            temp_dir=None,
                            epsg_id=4326,
                            area_thresh=50,
+                           max_workers=None,
                            ):
     #===========================================================================
     # defaults
@@ -182,7 +199,7 @@ def run_samples_on_country(country_key, hazard_key,
     
     if not os.path.exists(temp_dir):os.makedirs(temp_dir)
     
-    log = init_log(name=f'samp', fp=os.path.join(out_dir, today_str+'.log'))
+    log = init_log(name=f'samp.{country_key}.{hazard_key}', fp=os.path.join(out_dir, today_str+'.log'))
     log.info(f'on {country_key} x {hazard_key}')
     
     #===========================================================================
@@ -205,33 +222,67 @@ def run_samples_on_country(country_key, hazard_key,
     #===========================================================================
     # #loop through each tile in the country grid 
     #===========================================================================
+ 
     res_d, err_d=dict(), dict()
     cnt=0
-    for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
-        log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
+    
+    #===========================================================================
+    # single thread
+    #===========================================================================
+    log.info(f'intersecting buildings and hazard per tile \n\n')
+    if max_workers is None:
+        for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
+            log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
+            
+            try:
+                res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
+     
+            except Exception as e:
+                err_d[i] = row.copy()
+                err_d[i]['error'] = str(e)            
+                log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
+            #print(f'computing stats on {len(gdf)} feats')
+            """
+            print(rasterstats.utils.VALID_STATS)
+            """
+            #=======================================================================
+            # start_i = datetime.now()
+            # with fiona.open(poly_fp, mode='r') as src:
+            #     log.info(f'computing stats on {len(src)} polys')            
+            #     zs = zonal_stats(src, rlay_fp, nodata=-32768, stats=['min', 'max', 'mean'], all_touched=False)
+            # 
+            # res_df = pd.DataFrame.from_dict(zs).dropna(axis=0)
+            # tdelta = (datetime.now() - start_i).total_seconds()
+            # log.info(f'got {len(res_df)} feats w/ valid stats in {tdelta:.2f} secs')
+            #=======================================================================
+            cnt+=1
+    
+    #===========================================================================
+    # MULTI thread
+    #===========================================================================
+    else:
+        gdf = gdf.iloc[0:8, :]
+        log.info(f'running {len(gdf)} w/ max_workers={max_workers}')
+        args = (country_key, hazard_key, haz_tile_gdf, area_thresh, epsg_id, out_dir, haz_base_dir)
         
-        try:
-            res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
+        #run once to prime
+        """reduce conflicts...
+        get_tag_filter() for example applies to the whole country"""
+        
+        for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
+            _multi_sample_igrid(i, row, *args)
+            break
  
-        except Exception as e:
-            err_d[i] = row.copy()
-            err_d[i]['error'] = str(e)            
-            log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
-        #print(f'computing stats on {len(gdf)} feats')
-        """
-        print(rasterstats.utils.VALID_STATS)
-        """
-        #=======================================================================
-        # start_i = datetime.now()
-        # with fiona.open(poly_fp, mode='r') as src:
-        #     log.info(f'computing stats on {len(src)} polys')            
-        #     zs = zonal_stats(src, rlay_fp, nodata=-32768, stats=['min', 'max', 'mean'], all_touched=False)
-        # 
-        # res_df = pd.DataFrame.from_dict(zs).dropna(axis=0)
-        # tdelta = (datetime.now() - start_i).total_seconds()
-        # log.info(f'got {len(res_df)} feats w/ valid stats in {tdelta:.2f} secs')
-        #=======================================================================
-        cnt+=1
+        
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_multi_sample_igrid, i, row, *args) for i, row in gdf.to_crs(epsg=epsg_id).iterrows()]
+            for future in futures:
+                i, res, err = future.result()
+                if res is not None:
+                    res_d[i] = res
+                if err is not None:
+                    err_d[i] = err
+        
     
         
  
@@ -245,7 +296,7 @@ def run_samples_on_country(country_key, hazard_key,
         
         err_gdf = pd.concat(err_d, axis=1).T
  
-        log.error(f'writing {len(err_d)} error summaries to \n    {err_ofp}\n{err_gdf}')
+        log.error(f'writing {len(err_d)} error summaries to \n    {err_ofp}\n'+err_gdf['error'])
         err_gdf.set_geometry(err_gdf['geometry']).to_file(err_ofp)
     
     meta_d = {
@@ -261,7 +312,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('AUS', '100_fluvial')
+    run_samples_on_country('AUS', '100_fluvial', max_workers=None)
     
     
     
