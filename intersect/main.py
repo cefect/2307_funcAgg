@@ -261,7 +261,7 @@ def run_samples_on_country(country_key, hazard_key,
     # MULTI thread
     #===========================================================================
     else:
-        gdf = gdf.iloc[0:20, :]
+        #gdf = gdf.iloc[0:20, :]
         log.info(f'running {len(gdf)} w/ max_workers={max_workers}')
         args = (country_key, hazard_key, haz_tile_gdf, area_thresh, epsg_id, out_dir, haz_base_dir)
         
