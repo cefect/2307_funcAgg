@@ -86,7 +86,7 @@ def ogr_export_geometry(fp, ofp):
     cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM {layerName}"
     
     
-    p = subprocess.run(['ogr2ogr', '-f', 'GeoJSON', '-progress', '-dialect', 'SQLite', '-sql',cmd_str, ofp, fp], 
+    p = subprocess.run(['ogr2ogr', '-f', 'GeoJSON', '-dialect', 'SQLite', '-sql',cmd_str, ofp, fp], 
                        stderr=sys.stderr, stdout=sys.stdout, check=True)
  
     
