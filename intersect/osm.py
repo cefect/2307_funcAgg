@@ -54,7 +54,7 @@ def get_lib_dir(lib_dir, suffix):
 def _exe_osmimum(osmium_cmd, *args, log=None):
     if log is None: log=get_log_stream()
     
-    log.info(f'executing \'osmium {osmium_cmd}\'')
+    log.debug(f'executing \'osmium {osmium_cmd}\'')
     log.debug(f'args:{args}')
     
     p = subprocess.run(['osmium', osmium_cmd,*args], stderr=sys.stderr, stdout=sys.stdout, check=True)        
@@ -187,7 +187,7 @@ def export_pbf_to_geojson(pbf_fp,
     if not os.path.exists(ofp):   
  
         
-        _ = _exe_osmimum('export', pbf_fp, '--geometry-types=polygon','-o',ofp, '--progress', log=log)
+        _ = _exe_osmimum('export', pbf_fp, '--geometry-types=polygon','-o',ofp, log=log)
         
     else:
         log.debug(f'exported file already exists')
@@ -331,7 +331,7 @@ def retrieve_osm_buildings(
                     #'output_MB':os.path.getsize(ofp)/(1024**2)
                     }
             
-    log.info(f'buildings retrived at \n    {osm_filter_fp}\n    {dstr(meta_d)}')
+    log.debug(f'buildings retrived at \n    {osm_filter_fp}\n    {dstr(meta_d)}')
     
     
     return osm_filter_fp
