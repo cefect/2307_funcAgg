@@ -11,6 +11,7 @@ call %~dp0..\env\conda_activate
 
 
 for %%H in (%HAZARD_KEYS%) do (
+    ECHO on %%H
     python -O %~dp0\intersect_main.py %COUNTRY_KEY% %%H
     ECHO finished %%H
 )

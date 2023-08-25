@@ -6,7 +6,7 @@ Created on Jul. 25, 2023
 
 intersecting building data with hazard rasters
 '''
-import os, hashlib, sys
+import os, hashlib, sys, subprocess
 
  
  
@@ -15,14 +15,16 @@ from datetime import datetime
 import pandas as pd
 import fiona
 import geopandas as gpd
+from osgeo import ogr
 import rasterstats
 from rasterstats import zonal_stats
+
 
 from concurrent.futures import ProcessPoolExecutor
 
 from intersect.osm import retrieve_osm_buildings
 
-from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d
+from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir
 from definitions import temp_dir as temp_dirM
 
 #===============================================================================
@@ -37,12 +39,65 @@ from hp import (
     dstr
     )
 
-
+equal_area_epsg = 6933
 
 #===============================================================================
-# file indexers
+# BUILDINGS--------
 #===============================================================================
+def ogr_get_layer_names(fp):
+    """Retrieve a list of layer names from a .geojson file"""
+    ds = ogr.Open(fp)
+    num_layers = ds.GetLayerCount()
+    
+    # Extract the layer names list
+    layer_names_list = []
+    for i in range(num_layers):
+        layer = ds.GetLayerByIndex(i)
+        layer_names_list.append(layer.GetName())
+        
+    # Close the file
+    ds = None
+    
+    return layer_names_list
+    
+def ogr_export_geometry(fp, ofp):
+    """use ogr2ogr to extract only the geometry from a file
+    
+    much faster than geojson"""
+    
+    #get the layer names
+    layerName = ogr_get_layer_names(fp)[0]
+    
+    #setup paths
+    fstr = os.path.basename(fp).split('.')[0]
+    #ofp = os.path.join(out_dir, f'{fstr}_geom.geojson')
+    
+    if os.path.exists(ofp):
+        os.remove(ofp)
+        
+ 
+    #extract only the centroids
+    #cmd_str = f"SELECT ST_Centroid(geometry) FROM {layer_names_l[0]}"
+    
+    #geometry only
+    #cmd_str = f"SELECT geometry FROM {layerName}"
+    
+    #geometry and centroid\
+    cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM {layerName}"
+    
+    
+    p = subprocess.run(['ogr2ogr', '-f', 'GeoJSON', '-progress', '-dialect', 'SQLite', '-sql',cmd_str, ofp, fp], 
+                       stderr=sys.stderr, stdout=sys.stdout, check=True)
+ 
+    
+    
 
+
+    assert p.returncode==0  
+    
+    return ofp
+    
+    
 
 
 def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
@@ -68,27 +123,39 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
         log.info(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
         poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log)
         
+        if os.path.getsize(poly_fp)<1e3:
+            log.error(f'empty osm poly file... skipping')
+            return None
         #=======================================================================
         # #drop to centroid                
         #=======================================================================
-        log.info(f'loading osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
-        poly_gdf = gpd.read_file(poly_fp)
+        log.info(f'extracting centroid from osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
         
-        if len(poly_gdf)==0:
-            log.warning(f'for {country_key}.{bounds} got no polygons... skipping ')
-            return None
         
-        log.info(f'converting {len(poly_gdf)} polys to centroids')
+ #==============================================================================
+ #        TOO SLOW
+ #        poly_gdf = gpd.read_file(poly_fp)
+ #        
+ #        if len(poly_gdf)==0:
+ #            log.warning(f'for {country_key}.{bounds} got no polygons... skipping ')
+ #            return None 
+ #            
+ #        
+ #        
+ #        log.info(f'converting {len(poly_gdf)} polys to centroids')
+ #        
+ #        #add area (Equal Area Cylindrical CRS). drop to centroid 
+ #        cent_gdf = gpd.GeoDataFrame(
+ #            poly_gdf.geometry.to_crs(equal_area_epsg).area.rename('area')
+ #            ).set_geometry(poly_gdf.geometry.centroid)
+ # 
+ #        
+ #        cent_gdf.to_file(ofp)
+ #        
+ #        log.info(f'wrote {len(cent_gdf)} to \n    {ofp}')
+ #==============================================================================
         
-        #add area (Equal Area Cylindrical CRS). drop to centroid 
-        cent_gdf = gpd.GeoDataFrame(
-            poly_gdf.geometry.to_crs(6933).area.rename('area')
-            ).set_geometry(poly_gdf.geometry.centroid)
- 
-        
-        cent_gdf.to_file(ofp)
-        
-        log.info(f'wrote {len(cent_gdf)} to \n    {ofp}')
+        ogr_export_geometry(poly_fp, ofp)
         
         #===========================================================================
         # wrap
@@ -107,7 +174,9 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
         
     return ofp
 
-
+#===============================================================================
+# EXECUTORS--------
+#===============================================================================
 def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None):
     
     if log is None: log=get_log_stream()
@@ -129,7 +198,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         if bldg_fp is None:
             return None
         
-        log.info(f'loading osm building file {os.path.getsize(bldg_fp)/(1024**3): .2f} GB: {bldg_fp}')
+        log.info(f'loading bldg_cent {os.path.getsize(bldg_fp)/(1024**3): .2f} GB: {bldg_fp}')
         bldg_pts_gdf = gpd.read_file(bldg_fp)
         
         #apply filter
@@ -315,7 +384,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('AUS', '100_fluvial', max_workers=6)
+    run_samples_on_country('AUS', '100_fluvial', max_workers=4)
     
     
     

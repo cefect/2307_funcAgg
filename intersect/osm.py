@@ -163,7 +163,10 @@ def export_pbf_to_geojson(pbf_fp,
            lib_dir= None,
            logger=None,
            ):
-    """export a pbf file into a GIS file""" 
+    """export a pbf file into a GIS file
+    
+    might be a way to use this for filtering as well
+    couldn't figure out how to exclude fields (i.e., geometry only export)""" 
     #===========================================================================
     # setup
     #===========================================================================
@@ -182,15 +185,7 @@ def export_pbf_to_geojson(pbf_fp,
     """
     
     if not os.path.exists(ofp):   
- #==============================================================================
- #        cmd_str = f'osmium export {pbf_fp} --geometry-types=polygon -o {ofp}'
- #        log.debug(f'executing \n    {cmd_str}')
- #        result = os.system(cmd_str)
- #        assert result==0, f'tags-filter failed w/ {result}'
- # 
- #        
- #        log.debug(f'finished on {ofp}')
- #==============================================================================
+ 
         
         _ = _exe_osmimum('export', pbf_fp, '--geometry-types=polygon','-o',ofp, '--progress', log=log)
         
@@ -227,20 +222,22 @@ class AreaHandler(osmium.SimpleHandler):
             pass
 
         
-def pbf_to_geodataframe(pbf_fp):
-    """extract just the polygons from the pbf file"""
-    
-    # Create an instance of the handler and apply it to the PBF file
-    handler = AreaHandler()
-    
-    print(f'parsing areas from {pbf_fp}')
-    handler.apply_file(pbf_fp)
-    
-    gdf = gpd.GeoDataFrame.from_features(handler.features)
-    
-    print(f'finished w/ {len(gdf)}')
-    
-    return gdf
+#===============================================================================
+# def pbf_to_geodataframe(pbf_fp):
+#     """extract just the polygons from the pbf file"""
+#     
+#     # Create an instance of the handler and apply it to the PBF file
+#     handler = AreaHandler()
+#     
+#     print(f'parsing areas from {pbf_fp}')
+#     handler.apply_file(pbf_fp)
+#     
+#     gdf = gpd.GeoDataFrame.from_features(handler.features)
+#     
+#     print(f'finished w/ {len(gdf)}')
+#     
+#     return gdf
+#===============================================================================
     
     #gdf.to_file(r'l:\10_IO\2210_AggFSyn\outs\gdf.gpkg')
 
