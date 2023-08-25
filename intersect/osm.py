@@ -109,7 +109,7 @@ def get_tag_filter(
     log.debug(f'on {filter_fp}')
     
     if not os.path.exists(filter_fp):   
- 
+        log.info(f'applying tags-filter')
         _ = _exe_osmimum('tags-filter', pbf_raw_fp, filter_str, '-o', filter_fp, '--progress', log=log)
  
         
