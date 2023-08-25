@@ -111,8 +111,9 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
 def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None):
     
     if log is None: log=get_log_stream()
-    i = row['id']
     
+    i = row['id']
+    log = log.getChild(str(i))
     #===========================================================================
     # get record
     #===========================================================================
@@ -128,7 +129,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         if bldg_fp is None:
             return None
         
-        log.info(f'loading osm building file {os.path.getsize(bldg_fp)/(1024**3)}GB \n    {bldg_fp}')
+        log.info(f'loading osm building file {os.path.getsize(bldg_fp)/(1024**3): .2f} GB: {bldg_fp}')
         bldg_pts_gdf = gpd.read_file(bldg_fp)
         
         #apply filter
@@ -157,9 +158,8 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         assert len(samp_pts) == len(bldg_pts_gser)
         log.debug(f'got counts\n' + str(samp_pts.iloc[:, 0].value_counts(dropna=False)))
         
-        #write
-    
-        log.info(f'    writing to \n    {ofp}')
+        #write    
+        log.info(f'    writing samples to: {ofp}')
         samp_pts.to_file(ofp)
     else:
         log.info(f'    record exists: {ofp}')
@@ -261,7 +261,7 @@ def run_samples_on_country(country_key, hazard_key,
     # MULTI thread
     #===========================================================================
     else:
-        gdf = gdf.iloc[0:8, :]
+        gdf = gdf.iloc[0:20, :]
         log.info(f'running {len(gdf)} w/ max_workers={max_workers}')
         args = (country_key, hazard_key, haz_tile_gdf, area_thresh, epsg_id, out_dir, haz_base_dir)
         
@@ -281,7 +281,10 @@ def run_samples_on_country(country_key, hazard_key,
                 if res is not None:
                     res_d[i] = res
                 if err is not None:
+                    err_str = err['error']
+                    log.error(f'{i} returned error:\n{err_str}')
                     err_d[i] = err
+                cnt+=1
         
     
         
@@ -312,7 +315,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('AUS', '100_fluvial', max_workers=None)
+    run_samples_on_country('AUS', '100_fluvial', max_workers=6)
     
     
     
