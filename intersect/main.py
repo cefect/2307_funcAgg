@@ -192,6 +192,11 @@ def run_samples_on_country(country_key, hazard_key,
     gdf = gpd.read_file(index_country_fp_d[country_key])
     log.info(f'loaded country tiles w/ {len(gdf)}')
     
+    #add index
+    if not 'id' in gdf:
+        gdf['id'] = gdf.index
+        
+    
     #hazard
     haz_tile_gdf = gpd.read_file(index_hazard_fp_d[hazard_key])
     log.info(f'loaded hazard tiles w/ {len(haz_tile_gdf)}')
@@ -256,7 +261,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('BGD', '100_fluvial')
+    run_samples_on_country('AUS', '100_fluvial')
     
     
     
