@@ -211,7 +211,7 @@ def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log):
     #===============================================================================
     # #clean and convert
     #===============================================================================
-    log.info(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
+    log.debug(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
     bldg_pts_sample_gser = gpd.read_file(bldg_pts_filter_fp)
     bldg_pts_sample_gser = bldg_pts_sample_gser.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
     bldg_pts_sample_gser.loc[bldg_pts_sample_gser[hazard_key] == nodata, hazard_key] = np.nan
@@ -443,7 +443,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('ZAF', '500_fluvial', max_workers=4)
+    run_samples_on_country('CAN', '500_fluvial', max_workers=None)
     
     
     
