@@ -79,6 +79,9 @@ os.environ['PATH'] += r";l:\09_REPOS\02_JOBS\2307_funcAgg\env\funcAgg3\Library\b
 
 
 #hazard tiles
+"""these indexes should have a 'location' field with the absolute path to each raster file
+the relative path is extracted from this assuming the raster files are in ./raw (relative to the index file)
+"""
 index_hazard_fp_d ={
     '500_fluvial':r'500_fluvial\tileindex_500_fluvial.gpkg',
     '500_pluvial':r'500_pluvial\tileindex_500_pluvial.gpkg',

@@ -106,7 +106,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     return ofp
 
 
-def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None):
+def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None):
     
     if log is None: log=get_log_stream()
     i = row['id']
@@ -138,7 +138,10 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         #=======================================================================
         bx = haz_tile_gdf.to_crs(epsg=epsg_id).geometry.intersects(row.geometry.centroid)
         assert bx.sum() == 1, f'no intersect'
-        rlay_fp = haz_tile_gdf[bx]['location'].values[0]
+        
+        #get filepath
+        """the tile_indexers give absolute filepaths (from when the index was created)"""
+        rlay_fp = os.path.join(haz_base_dir, 'raw', os.path.basename(haz_tile_gdf[bx]['location'].values[0]))
         assert os.path.exists(rlay_fp)
         log.info(f'    for grid {i} got hazard raster {os.path.basename(rlay_fp)}')
         
@@ -192,7 +195,7 @@ def run_samples_on_country(country_key, hazard_key,
     haz_tile_gdf = gpd.read_file(index_hazard_fp_d[hazard_key])
     log.info(f'loaded hazard tiles w/ {len(haz_tile_gdf)}')
     
-    
+    haz_base_dir = os.path.dirname(index_hazard_fp_d[hazard_key])
     #===========================================================================
     # #loop through each tile in the country grid 
     #===========================================================================
@@ -202,7 +205,7 @@ def run_samples_on_country(country_key, hazard_key,
         log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
         
         try:
-            res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log)
+            res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
  
         except Exception as e:
             err_d[i] = row.copy()
@@ -252,7 +255,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('BGD', '500_fluvial')
+    run_samples_on_country('BGD', '100_fluvial')
     
     
     
