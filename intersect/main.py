@@ -13,6 +13,7 @@ import os, hashlib, sys, subprocess
 import psutil
 from datetime import datetime
 import pandas as pd
+import numpy as np
 import fiona
 import geopandas as gpd
 from osgeo import ogr
@@ -26,6 +27,15 @@ from intersect.osm import retrieve_osm_buildings
 
 from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir
 from definitions import temp_dir as temp_dirM
+
+#whitebox
+from whitebox_tools import WhiteboxTools
+
+wbt = WhiteboxTools()
+wbt.set_compress_rasters(False) 
+wbt.set_max_procs(1)
+wbt.set_verbose_mode(True)
+
 
 #===============================================================================
 # print('\n\nPATH:\n')
@@ -177,7 +187,42 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
 #===============================================================================
 # EXECUTORS--------
 #===============================================================================
-def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None):
+
+def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log):
+    """ sample points with WBT"""
+    #write to file
+    """WBT requires a shape file..."""    
+    bldg_pts_filter_fp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')    
+    bldg_pts_gser.to_file(bldg_pts_filter_fp)
+    
+    #===========================================================================
+    # execute
+    #===========================================================================
+    def wbt_callback(value):
+        if not "%" in value:
+            log.debug(value)
+            
+    wbt.extract_raster_values_at_points(
+        rlay_fp, 
+        bldg_pts_filter_fp, 
+        out_text=False, 
+        callback=wbt_callback)
+    
+    #===============================================================================
+    # #clean and convert
+    #===============================================================================
+    log.info(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
+    bldg_pts_sample_gser = gpd.read_file(bldg_pts_filter_fp)
+    bldg_pts_sample_gser = bldg_pts_sample_gser.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
+    bldg_pts_sample_gser.loc[bldg_pts_sample_gser[hazard_key] == nodata, hazard_key] = np.nan
+    bldg_pts_sample_gser.to_file(ofp)
+    
+    #write
+    log.info(f'    writing {len(bldg_pts_sample_gser)} samples to: {ofp}')
+    
+    return ofp
+
+def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None, nodata=-32767):
     
     if log is None: log=get_log_stream()
     
@@ -223,13 +268,17 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         # #compute hte stats
         #=======================================================================
         log.info(f'    computing {len(bldg_pts_gser)} samples on {os.path.basename(rlay_fp)}')
-        samp_pts = get_raster_point_samples(bldg_pts_gser, rlay_fp, colName=hazard_key, nodata=-32767)
-        assert len(samp_pts) == len(bldg_pts_gser)
-        log.debug(f'got counts\n' + str(samp_pts.iloc[:, 0].value_counts(dropna=False)))
+        #=======================================================================
+        # samp_pts = get_raster_point_samples(bldg_pts_gser, rlay_fp, colName=hazard_key, nodata=-32767)
+        # assert len(samp_pts) == len(bldg_pts_gser)
+        # log.debug(f'got counts\n' + str(samp_pts.iloc[:, 0].value_counts(dropna=False)))
+        #=======================================================================
         
-        #write    
-        log.info(f'    writing samples to: {ofp}')
-        samp_pts.to_file(ofp)
+        #execute tool
+
+        
+        _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log)
+ 
     else:
         log.info(f'    record exists: {ofp}')
     
@@ -384,7 +433,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('AUS', '100_fluvial', max_workers=4)
+    run_samples_on_country('AUS', '100_fluvial', max_workers=None)
     
     
     

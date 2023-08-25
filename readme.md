@@ -94,4 +94,11 @@ index_hazard_fp_d ={
     }
 
 index_hazard_fp_d = {k:os.path.join(r'd:\05_DATA\2307_funcAgg\fathom\global3', v) for k,v in index_hazard_fp_d.items()}
+
+
+#===============================================================================
+# WhiteBoxTools
+#===============================================================================
+ 
+sys.path.append(r'l:\09_REPOS\04_FORKS\whitebox-tools\WBT')
 ```
