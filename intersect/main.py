@@ -6,8 +6,9 @@ Created on Jul. 25, 2023
 
 intersecting building data with hazard rasters
 '''
-import os, hashlib, psutil
-#print('\n'.join(os.environ['PATH'].split(';')))
+import os, hashlib
+print('\n'.join(os.environ['PATH'].split(';')))
+import psutil
 from datetime import datetime
 import pandas as pd
 import fiona
@@ -20,7 +21,10 @@ from intersect.osm import retrieve_osm_buildings
 from definitions import wrk_dir, lib_dir
 from definitions import temp_dir as temp_dirM
  
-from hp import init_log, today_str, get_log_stream, get_raster_point_samples
+from hp import (
+    init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
+    dstr
+    )
 
 
 
@@ -29,13 +33,27 @@ from hp import init_log, today_str, get_log_stream, get_raster_point_samples
 #===============================================================================
 #country tiles
 index_country_fp_d = {
-    'BGD':'BGD_tindex_0725.gpkg'}
+    'BGD':'BGD_tindex_0725.gpkg',
+    'AUS':'AUS_tindex_0824.gpkg',
+    'ZAF':'ZAF_tindex_0824.gpkg',
+    'BRA':'BRA_tindex_0824.gpkg',
+    'CAN':'CAN_tindex_0824.gpkg',
+    'DEU':'DEU_tindex_0824.gpkg',    
+    }
 
 index_country_fp_d = {k:os.path.join(r'l:\10_IO\2307_funcAgg\ins\indexes', v) for k,v in index_country_fp_d.items()}
 
 #hazard tiles
 index_hazard_fp_d ={
-    '500_fluvial':r'500_fluvial\tileindex_500_fluvial.gpkg'}
+    '500_fluvial':r'500_fluvial\tileindex_500_fluvial.gpkg',
+    '500_pluvial':r'500_pluvial\tileindex_500_pluvial.gpkg',
+    '100_pluvial':r'100_pluvial\tileindex_100_pluvial.gpkg',
+    '100_fluvial':r'100_fluvial\tileindex_100_fluvial.gpkg',
+    '050_pluvial':r'050_pluvial\tileindex_050_pluvial.gpkg',
+    '050_fluvial':r'050_fluvial\tileindex_050_fluvial.gpkg',
+    '010_pluvial':r'010_pluvial\tileindex_010_pluvial.gpkg',
+    '010_fluvial':r'010_fluvial\tileindex_010_fluvial.gpkg',    
+    }
 
 index_hazard_fp_d = {k:os.path.join(r'd:\05_DATA\2307_funcAgg\fathom\global3', v) for k,v in index_hazard_fp_d.items()}
 
@@ -156,6 +174,7 @@ def run_samples_on_country(country_key, hazard_key,
     #===========================================================================
     # defaults
     #===========================================================================
+    start=datetime.now()
     if out_dir is None:
         out_dir = os.path.join(wrk_dir, 'outs', 'samples')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
@@ -182,12 +201,18 @@ def run_samples_on_country(country_key, hazard_key,
     #===========================================================================
     # #loop through each tile in the country grid 
     #===========================================================================
-    res_d=dict()
+    res_d, err_d=dict(), dict()
+    cnt=0
     for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
         log.info(f'{i+1}/{len(gdf)} building for polygon %i'%row['id'])
         
-
-        res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log)
+        try:
+            res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log)
+ 
+        except Exception as e:
+            err_d[i] = row.copy()
+            err_d[i]['error'] = str(e)            
+            log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
         #print(f'computing stats on {len(gdf)} feats')
         """
         print(rasterstats.utils.VALID_STATS)
@@ -202,6 +227,33 @@ def run_samples_on_country(country_key, hazard_key,
         # tdelta = (datetime.now() - start_i).total_seconds()
         # log.info(f'got {len(res_df)} feats w/ valid stats in {tdelta:.2f} secs')
         #=======================================================================
+        cnt+=1
+    
+        
+ 
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    log.info(f'finished on {cnt}')
+    #write errors
+    if len(err_d)>0:
+        err_ofp = os.path.join(out_dir, f'errors_{today_str}_{country_key}_{hazard_key}.gpkg')
+        
+        err_gdf = pd.concat(err_d, axis=1).T
+ 
+        log.error(f'writing {len(err_d)} error summaries to \n    {err_ofp}\n{err_gdf}')
+        err_gdf.set_geometry(err_gdf['geometry']).to_file(err_ofp)
+    
+    meta_d = {
+                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'RAM_GB':psutil.virtual_memory () [3]/1000000000,
+                    'file_GB':get_directory_size(out_dir),
+                    #'output_MB':os.path.getsize(ofp)/(1024**2)
+                    }
+    
+    log.info(meta_d)
+        
+ 
  
 if __name__ == '__main__':
     

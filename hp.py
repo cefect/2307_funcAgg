@@ -109,7 +109,13 @@ def get_log_stream(name=None, level=None):
 #===============================================================================
 # FILES-------
 #===============================================================================
-
+def get_directory_size(directory):
+    total_size = 0
+    for path, dirs, files in os.walk(directory):
+        for f in files:
+            fp = os.path.join(path, f)
+            total_size += os.path.getsize(fp)
+    return total_size / (1024**3)
 #===============================================================================
 # GEOPANDAS-------
 #===============================================================================
