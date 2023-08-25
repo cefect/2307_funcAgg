@@ -16,7 +16,10 @@ import pandas as pd
 import rasterio as rio
 import geopandas as gpd
 
-from definitions import wrk_dir, logcfg_file
+from definitions import wrk_dir, logcfg_file, temp_dir
+
+if not os.path.exists(temp_dir):
+    os.makedirs(temp_dir)
 
 
 today_str = datetime.now().strftime('%Y%m%d')

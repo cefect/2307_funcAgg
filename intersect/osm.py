@@ -16,23 +16,13 @@ import geopandas as gpd
 from shapely.geometry import shape
 from rasterstats import zonal_stats
 
-from definitions import osm_pbf_basedir
+from definitions import osm_pbf_data, osm_cache_dir
 
 from hp import get_log_stream, dstr
 
 
 
 #OSM pbf data directories
-
-osm_pbf_data = {
-    'BGD':'bangladesh-latest.osm.pbf',
-    'AUS':'australia-latest.osm.pbf',
-    'DEU':'germany-latest.osm.pbf',
-    'CAN':'canada-latest.osm.pbf',
-    'ZAF':'south-africa-latest.osm.pbf',    
-    }
-
-osm_cache_dir = os.path.join(osm_pbf_basedir, 'cache')
 if not os.path.exists(osm_cache_dir): os.makedirs(osm_cache_dir)
 
 #===============================================================================
@@ -327,7 +317,7 @@ def retrieve_osm_buildings(
     #===========================================================================
     # #country raw data
     #===========================================================================
-    pbf_fp = os.path.join(osm_pbf_basedir, osm_pbf_data[country_key])
+    pbf_fp = osm_pbf_data[country_key]
     assert os.path.exists(pbf_fp)
     
     #===========================================================================
