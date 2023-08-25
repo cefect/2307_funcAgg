@@ -98,7 +98,7 @@ def init_log(
     return get_new_file_logger(**kwargs)
 
 
-def get_log_stream(name=None, level=None):
+def get_log_stream(name=None, level=logging.INFO):
     """get a logger with stream handler"""
     if name is None: name=str(os.getpid())
     if level is None:
@@ -114,7 +114,7 @@ def get_log_stream(name=None, level=None):
         logger.setLevel(level)
         handler = logging.StreamHandler(
             stream=sys.stdout, #send to stdout (supports colors)
-            ) #Create a file handler at the passed filename 
+            ) 
         formatter = logging.Formatter(log_format_str) 
         handler.setFormatter(formatter)
         logger.addHandler(handler)
