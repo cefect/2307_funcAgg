@@ -6,8 +6,10 @@ Created on Jul. 25, 2023
 
 intersecting building data with hazard rasters
 '''
-import os, hashlib
-print('\n'.join(os.environ['PATH'].split(';')))
+import os, hashlib, sys
+
+ 
+ 
 import psutil
 from datetime import datetime
 import pandas as pd
@@ -20,6 +22,13 @@ from intersect.osm import retrieve_osm_buildings
 
 from definitions import wrk_dir, lib_dir
 from definitions import temp_dir as temp_dirM
+
+#===============================================================================
+# print('\n\nPATH:\n')
+# print('\n'.join(os.environ['PATH'].split(';')))
+# print('\n\nPYTHONPATH:\n')
+# print('\n'.join(os.environ['PYTHONPATH'].split(';')))
+#===============================================================================
  
 from hp import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
@@ -58,7 +67,7 @@ index_hazard_fp_d ={
 index_hazard_fp_d = {k:os.path.join(r'd:\05_DATA\2307_funcAgg\fathom\global3', v) for k,v in index_hazard_fp_d.items()}
 
 
-def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None,
+def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
                       ):
     """intelligent retrival of building centroids"""
     #===========================================================================
@@ -71,15 +80,22 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None,
     
     #get record
     uuid = hashlib.shake_256(f'{country_key}_{bounds}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
-    ofp = os.path.join(out_dir, f'{country_key}_{uuid}.geojson')
+    ofp = os.path.join(out_dir, f'{pfx}_{uuid}.geojson')
     
+    #===========================================================================
+    # build
+    #===========================================================================
     if not os.path.exists(ofp):
         """this retrieves precompiled files if they are available"""
         log.info(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
-        poly_fp = retrieve_osm_buildings(country_key, bounds)
+        poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log)
         
-        #drop to centroid                
+        #=======================================================================
+        # #drop to centroid                
+        #=======================================================================
+        log.info(f'loading osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
         poly_gdf = gpd.read_file(poly_fp)
+        
         if len(poly_gdf)==0:
             log.warning(f'for {country_key}.{bounds} got no polygons... skipping ')
             return None
@@ -130,9 +146,11 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         #=======================================================================
         # #get OSM building footprints
         #=======================================================================
-        bldg_fp = get_osm_bldg_cent(country_key, row.geometry.bounds, log=log)
+        bldg_fp = get_osm_bldg_cent(country_key, row.geometry.bounds, pfx=fnstr, log=log)
         if bldg_fp is None:
             return None
+        
+        log.info(f'loading osm building file {os.path.getsize(bldg_fp)/(1024**3)}GB \n    {bldg_fp}')
         bldg_pts_gdf = gpd.read_file(bldg_fp)
         #apply filter
         bx = bldg_pts_gdf['area'] > area_thresh
@@ -186,6 +204,7 @@ def run_samples_on_country(country_key, hazard_key,
     
     log = init_log(name=f'samp', fp=os.path.join(out_dir, today_str+'.log'))
     log.info(f'on {country_key} x {hazard_key}')
+    
     #===========================================================================
     # #load tiles
     #===========================================================================
@@ -204,7 +223,7 @@ def run_samples_on_country(country_key, hazard_key,
     res_d, err_d=dict(), dict()
     cnt=0
     for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
-        log.info(f'{i+1}/{len(gdf)} building for polygon %i'%row['id'])
+        log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
         
         try:
             res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log)

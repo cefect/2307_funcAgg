@@ -25,10 +25,22 @@ today_str = datetime.now().strftime('%Y%m%d')
 # loggers-----------
 #===============================================================================
 log_format_str = '%(levelname)s.%(name)s.%(asctime)s:  %(message)s'
-def init_root_logger(
- 
+def init_root_logger( 
         log_dir = wrk_dir,
         ):
+    """set up the root logger and config from file
+    
+    typically, our config file has these handlers:
+        handler_consoleHandler: level=INFO
+        handler_consoleHandlerError: level=WARNING
+        handler_fileHandler1: level=DEBUG
+        handler_fileHandler2: level=WARNING
+        
+    """
+        
+        
+        
+        
     logger = logging.getLogger() #get the root logger
     
     logging.config.fileConfig(logcfg_file,
@@ -75,7 +87,7 @@ def init_log(
  
         log_dir=wrk_dir,
         **kwargs):
-    """wrapper to setup the root loger and create a file logger"""
+    """wrapper to setup the root loger and create an additional local file logger"""
     
     root_logger = init_root_logger(log_dir=log_dir) 
     
