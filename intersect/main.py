@@ -93,7 +93,7 @@ def ogr_export_geometry(fp, ofp):
     #cmd_str = f"SELECT geometry FROM {layerName}"
     
     #geometry and centroid\
-    cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM {layerName}"
+    cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM \'{layerName}\'"
     
     
     p = subprocess.run(['ogr2ogr', '-f', 'GeoJSON', '-dialect', 'SQLite', '-sql',cmd_str, ofp, fp], 
@@ -130,7 +130,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     #===========================================================================
     if not os.path.exists(ofp):
         """this retrieves precompiled files if they are available"""
-        log.info(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
+        log.debug(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
         poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log)
         
         if os.path.getsize(poly_fp)<1e3:
@@ -139,7 +139,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
         #=======================================================================
         # #drop to centroid                
         #=======================================================================
-        log.info(f'extracting centroid from osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
+        log.debug(f'extracting centroid from osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
         
         
  #==============================================================================
@@ -176,11 +176,11 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
                         'file_GB':os.path.getsize(ofp)/(1024**3),
                         #'output_MB':os.path.getsize(ofp)/(1024**2)
                         }
-        log.info(meta_d)
+        log.debug(meta_d)
     
         
     else:
-        log.info(f'record exists for {country_key}.{bounds}\n    {ofp}')
+        log.debug(f'record exists for {country_key}.{bounds}\n    {ofp}')
         
     return ofp
 
@@ -243,13 +243,20 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         if bldg_fp is None:
             return None
         
-        log.info(f'loading bldg_cent {os.path.getsize(bldg_fp)/(1024**3): .2f} GB: {bldg_fp}')
+        log.debug(f'loading bldg_cent {os.path.getsize(bldg_fp)/(1024**3): .2f} GB: {bldg_fp}')
         bldg_pts_gdf = gpd.read_file(bldg_fp)
         
         #apply filter
         log.debug(f'    applying filter on {len(bldg_pts_gdf)}')
         bx = bldg_pts_gdf['area'] > area_thresh
+        
+        if bx.sum()==0:
+            log.warning(f'no valid buildings... skipping')
+            return None
+        
         bldg_pts_gser = bldg_pts_gdf[bx].geometry
+        
+        
         
         log.debug(f'    filtered {bx.sum()}/{len(bx)} w/ area_tresh={area_thresh}')
         #=======================================================================
@@ -262,7 +269,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         """the tile_indexers give absolute filepaths (from when the index was created)"""
         rlay_fp = os.path.join(haz_base_dir, 'raw', os.path.basename(haz_tile_gdf[bx]['location'].values[0]))
         assert os.path.exists(rlay_fp)
-        log.info(f'    for grid {i} got hazard raster {os.path.basename(rlay_fp)}')
+        log.debug(f'    for grid {i} got hazard raster {os.path.basename(rlay_fp)}')
         
         #=======================================================================
         # #compute hte stats
@@ -350,15 +357,18 @@ def run_samples_on_country(country_key, hazard_key,
     log.info(f'intersecting buildings and hazard per tile \n\n')
     if max_workers is None:
         for i, row in gdf.to_crs(epsg=epsg_id).iterrows():
-            log.info(f'{i+1}/{len(gdf)} on grid %i'%row['id'])
+            log.info(f'{i+1}/{len(gdf)} {country_key}.{hazard_key} on grid %i'%row['id'])
             
-            try:
-                res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
-     
-            except Exception as e:
-                err_d[i] = row.copy()
-                err_d[i]['error'] = str(e)            
-                log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
+            res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
+     #==========================================================================
+     #        try:
+     #            
+     # 
+     #        except Exception as e:
+     #            err_d[i] = row.copy()
+     #            err_d[i]['error'] = str(e)            
+     #            log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
+     #==========================================================================
             #print(f'computing stats on {len(gdf)} feats')
             """
             print(rasterstats.utils.VALID_STATS)
@@ -433,7 +443,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('AUS', '100_fluvial', max_workers=None)
+    run_samples_on_country('ZAF', '500_fluvial', max_workers=4)
     
     
     
