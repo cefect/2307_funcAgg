@@ -9,6 +9,7 @@ import os, hashlib, sys, subprocess
 import psutil
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 
@@ -16,7 +17,7 @@ from tqdm import tqdm
 
 import concurrent.futures
 
-from hp import (
+from coms import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
     dstr, view
     )
@@ -35,6 +36,15 @@ def _load_concat_write(fp_d, out_dir, log, country_key):
     df_l = [pd.read_pickle(fp) for fp in fp_d.values()]
     #concat
     dxind = pd.concat(df_l, axis=1)
+    
+    #clean
+    for haz_key, col in dxind.items():
+        bx = col<0
+        if bx.any():
+            dxind.loc[bx, haz_key]=np.nan
+ 
+ 
+    
     #write
     ofp_i = os.path.join(out_dir, f'samp_concat_{country_key}_{len(dxind)}.pkl')
     log.info(f'writing {str(dxind.shape)} to \n    {ofp_i}')
@@ -45,7 +55,7 @@ def run_concat_sims(
         srch_dir=None,
         out_dir=None,
         #temp_dir=None,
-        max_workers=None,
+ 
         ):
     """
     collect and concat samples (drop geoemtry)
@@ -120,8 +130,8 @@ def run_concat_sims(
     log.info(meta_d)
     
     return ofp_d
- 
-        
+
+
  
  
     
@@ -130,7 +140,7 @@ def run_concat_sims(
 
 
 if __name__ == '__main__':
-    run_concat_sims(max_workers=8)
+    run_concat_sims( )
     
     
     
