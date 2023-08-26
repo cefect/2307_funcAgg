@@ -134,8 +134,11 @@ def run_collect_sims(
         log.info(f'{i+1} on {country_key}.{haz_key} w/ {len(gserx)}')
         
         #get record
-        uuid = hashlib.shake_256(f'{country_key}_{haz_key}_{srch_dir}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
-        ofp_i = os.path.join(out_dir, f'{country_key}_{haz_key}_{uuid}.pkl')
+        uuid = hashlib.shake_256(f'{country_key}_{haz_key}_{srch_dir}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+        
+        odi = os.path.join(out_dir, country_key)
+        if not os.path.exists(odi):os.makedirs(odi) 
+        ofp_i = os.path.join(odi, f'{country_key}_{haz_key}_{uuid}.pkl')
         
         if not os.path.exists(ofp_i):
             dxind = _load_samps_set(gserx, max_workers)
@@ -145,11 +148,10 @@ def run_collect_sims(
             
         else:
             log.info(f'record exists... skipping')
-            
-        if i==4:
-            break
+ 
             
         ofp_d[country_key][haz_key] = ofp_i
+ 
  
  
         
@@ -167,10 +169,6 @@ def run_collect_sims(
  
         
  
-    
-    
-    
-        
  
     
     
