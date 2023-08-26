@@ -44,7 +44,7 @@ wbt.set_verbose_mode(True)
 # print('\n'.join(os.environ['PYTHONPATH'].split(';')))
 #===============================================================================
  
-from hp import (
+from coms import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
     dstr
     )

@@ -18,7 +18,7 @@ from rasterstats import zonal_stats
 
 from definitions import osm_pbf_data, osm_cache_dir
 
-from hp import get_log_stream, dstr
+from coms import get_log_stream, dstr
 
 
 

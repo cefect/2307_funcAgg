@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 import concurrent.futures
 
-from hp import (
+from coms import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
     dstr, view
     )
