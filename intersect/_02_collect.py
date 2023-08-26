@@ -141,6 +141,7 @@ def run_collect_sims(
         ofp_i = os.path.join(odi, f'{country_key}_{haz_key}_{uuid}.pkl')
         
         if not os.path.exists(ofp_i):
+            log.info(f'loading sample set w/ max_workers={max_workers}')
             dxind = _load_samps_set(gserx, max_workers)
             
             log.info(f'writing {str(dxind.shape)} to \n    {ofp_i}')
