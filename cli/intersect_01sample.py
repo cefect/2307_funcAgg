@@ -4,7 +4,7 @@ Created on Aug. 24, 2023
 @author: cefect
 '''
 import argparse
-from intersect.main import run_samples_on_country
+from intersect._01_main import run_samples_on_country
 
 
 if __name__ == '__main__':

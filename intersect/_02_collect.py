@@ -83,7 +83,7 @@ def _load_samps_set(gserx, max_workers):
     return pd.concat(d, names=['gid', 'fid']).sort_index()
 
 def run_collect_sims(
-        srch_dir=r'l:\10_IO\2307_funcAgg\outs\samps',
+        srch_dir=None,
         out_dir=None,
         #temp_dir=None,
         max_workers=None,
@@ -98,7 +98,7 @@ def run_collect_sims(
     start=datetime.now()
  
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'samps_collect')
+        out_dir = os.path.join(wrk_dir, 'outs', 'intersect', '02_collect')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     #===========================================================================
