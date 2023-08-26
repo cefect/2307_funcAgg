@@ -11,6 +11,8 @@ dependencies:
   - rasterstats=0.19.*
   - geopandas=0.13.*
   - osmium-tool
+  - tqdm
+  - pyarrow=13.0.*
   - pip
   - pip:
     - osmium
