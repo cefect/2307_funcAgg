@@ -96,9 +96,13 @@ def run_collect_sims(
     # defaults
     #===========================================================================
     start=datetime.now()
+    
+    if srch_dir is None:
+        srch_dir = os.path.join(wrk_dir, 'outs', 'inters', '01_sample')
+    assert os.path.exists(srch_dir)
  
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'intersect', '02_collect')
+        out_dir = os.path.join(wrk_dir, 'outs', 'inters', '02_collect')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     #===========================================================================
