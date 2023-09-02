@@ -4,6 +4,10 @@ Created on Aug. 26, 2023
 @author: cefect
 
 collecting results of intersect routine
+
+simple concat on haz_key and removing redundant point info
+
+results in a .pkl file per country-gid with samples for each hazard layer 
 '''
 import os, hashlib, sys, subprocess
 import psutil
@@ -164,7 +168,10 @@ def run_collect_sims(
     for some countries, this points file becomes quite large
     for fancier analysis (e.g., anything spatial) should use PostGIS
     
-    should parallelize this loop"""
+    should parallelize this loop
+    
+    different file format?
+    """
     
     ofp_d = {k:dict() for k in fpserx.index.unique('country_key')}
     for i, ((country_key, gid), gserx) in enumerate(fpserx.groupby(['country_key', 'gid'])):
