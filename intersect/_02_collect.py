@@ -9,6 +9,7 @@ import os, hashlib, sys, subprocess
 import psutil
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 
@@ -54,7 +55,7 @@ def get_fpserx(srch_dir, log):
         
         #concat into serx
         l=[pd.Series(e, name=k) for k,e in fp_d.items()] 
-        fp_lib[country_key] = pd.concat(l, keys=[s.name for s in l], names=['haz_key', 'id']).sort_index()
+        fp_lib[country_key] = pd.concat(l, keys=[s.name for s in l], names=['haz_key', 'gid']).sort_index()
     
 #wrap
     fpserx = pd.concat(fp_lib, names=['country_key'])
@@ -62,13 +63,11 @@ def get_fpserx(srch_dir, log):
     return fpserx
 
 def _get_gdf(id, fp):
-    return id, gpd.read_file(fp, 
-                             #ignore_fields=['geometry'],
-                             ignore_geometry=True,
+    return id, gpd.read_file(fp, ignore_geometry=True,
                              )
 
 
-def _load_samps_set(gserx, max_workers):
+def xxx_load_samps_set(gserx, max_workers):
     """load geodataframe from each file in the gserx"""
     if max_workers is None:
         d = dict()
@@ -81,6 +80,44 @@ def _load_samps_set(gserx, max_workers):
                         zip(*gserx.droplevel([0, 1]).to_dict().items())), total=len(gserx.droplevel([0, 1]).to_dict().items())))
         d = dict(results)
     return pd.concat(d, names=['gid', 'fid']).sort_index()
+
+
+
+def _load_samps_set(gserx, max_workers):
+    """load geodataframe from each file in the gserx. merge on keys and take geometry from first"""
+ 
+    d = dict()
+    first=True
+    for id, fp in tqdm(gserx.droplevel([0, 2]).to_dict().items()):
+        d[id] = gpd.read_file(fp, ignore_geometry=np.invert(first))
+        
+        first=False
+ 
+    
+ 
+    #merge into frame
+    df = pd.concat(list(d.values()), axis=1)
+    df.index.name='id'
+    
+    #clean geo
+    geo = df.pop('geometry')
+    
+    assert np.all(df.isna().sum()==df.isna().sum()[0]), f'got inconsistent nulls\n{df.isna().sum()}'
+    
+    df = df.set_geometry(geo)
+    
+    #add levels
+    """probably a nicer way to do this"""
+    mdex = df.index.to_frame().reset_index(drop=True)
+    
+    for i in [0, 1]:
+        mdex_i = gserx.droplevel(1).index.unique(i)
+        mdex[mdex_i.name] = mdex_i[0]
+ 
+    df.index = pd.MultiIndex.from_frame(mdex).swaplevel(0,2).swaplevel(0,1)
+ 
+ 
+    return df
 
 def run_collect_sims(
         srch_dir=None,
@@ -123,22 +160,22 @@ def run_collect_sims(
     # loop and load per sim (concat1)
     #===========================================================================
     """here we concat all of the points for the country
-    each haz_key should have redundant geometry info
+    each haz_key has redundant geometry info
     for some countries, this points file becomes quite large
     for fancier analysis (e.g., anything spatial) should use PostGIS
     
-    just extracting the values for  now"""
+    should parallelize this loop"""
     
     ofp_d = {k:dict() for k in fpserx.index.unique('country_key')}
-    for i, ((country_key, haz_key), gserx) in enumerate(fpserx.groupby(['country_key', 'haz_key'])):
-        log.info(f'{i+1} on {country_key}.{haz_key} w/ {len(gserx)}')
+    for i, ((country_key, gid), gserx) in enumerate(fpserx.groupby(['country_key', 'gid'])):
+        log.info(f'{i+1} on {country_key}.{gid} w/ {len(gserx)}')
         
         #get record
-        uuid = hashlib.shake_256(f'{country_key}_{haz_key}_{srch_dir}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+        uuid = hashlib.shake_256(f'{country_key}_{gid}_{srch_dir}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
         
         odi = os.path.join(out_dir, country_key)
         if not os.path.exists(odi):os.makedirs(odi) 
-        ofp_i = os.path.join(odi, f'{country_key}_{haz_key}_{uuid}.pkl')
+        ofp_i = os.path.join(odi, f'{country_key}_{gid:04d}_{uuid}.pkl')
         
         if not os.path.exists(ofp_i):
             log.info(f'loading sample set w/ max_workers={max_workers}')
@@ -151,7 +188,7 @@ def run_collect_sims(
             log.info(f'record exists... skipping')
  
             
-        ofp_d[country_key][haz_key] = ofp_i
+        ofp_d[country_key][gid] = ofp_i
  
  
  
@@ -168,16 +205,10 @@ def run_collect_sims(
     
     log.info(meta_d)
  
-        
  
- 
-    
-    
-
-
 
 if __name__ == '__main__':
-    run_collect_sims(max_workers=8)
+    run_collect_sims(max_workers=None)
     
     
     
