@@ -27,7 +27,7 @@ from coms import (
     dstr, view
     )
 
-from definitions import wrk_dir, lib_dir, conn_str
+from definitions import wrk_dir, lib_dir, postgres_d, index_country_fp_d
 
 
 
@@ -78,6 +78,28 @@ def sql_schema_exists(schemaName, conn):
         return cur.fetchone()[0]
     
 
+
+def gpkg_to_postgis(gpkg_path, pg_conn_string, table_name):
+    # Construct the ogr2ogr command
+    cmd = [
+        "ogr2ogr",
+        "-f", "PostgreSQL",
+        pg_conn_string,
+        gpkg_path,
+        "-nln", table_name,
+        "-overwrite"
+    ]
+
+    # Run the ogr2ogr command
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Check for errors
+    if result.returncode != 0:
+        print(f"An error occurred while running ogr2ogr: {result.stderr}")
+    else:
+        print(f"Successfully copied {gpkg_path} to PostGIS table {table_name}")
+
+ 
  
 
 def run_to_postgres(
@@ -211,13 +233,128 @@ def run_to_postgres(
     log.info(meta_d)
     return tab_d
         
+def get_conn_str(d):
+    pg_str=''
+    for k,v in d.items():
+        pg_str+=f'{k}={v} ' 
+        
+    return pg_str[:-1]
+
+
+def init_schema(schemaName, conn, log):
+    if not sql_schema_exists(schemaName, conn):
+        log.info(f'schema \'{schemaName}\' not found... creating')
+        with conn.cursor() as cur:
+            cur.execute(f"""CREATE SCHEMA {schemaName}""")
+
+def run_grids_to_postgres(
+        out_dir=None,
+        postgres_d=None,
+        schemaName='grids',tableName='country_grids',
+        index_d=index_country_fp_d,
+        ):
+    """add grids to postgis"""
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()
+ 
+ 
+    
+    log = init_log(name=f'toPostG')
+    log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
+    
+    
+ 
+        
+    
+    #===========================================================================
+    # setup
+    #===========================================================================
+    #see if our schema exists
+    with psycopg2.connect(get_conn_str(postgres_d)) as conn:        
+        init_schema(schemaName, conn, log)  
+        
+        
+    #===========================================================================
+    # #loop and load each
+    #===========================================================================
+    with psycopg2.connect(get_conn_str(postgres_d)) as conn:        
+ 
+        
+        #set engine for geopandas
+        engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
+        
+        first=True
+        for k, fp in index_d.items():
+            log.info(f'{os.path.basename(fp)}')
             
+            #use geopandas
+            gdf = gpd.read_file(fp)
+            
+            
+            #add country key
+            gdf['country_key'] = k.lower()
+            
+            #port to postgis
+            log.info(f'porting {gdf.shape} to postgis')
+            if_exists = 'replace' if first else 'append'
+            
+            gdf.to_postgis(tableName, engine, schema=schemaName, 
+                                               if_exists=if_exists, 
+                                               index=False, 
+                                               #index_label=dxcol.index.names,
+                                               )
+            
+            first=False
+     
+ 
+            
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    log.info(f'finished on {len(index_d)}')
+    
+    meta_d = {
+                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'RAM_GB':psutil.virtual_memory () [3]/1000000000,
+                    #'file_GB':get_directory_size(out_dir),
+                    #'output_MB':os.path.getsize(ofp)/(1024**2)
+                    }
+    
+    log.info(meta_d)
+    return 
+    
  
 
+        
+ 
+        
+    
+    
+    
+    
+
 if __name__ == '__main__':
-    run_to_postgres(conn_str=conn_str,
-                    country_l = [
-                        #'AUS', 
-                        'BGD', 
-                        'BRA', 'CAN', 'DEU', 'ZAF'],
-                    )
+    run_grids_to_postgres(postgres_d=postgres_d)
+    
+    
+    #===========================================================================
+    # run_to_postgres(conn_str=conn_str,
+    #                 country_l = [
+    #                     #'AUS', 
+    #                     #'BGD', 
+    #                     'BRA', 'CAN', 'DEU', 'ZAF',
+    #                     ],
+    #                 )
+    #===========================================================================
+    
+    
+    
+    
+    
+    
+    
+    
+    

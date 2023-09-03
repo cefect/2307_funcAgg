@@ -73,6 +73,9 @@ def get_new_file_logger(
     if logger is None:
         logger = logging.getLogger(name)
         
+    if fp is None:
+        return logger
+        
     logger.setLevel(level)
     
     #===========================================================================
