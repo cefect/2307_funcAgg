@@ -87,7 +87,9 @@ def xxx_load_samps_set(gserx, max_workers):
 
 
 
-def _load_samps_set(gserx, max_workers):
+def _load_samps_set(gserx, max_workers,
+                    coln_l=['010_fluvial', '050_fluvial', '100_fluvial', '500_fluvial', 'geometry'],
+                    ):
     """load geodataframe from each file in the gserx. merge on keys and take geometry from first"""
  
     d = dict()
@@ -102,6 +104,9 @@ def _load_samps_set(gserx, max_workers):
     #merge into frame
     df = pd.concat(list(d.values()), axis=1)
     df.index.name='id'
+    
+    #check
+    assert set(coln_l).difference(df.columns)==set(), f'column mismatch on \n    {gserx}'
     
     #clean geo
     geo = df.pop('geometry')

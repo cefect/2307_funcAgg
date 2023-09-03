@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run collect sims')
     parser.add_argument('--srch_dir', type=str, default=None, help='search directory')
     parser.add_argument('--out_dir', type=str, default=None, help='output directory')
-    parser.add_argument('--max_workers', type=int, default=10, help='maximum number of workers')
+    parser.add_argument('--max_workers', type=int, default=None, help='maximum number of workers')
     
     args = parser.parse_args()
     
