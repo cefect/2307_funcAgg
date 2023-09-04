@@ -169,7 +169,16 @@ def get_raster_point_samples(gser, rlay_fp, colName=None, nodata=None,
         
     return gpd.GeoDataFrame(data={colName:samp_ar}, index=gser.index, geometry=gser)
  
-    
+#===============================================================================
+# POSTGRES--------
+#===============================================================================
+def get_conn_str(d):
+    pg_str=''
+    for k,v in d.items():
+        pg_str+=f'{k}={v} ' 
+        
+    return pg_str[:-1]
+
 #===============================================================================
 # MISC-----------
 #===============================================================================

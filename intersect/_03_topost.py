@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from coms import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
-    dstr, view
+    dstr, view, get_conn_str
     )
 
 from definitions import wrk_dir, lib_dir, postgres_d, index_country_fp_d
@@ -233,12 +233,7 @@ def run_to_postgres(
     log.info(meta_d)
     return tab_d
         
-def get_conn_str(d):
-    pg_str=''
-    for k,v in d.items():
-        pg_str+=f'{k}={v} ' 
-        
-    return pg_str[:-1]
+
 
 
 def init_schema(schemaName, conn, log):

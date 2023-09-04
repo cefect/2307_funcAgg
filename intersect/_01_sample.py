@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 from intersect.osm import retrieve_osm_buildings
 
-from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir
+from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir, equal_area_epsg
 from definitions import temp_dir as temp_dirM
 
 #whitebox
@@ -49,7 +49,7 @@ from coms import (
     dstr
     )
 
-equal_area_epsg = 6933
+
 
 #===============================================================================
 # BUILDINGS--------
