@@ -17,7 +17,6 @@ dependencies:
   - pip:
     - osmium
     - psutil
-    - psycopg[binary,pool]
     - psycopg2
     - SQLAlchemy
     - GeoAlchemy2
