@@ -37,6 +37,7 @@ def build_extents_grid(conn_d, epsg_id, schema, tableName):
         with conn.cursor() as cur:
             cur.execute(f"""DROP TABLE IF EXISTS {schema}.{tableName}""")
         conn.commit()
+        
         #create a table with a geometry column
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -84,7 +85,9 @@ def build_extents_grid(conn_d, epsg_id, schema, tableName):
 
 
 
-def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log):
+def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log,
+                                 tableName_trim='cg_extents',
+                                 ):
     """build a grid table for the country +grid_size combination"""
     
     #===========================================================================
@@ -119,12 +122,18 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
             #===================================================================
             # #delete irrellevant grids
             #===================================================================
+            """ query for building exclusion geometry
+            CREATE TABLE grids.cg_extents AS
+                SELECT country_key, ST_Union(ST_buffer(geometry, .001)) as geom 
+                    FROM grids.country_grids
+                        GROUP BY country_key
+            """
             cmd_str = f"""
             DELETE FROM {schema}.{tableName} a
                 WHERE NOT EXISTS (
                     SELECT 1
-                    FROM grids.country_grids b
-                    WHERE ST_Intersects(a.geom, ST_Transform(b.geometry, {epsg_id}))
+                    FROM grids.{tableName_trim} b
+                    WHERE ST_Intersects(a.geom, ST_Transform(b.geom, {epsg_id}))
                 )"""
             log.info(cmd_str)
             cur.execute(cmd_str)
@@ -194,7 +203,7 @@ def build_agg_grids(grid_size_l, country_l, conn_d, schema, tableBaseName, table
     for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
         tableName=f'{tableBaseName}_{country_key}_{grid_size:07d}'
         log.info(f'on {i}: {tableName}')            
-        _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log)
+        res_d[i] = _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log)
                 
  
                 
@@ -214,8 +223,9 @@ def run_join_agg_grids(
         epsg_id=None,
         schema='grids',
         grid_size_l=[
-            #30*34,30*8, 30*2
-            1e5, 
+            #30*34,
+            30*8, 30*2
+            #1e5, 
             #2e5, #big for testing
             ],
         
