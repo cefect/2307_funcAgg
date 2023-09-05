@@ -16,6 +16,8 @@ import pandas as pd
 import rasterio as rio
 import geopandas as gpd
 
+import psycopg2
+
 from definitions import wrk_dir, logcfg_file, temp_dir
 
 if not os.path.exists(temp_dir):
@@ -178,6 +180,32 @@ def get_conn_str(d):
         pg_str+=f'{k}={v} ' 
         
     return pg_str[:-1]
+
+
+def pg_vacuum(conn_d, tableName):
+    """perform vacuum and analyze on passed table
+    
+    does not work with context management"""
+    conn = psycopg2.connect(get_conn_str(conn_d))
+    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    cur = conn.cursor()
+    cur.execute(f"""VACUUM ANALYZE {tableName}""")
+    # Make the changes to the database persistent
+    conn.commit()
+    # Close communication with the database
+    cur.close()
+    conn.close()
+    return conn, cur
+
+
+def pg_spatialIndex(conn_d, schema, tableName):
+    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                CREATE INDEX {tableName}_geom_idx
+                    ON {schema}.{tableName}
+                        USING GIST (geom);
+                """)
 
 #===============================================================================
 # MISC-----------

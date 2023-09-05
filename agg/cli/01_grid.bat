@@ -3,7 +3,7 @@
 @echo off
  
 set gridsizes=1020 240 60
-set countries=aus
+set countries=zaf bra can deu
  
 
 :: Activate environment

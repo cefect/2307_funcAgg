@@ -21,7 +21,7 @@ import pandas as pd
 
 from coms import (
     init_log, today_str, get_log_stream, get_directory_size,
-    dstr, view, get_conn_str
+    dstr, view, get_conn_str, pg_vacuum, pg_spatialIndex
     )
 
  
@@ -86,20 +86,7 @@ def build_extents_grid(conn_d, epsg_id, schema, tableName):
 
 
 
-def pg_vacuum(conn_d, tableName):
-    """perform vacuum and analyze on passed table
-    
-    does not work with context management"""
-    conn = psycopg2.connect(get_conn_str(conn_d))
-    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-    cur = conn.cursor()
-    cur.execute(f"""VACUUM ANALYZE {tableName}""")
-    # Make the changes to the database persistent
-    conn.commit()
-    # Close communication with the database
-    cur.close()
-    conn.close()
-    return conn, cur
+
 
 def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log,
                                  tableName_trim='cg_transf',
@@ -363,12 +350,21 @@ def run_merge_agg_grids(
                 cur.execute(cmd_str)
                 
             first=False
+            
+            
+    #===========================================================================
+    # clean up
+    #===========================================================================
+ 
+    pg_spatialIndex(conn_d, schema, tableName)
+    pg_vacuum(conn_d, f'{schema}.{tableName}')
                 
     print(f'finished')
         
 
 if __name__ == '__main__':
-    run_build_agg_grids()
+    #run_build_agg_grids()
+    run_merge_agg_grids()
     
     
     
