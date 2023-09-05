@@ -119,24 +119,7 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
             log.info(cmd_str)
             cur.execute(cmd_str, (country_key,country_key,))
             
-            #===================================================================
-            # #delete irrellevant grids
-            #===================================================================
-            """ query for building exclusion geometry
-            CREATE TABLE grids.cg_extents AS
-                SELECT country_key, ST_Union(ST_buffer(geometry, .001)) as geom 
-                    FROM grids.country_grids
-                        GROUP BY country_key
-            """
-            cmd_str = f"""
-            DELETE FROM {schema}.{tableName} a
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM grids.{tableName_trim} b
-                    WHERE ST_Intersects(a.geom, ST_Transform(b.geom, {epsg_id}))
-                )"""
-            log.info(cmd_str)
-            cur.execute(cmd_str)
+
             
             #===================================================================
             # post
@@ -159,12 +142,34 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
                             USING GIST (geom);
                     """)
                 
+    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+        with conn.cursor() as cur:
+            #===================================================================
+            # #delete irrellevant grids
+            #===================================================================
+            """ query for building exclusion geometry
+            CREATE TABLE grids.cg_extents AS
+                SELECT country_key, ST_Union(ST_buffer(geometry, .001)) as geom 
+                    FROM grids.country_grids
+                        GROUP BY country_key
+            """
+            cmd_str = f"""
+            DELETE FROM {schema}.{tableName} a
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM grids.{tableName_trim} b
+                    WHERE ST_Intersects(a.geom, ST_Transform(b.geom, {epsg_id}))
+                )"""
+            log.info(cmd_str)
+            cur.execute(cmd_str)
+                
     #===========================================================================
     # wrap
     #===========================================================================
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         #query result
         with conn.cursor() as cur:
+            log.info(f'query results')
             cur.execute(f"""
                 SELECT country_key, COUNT(*)
                     FROM {schema}.{tableName}
@@ -224,7 +229,8 @@ def run_build_agg_grids(
         schema='grids',
         grid_size_l=[
             #30*34,
-            30*8, 30*2
+            #30*8, 
+            30*2
             #1e5, 
             #2e5, #big for testing
             ],

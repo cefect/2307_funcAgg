@@ -7,7 +7,7 @@
 call %~dp0..\..\env\conda_activate
 
 :: execute
-python -O %~dp0..\_01_jgrid.py
+python -O %~dp0..\_01_grids.py
  
 
 cmd.exe /k
