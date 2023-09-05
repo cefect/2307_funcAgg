@@ -216,7 +216,7 @@ def build_agg_grids(grid_size_l, country_l, conn_d, schema, tableBaseName, table
     return res_d
   
 
-def run_join_agg_grids(
+def run_build_agg_grids(
  
         out_dir=None,
         conn_d=postgres_d,
@@ -286,7 +286,7 @@ def run_join_agg_grids(
         
 
 if __name__ == '__main__':
-    run_join_agg_grids()
+    run_build_agg_grids()
     
     
     
