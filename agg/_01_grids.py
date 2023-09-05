@@ -85,8 +85,24 @@ def build_extents_grid(conn_d, epsg_id, schema, tableName):
 
 
 
+
+def pg_vacuum(conn_d, tableName):
+    """perform vacuum and analyze on passed table
+    
+    does not work with context management"""
+    conn = psycopg2.connect(get_conn_str(conn_d))
+    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    cur = conn.cursor()
+    cur.execute(f"""VACUUM ANALYZE {tableName}""")
+    # Make the changes to the database persistent
+    conn.commit()
+    # Close communication with the database
+    cur.close()
+    conn.close()
+    return conn, cur
+
 def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, schema,tableName2, epsg_id, log,
-                                 tableName_trim='cg_extents',
+                                 tableName_trim='cg_transf',
                                  ):
     """build a grid table for the country +grid_size combination"""
     
@@ -121,27 +137,32 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
             
 
             
-            #===================================================================
-            # post
-            #===================================================================
-            #register the geometry for QGIS
-            with conn.cursor() as cur:
-                cur.execute(f"""SELECT Populate_Geometry_Columns(%s::regclass)""", (f'{schema}.{tableName}', ))
-            #change dtype on grid_size
-            with conn.cursor() as cur:
-                cur.execute(f"""
-                ALTER TABLE {schema}.{tableName}
-                    ALTER COLUMN grid_size TYPE integer;
-                    """)
-                
-            #create spatial index
-            with conn.cursor() as cur:
-                cur.execute(f"""
-                    CREATE INDEX {tableName}_geom_idx
-                        ON {schema}.{tableName}
-                            USING GIST (geom);
-                    """)
-                
+        #===================================================================
+        # post
+        #===================================================================
+        #register the geometry for QGIS
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT Populate_Geometry_Columns(%s::regclass)""", (f'{schema}.{tableName}', ))
+        #change dtype on grid_size
+        with conn.cursor() as cur:
+            cur.execute(f"""
+            ALTER TABLE {schema}.{tableName}
+                ALTER COLUMN grid_size TYPE integer;
+                """)
+            
+        #create spatial index
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                CREATE INDEX {tableName}_geom_idx
+                    ON {schema}.{tableName}
+                        USING GIST (geom);
+                """)
+            
+        #update stats
+        with conn.cursor() as cur:
+            cur.execute(f"""ANALYZE {schema}.{tableName}""")
+            
+    log.info(f'trimming at %.2f secs'%(datetime.now() - start_i).total_seconds())
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         with conn.cursor() as cur:
             #===================================================================
@@ -158,10 +179,13 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM grids.{tableName_trim} b
-                    WHERE ST_Intersects(a.geom, ST_Transform(b.geom, {epsg_id}))
+                    WHERE ST_Intersects(a.geom, b.geom)
                 )"""
             log.info(cmd_str)
             cur.execute(cmd_str)
+ 
+    log.info(f'vacuum at %.2f secs'%(datetime.now() - start_i).total_seconds())
+    pg_vacuum(conn_d, f'{schema}.{tableName}')
                 
     #===========================================================================
     # wrap
@@ -224,24 +248,24 @@ def build_agg_grids(grid_size_l, country_l, conn_d, schema, tableBaseName, table
 def run_build_agg_grids(
  
         out_dir=None,
-        conn_d=postgres_d,
+        conn_d=None,
         epsg_id=None,
         schema='grids',
         grid_size_l=[
-            #30*34,
+            30*34,
             #30*8, 
-            30*2
+            #30*2
             #1e5, 
             #2e5, #big for testing
             ],
         
-        country_l = ['bgd'],
+        country_l = ['deu'],
         ):
     #===========================================================================
     # defaults
     #===========================================================================
     start=datetime.now()    
- 
+    if conn_d is None: conn_d=postgres_d
  
     if out_dir is None:
         out_dir = os.path.join(wrk_dir, 'outs', 'agg', '01_jgrid')
@@ -254,7 +278,7 @@ def run_build_agg_grids(
     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
     if epsg_id is None: epsg_id=equal_area_epsg
     
-    log.info(f'on \n    {country_l}\n    {conn_d}')
+    log.info(f'on \n    {grid_size_l}\n    {country_l}\n    {conn_d}')
     
     
     #===========================================================================
@@ -262,7 +286,7 @@ def run_build_agg_grids(
     #===========================================================================
     tbl_extents='country_grids_extents'
     #build_extents_grid(conn_d, epsg_id, schema, tbl_extents)
-    log.info(f'built {tbl_extents}')
+    #log.info(f'built {tbl_extents}')
  
     #===========================================================================
     # create agg grids
