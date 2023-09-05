@@ -282,7 +282,59 @@ def run_build_agg_grids(
     log.info(meta_d)
     return
     
- 
+
+def run_merge_agg_grids(
+        conn_d=postgres_d,
+        tbl_grids_l = [
+            'agg_bgd_0100000',
+            #'agg_bgd_0000240',
+            'agg_bgd_0001020',
+            ],
+                
+        schema='grids', tableName='agg',
+        ):
+    """merge the agg grids"""
+    
+    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+        
+        #===========================================================================
+        # setup
+        #===========================================================================
+        #remove if it exists
+        with conn.cursor() as cur:
+            cur.execute(f"""DROP TABLE IF EXISTS {schema}.{tableName}""")
+        conn.commit()
+        
+        #create if it exists
+
+        
+        #=======================================================================
+        # build
+        #=======================================================================
+        first=True
+        for tableName_i in tbl_grids_l:
+            
+            #create it
+            if first:
+                with conn.cursor() as cur:
+                    cur.execute(f"""
+                        CREATE TABLE {schema}.{tableName} AS
+                            SELECT * FROM {schema}.{tableName_i}
+                                WHERE false""")
+                    
+                conn.commit()
+                
+            with conn.cursor() as cur:
+                cmd_str = f"""
+                INSERT INTO {schema}.{tableName}
+                    SELECT * FROM {schema}.{tableName_i} 
+                """
+                print(cmd_str)
+                cur.execute(cmd_str)
+                
+            first=False
+                
+    print(f'finished')
         
 
 if __name__ == '__main__':
