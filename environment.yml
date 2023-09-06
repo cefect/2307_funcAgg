@@ -13,6 +13,7 @@ dependencies:
   - osmium-tool
   - tqdm
   - pyarrow=13.0.*
+  - xlrd
   - pip
   - pip:
     - osmium
