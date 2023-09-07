@@ -13,9 +13,14 @@ from coms import (
     pg_vacuum, pg_spatialIndex
     ) 
 
+#===============================================================================
+# VARS--------
+#===============================================================================
+max_depth=10.0
 
-
-
+#===============================================================================
+# HELPER FUNCS-------
+#===============================================================================
 def _get_mdex(vidnm, df_d):
     # join some tabs
     df1 = df_d['damage_function'].set_index(vidnm)
@@ -220,10 +225,12 @@ def slice_serx(serx_raw,
         
     #set the cross section
     serx = serx_raw
-    for lvlName, lvlVal in xs_d.items():
-        serx = serx.xs(lvlVal, level=lvlName)
-        keep_names_l.append(lvlName)
+    if not xs_d is None:
+        for lvlName, lvlVal in xs_d.items():
+            serx = serx.xs(lvlVal, level=lvlName)
+            keep_names_l.append(lvlName)
         
+    #drop the levels
     drop_lvl_names = list(set(serx_raw.index.names).difference(keep_names_l))
 
     return serx.droplevel(drop_lvl_names)

@@ -24,6 +24,57 @@ from funcMetrics.coms_fm import slice_serx
 
 from definitions import wrk_dir, dfunc_pkl_fp
 
+def force_max_depth(
+        serx_raw,
+        max_depth, log
+        ):
+    """add a maximum depth to each function"""
+    log = log.getChild('maxDepth')
+    log.info(f'on {serx_raw.shape} w/ max_depth={max_depth}')
+    
+    #===========================================================================
+    # #add a flag to the index
+    #===========================================================================
+    dx = serx_raw.to_frame()
+    dx['max_depth_forcing']=False
+    serx = dx.set_index('max_depth_forcing', append=True).swaplevel().iloc[:,0]
+ 
+    #===========================================================================
+    # #add the max depth to each function group
+    #===========================================================================
+    d = dict()
+    cnt=0
+    for df_id, gserx in tqdm(serx.groupby('df_id')):
+        
+        wd_vals = gserx.index.get_level_values('wd')
+        
+        d[df_id] =gserx.copy()
+        
+        #expand
+        if max(wd_vals)<max_depth:
+            new_index_vals = list(gserx.index[0])
+            new_index_vals[-2]  =True #flag this one as forced
+            new_index_vals[-1] = max_depth
+            
+            d[df_id].loc[tuple(new_index_vals)] = gserx.max()
+            
+            cnt+=1
+            
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    res_serx = pd.concat(d.values())
+    
+    assert len(res_serx) == len(serx) + cnt
+    log.info(f'forced {cnt} max depths')
+    
+    return res_serx
+    
+ 
+ 
+ 
+            
+    
 
 def compute_gradient(
         serx,
@@ -31,13 +82,11 @@ def compute_gradient(
         log
         ):
     """calculate the gradient of the functions"""
-    
-    
-
-    
-    
-    
+ 
+    log = log.getChild('gradient')
     log.info(f'on {len(serx.index.unique(1))} funcs')
+    
+ 
     
     #===========================================================================
     # loop and compute
@@ -47,6 +96,8 @@ def compute_gradient(
         #prep
         log.debug(f'df_id={df_id} w/ {len(gserx)}')
         ar = gserx.droplevel([0,1]).reset_index().T.values
+        
+ 
         
         #compute the first derivative
         """
@@ -66,7 +117,7 @@ def compute_gradient(
     # collect
     #===========================================================================
     log.info(f'finished w/ {len(res_d)}')
-    res_dx = pd.concat(res_d.values(), axis=0)
+    res_dx = pd.concat(res_d.values(), axis=0).astype(np.float16)
     
     return res_dx
  
@@ -78,6 +129,7 @@ def compute_gradient(
 def run_gradient(
         fp = dfunc_pkl_fp,
         out_dir=None,
+        max_depth=None,
         ):
     
     #===========================================================================
@@ -94,18 +146,36 @@ def run_gradient(
     
     log = init_log(name=f'deriv', fp=os.path.join(out_dir, today_str+'.log'))
     
+    if max_depth is None:
+        from funcMetrics.coms_fm import max_depth
+    
     #===========================================================================
     # load
     #===========================================================================
     log.info(f'loading from \n    {fp}')
     serx_raw = pd.read_pickle(fp)
     
-    serx = slice_serx(serx_raw)
+    
+    
+    #===========================================================================
+    # extend
+    #===========================================================================
+    """using full index as we are changing the index (not just adding values"""
+    serx_extend = force_max_depth(serx_raw, max_depth, log)
+    
     
     #===========================================================================
     # compute
     #===========================================================================
-    res_dx =  compute_gradient(serx, log)
+ 
+    res_dx =  compute_gradient(slice_serx(serx_extend, xs_d=None), log)
+    
+    #add back the big index
+    res_dx.index = serx_extend.index
+    
+    """
+    view(res_dx)
+    """
     
     #===========================================================================
     # #write
