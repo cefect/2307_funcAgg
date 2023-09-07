@@ -131,7 +131,7 @@ def plot_dfunc_matrix(
         out_dir=None,
         figsize=None,
         model_l=None,
-        ncols=4,
+        ncols=5,
         model_names_d=clean_names_d.copy(),
         ):
     """plot damage function groups"""
@@ -160,7 +160,7 @@ def plot_dfunc_matrix(
     #update the names
     for model_id in serx.index.unique('model_id'):
         if not model_id in model_names_d:
-            model_names_d[model_id] = serx.xs(model_id, level='model_id').index.unique('abbreviation')[0]
+            model_names_d[model_id] = serx.xs(model_id, level='model_id').index.unique('abbreviation')[0].replace(' et al.', '.')
  
         
     
@@ -180,6 +180,13 @@ def plot_dfunc_matrix(
     model_df = pd.DataFrame(transform_1d_to_2d(np.array(model_l), ncols))
     model_df.columns = [f'c{e}' for e in model_df.columns]
     model_df.index = [f'r{e}' for e in model_df.index]    
+    
+    #get figsize (holding the width)
+    if figsize is None:
+        figsize_width=matplotlib.rcParams['figure.figsize'][0]
+        figsize_height = figsize_width*(model_df.shape[0]/model_df.shape[1])
+        
+        figsize = (figsize_width, figsize_height)
  
     #setup the figure with this
     col_keys, row_keys  = model_df.columns.tolist(), model_df.index.tolist()
@@ -201,6 +208,7 @@ def plot_dfunc_matrix(
         if model_id==-9999:
             #ax.axis('off') #hide it
             continue
+        fancy_name = model_names_d[model_id]
         
         #slice to this model and remove unecessary indexers
         serx_i = serx.xs(model_id, level='model_id').droplevel(drop_lvl_names)
@@ -208,7 +216,7 @@ def plot_dfunc_matrix(
  
         #plot all the curves
         func_cnt = len(serx_i.index.unique('df_id'))
-        log.info(f'plotting %i \'df_id\' values for model_id=\'{model_id}\''%(func_cnt))
+        log.info(f'plotting %i \'df_id\' values for model_id=\'{model_id}\' ({fancy_name})'%(func_cnt))
         for df_id, gserx in serx_i.groupby('df_id', group_keys=False):
             
             ar = gserx.droplevel('df_id').reset_index().values.swapaxes(0,1)
@@ -230,7 +238,7 @@ def plot_dfunc_matrix(
         
  
  
-        tstr = f'%s\n'%model_names_d[model_id]+f'model_id={model_id}\n'+f'functions={func_cnt}'
+        tstr = f'%s\n'%fancy_name+f'model={model_id}\n'+f'cnt={func_cnt}'
             
             #f'sector=%s\n'%mdf['sector_attribute'][0]
             #f'real_frac={bx.sum()/len(bx):.4f}'
@@ -259,7 +267,7 @@ def plot_dfunc_matrix(
         if row_key==row_keys[-1]:
             ax.get_xaxis().set_major_formatter(
                 matplotlib.ticker.FuncFormatter(lambda x, p: '%i'%(x*100)))
-            ax.set_xlabel('water depth (cm)')
+            ax.set_xlabel('depth (cm)')
             
         #first col
         if col_key==col_keys[0]:
