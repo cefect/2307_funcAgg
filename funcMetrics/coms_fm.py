@@ -210,6 +210,24 @@ def write_dfunc_serx(**kwargs):
     serx.to_pickle(r'l:\10_IO\2307_funcAgg\ins\figueiredo2018\dfunc_lib_figu2018_20230906.pkl')
 
 
+def slice_serx(serx_raw,
+               xs_d = {'sector_attribute':'residential'},
+               keep_names_l = None,
+               ):
+    """do some typical slicing and cleaning of the function data"""
+    if keep_names_l is None:
+        keep_names_l = ['model_id','df_id', 'wd']
+        
+    #set the cross section
+    serx = serx_raw
+    for lvlName, lvlVal in xs_d.items():
+        serx = serx.xs(lvlVal, level=lvlName)
+        keep_names_l.append(lvlName)
+        
+    drop_lvl_names = list(set(serx_raw.index.names).difference(keep_names_l))
+
+    return serx.droplevel(drop_lvl_names)
+    
 
 
 
