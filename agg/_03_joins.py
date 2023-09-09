@@ -5,6 +5,9 @@ Created on Sep. 5, 2023
 
 join agg grids to sample poitns
 '''
+#===============================================================================
+# IMPORTS-----
+#===============================================================================
 import os, hashlib, sys, subprocess, psutil
 from datetime import datetime
 from itertools import product
@@ -19,9 +22,10 @@ from tqdm import tqdm
 import pandas as pd
 
 from coms import (
-    init_log, today_str, get_directory_size,dstr, view, get_conn_str,
-    pg_vacuum, pg_spatialIndex
+    init_log, today_str, get_directory_size,dstr, view,  
     ) 
+
+from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex
 
 from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir
 
@@ -31,7 +35,9 @@ from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg
 tableName_grid='agg'
 out_schema = 'inters_agg'
             
-            
+#===============================================================================
+# FUNCS---------
+#===============================================================================
 
 def run_join_agg_grids(
         country_l = ['bgd'],
@@ -45,9 +51,6 @@ def run_join_agg_grids(
         tableBaseName = 'pts_osm_fathom'
         
  
-        
-        
-
         ):
     """join intersect points to agg grids
     

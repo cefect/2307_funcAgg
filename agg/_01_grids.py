@@ -6,6 +6,9 @@ Created on Sep. 2, 2023
 create aggregation grids
 '''
 
+#===============================================================================
+# IMPORTS--------
+#===============================================================================
 import os, hashlib, sys, subprocess, psutil
 from datetime import datetime
 from itertools import product
@@ -21,15 +24,19 @@ import pandas as pd
 
 from coms import (
     init_log, today_str, get_log_stream, get_directory_size,
-    dstr, view, get_conn_str, pg_vacuum, pg_spatialIndex
+    dstr, view, 
     )
+
+from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe
 
  
 
 from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir
 
 
-
+#===============================================================================
+# FUNCS-------
+#===============================================================================
 def build_extents_grid(conn_d, epsg_id, schema, tableName):
     """build table of textents from original grids"""
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
@@ -298,73 +305,12 @@ def run_build_agg_grids(
     
     log.info(meta_d)
     return
-    
 
-def run_merge_agg_grids(
-        conn_d=postgres_d,
-        tbl_grids_l = [
-            'agg_bgd_0100000',
-            #'agg_bgd_0000240',
-            'agg_bgd_0001020',
-            ],
-                
-        schema='grids', tableName='agg',
-        ):
-    """merge the agg grids"""
-    
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:
-        
-        #===========================================================================
-        # setup
-        #===========================================================================
-        #remove if it exists
-        with conn.cursor() as cur:
-            cur.execute(f"""DROP TABLE IF EXISTS {schema}.{tableName}""")
-        conn.commit()
-        
-        #create if it exists
 
-        
-        #=======================================================================
-        # build
-        #=======================================================================
-        first=True
-        for tableName_i in tbl_grids_l:
-            
-            #create it
-            if first:
-                with conn.cursor() as cur:
-                    cur.execute(f"""
-                        CREATE TABLE {schema}.{tableName} AS
-                            SELECT * FROM {schema}.{tableName_i}
-                                WHERE false""")
-                    
-                conn.commit()
-                
-            with conn.cursor() as cur:
-                cmd_str = f"""
-                INSERT INTO {schema}.{tableName}
-                    SELECT * FROM {schema}.{tableName_i} 
-                """
-                print(cmd_str)
-                cur.execute(cmd_str)
-                
-            first=False
-            
-            
-    #===========================================================================
-    # clean up
-    #===========================================================================
- 
-    pg_spatialIndex(conn_d, schema, tableName)
-    pg_vacuum(conn_d, f'{schema}.{tableName}')
-                
-    print(f'finished')
-        
 
 if __name__ == '__main__':
-    #run_build_agg_grids()
-    run_merge_agg_grids()
+    run_build_agg_grids()
+ 
     
     
     
