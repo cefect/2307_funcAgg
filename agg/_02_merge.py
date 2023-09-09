@@ -36,7 +36,7 @@ def run_merge_agg_grids(
         tbl_grids_l = [
             #'agg_aus_0000240',
             #'agg_aus_0001020',
-            #'agg_bgd_0000060',
+            'agg_bgd_0000060',
             'agg_bgd_0000240',
             'agg_bgd_0001020',
             'agg_bgd_0100000',
@@ -123,12 +123,12 @@ def run_merge_agg_grids(
     #===========================================================================
     # report
     #===========================================================================
-    res = pg_exe(
-        """SELECT country_key, grid_size, COUNT(*)
+    cmd_str = """SELECT country_key, grid_size, COUNT(*)
             FROM grids.agg
             GROUP BY country_key, grid_size
             ORDER BY country_key, grid_size"""
-            )
+    print(cmd_str)
+    res = pg_exe(cmd_str)
     
     print(pd.DataFrame(res, columns=['country_key', 'grid_size', 'count']))
  
