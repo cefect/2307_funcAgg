@@ -170,7 +170,7 @@ def run_clean_inters(
     
 def run_merge_inters(
         conn_d=postgres_d,
-        country_l = ['bgd'], 
+        country_l = None, 
         schema='inters', viewName='pts_osm_fathom',
         ):
     """merge the agg grids"""
@@ -188,15 +188,10 @@ def run_merge_inters(
     # create view
     #===========================================================================
     print(f'creating view on {len(country_l)}')
+    pg_exe(f"""DROP VIEW IF EXISTS {schema}.{viewName}""")
+    
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
-        
-        #===========================================================================
-        # setup
-        #===========================================================================
-        #remove if it exists
-        with conn.cursor() as cur:
-            cur.execute(f"""DROP VIEW IF EXISTS {schema}.{viewName}""")
-        conn.commit()
+ 
  
         #=======================================================================
         # build
@@ -217,18 +212,15 @@ def run_merge_inters(
         with conn.cursor() as cur:
             print(cmd_str)
             cur.execute(cmd_str)
-        conn.commit()
 
- 
             
     #===========================================================================
     # report
     #===========================================================================
-    cmd_str = f"""SELECT country_key, COUNT(*)
+ 
+    res = pg_exe(f"""SELECT country_key, COUNT(*)
             FROM {schema}.{viewName}
-            GROUP BY country_key"""
-    print(cmd_str)
-    res = pg_exe(cmd_str)
+            GROUP BY country_key""", return_fetch=True)
     
     print(pd.DataFrame(res, columns=['country_key', 'count']))
  
@@ -244,7 +236,16 @@ def run_merge_inters(
       
     
 if __name__ == '__main__':
-    #run_build_agg_grids()
-    run_clean_inters()
+    run_merge_inters()
+    """
+      country_key     count
+0         AUS   2333745
+1         BGD   4647944
+2         BRA   6450206
+3         CAN   5754035
+4         DEU  25994846
+5         ZAF    986456
+"""
+    #run_clean_inters()
     #run_merge_agg_grids()
         
