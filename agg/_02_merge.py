@@ -224,14 +224,13 @@ def run_merge_inters(
     #===========================================================================
     # report
     #===========================================================================
-    cmd_str = f"""SELECT country_key, grid_size, COUNT(*)
+    cmd_str = f"""SELECT country_key, COUNT(*)
             FROM {schema}.{viewName}
-            GROUP BY country_key, grid_size
-            ORDER BY country_key, grid_size"""
+            GROUP BY country_key"""
     print(cmd_str)
     res = pg_exe(cmd_str)
     
-    print(pd.DataFrame(res, columns=['country_key', 'grid_size', 'count']))
+    print(pd.DataFrame(res, columns=['country_key', 'count']))
  
     #===========================================================================
     # clean up
