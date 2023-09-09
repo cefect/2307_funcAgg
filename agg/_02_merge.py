@@ -141,11 +141,111 @@ def run_merge_agg_grids(
                 
     print(f'finished')
     
+
+def run_clean_inters(
+        conn_d=postgres_d,
+        country_l = ['aus', 'bra', 'can', 'deu', 'zaf'], 
+        schema='inters',  
+        ):
+    """merge the agg grids"""
     
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    #create if it exists
+    if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
     
+    #===========================================================================
+    # clean and index
+    #===========================================================================
+    for tableName in tqdm(country_l):
+        print(f'pg_vacuum {tableName}')
+        pg_vacuum(conn_d, f'{schema}.{tableName}')
+        
+        print(f'pg_spatialIndex {tableName}')
+        pg_spatialIndex(conn_d, schema, tableName, columnName='geometry')
+        
+    print(f'finished')
+    return
     
+def run_merge_inters(
+        conn_d=postgres_d,
+        country_l = ['bgd'], 
+        schema='inters', viewName='pts_osm_fathom',
+        ):
+    """merge the agg grids"""
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    #create if it exists
+    if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
+    
+ 
+        
+    
+    #===========================================================================
+    # create view
+    #===========================================================================
+    print(f'creating view on {len(country_l)}')
+    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+        
+        #===========================================================================
+        # setup
+        #===========================================================================
+        #remove if it exists
+        with conn.cursor() as cur:
+            cur.execute(f"""DROP VIEW IF EXISTS {schema}.{viewName}""")
+        conn.commit()
+ 
+        #=======================================================================
+        # build
+        #=======================================================================
+        #start the query with the first table
+        cmd_str = f"""
+        CREATE VIEW {schema}.{viewName} AS
+            SELECT * FROM {schema}.{country_l[0]}
+        """
+        
+        #add the rest of the tables to the union statement
+        print(f'building union call w/ {len(country_l)} tables')
+        for tableName_i in country_l[1:]:
+            cmd_str += f"""
+                UNION ALL
+                SELECT * FROM {schema}.{tableName_i}
+            """
+        with conn.cursor() as cur:
+            print(cmd_str)
+            cur.execute(cmd_str)
+        conn.commit()
+
+ 
+            
+    #===========================================================================
+    # report
+    #===========================================================================
+    cmd_str = f"""SELECT country_key, grid_size, COUNT(*)
+            FROM {schema}.{viewName}
+            GROUP BY country_key, grid_size
+            ORDER BY country_key, grid_size"""
+    print(cmd_str)
+    res = pg_exe(cmd_str)
+    
+    print(pd.DataFrame(res, columns=['country_key', 'grid_size', 'count']))
+ 
+    #===========================================================================
+    # clean up
+    #===========================================================================
+    """not needed by a view
+    pg_spatialIndex(conn_d, schema, tableName)
+    pg_vacuum(conn_d, f'{schema}.{tableName}')"""
+                
+    print(f'finished')
+    
+      
     
 if __name__ == '__main__':
     #run_build_agg_grids()
-    run_merge_agg_grids()
+    run_clean_inters()
+    #run_merge_agg_grids()
         

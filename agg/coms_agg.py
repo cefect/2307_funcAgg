@@ -34,22 +34,26 @@ def pg_vacuum(conn_d, tableName):
     return conn, cur
 
 
-def pg_spatialIndex(conn_d, schema, tableName):
+def pg_spatialIndex(conn_d, schema, tableName, columnName='geom'):
     return pg_exe(f"""
                 CREATE INDEX {tableName}_geom_idx
                     ON {schema}.{tableName}
-                        USING GIST (geom);
+                        USING GIST ({columnName});
                 """)
  
             
 
-def pg_exe(cmd_str, conn_d=None):
+def pg_exe(cmd_str, conn_d=None, log=None, return_fetch=False):
+    if not log is None:
+        log.info(cmd_str)
     if conn_d is None:
         conn_d =postgres_d
         
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         with conn.cursor() as cur:
             cur.execute(cmd_str)
-            return cur.fetchall()
+            if return_fetch:
+                return cur.fetchall()
+ 
         
         
