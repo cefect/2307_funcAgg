@@ -25,14 +25,15 @@ from coms import (
     init_log, today_str, get_directory_size,dstr, view,  
     ) 
 
-from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex
+from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe
+from agg._01_grids import gridssize_default_l
 
 from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir
 
 
 
 
-tableName_grid='agg'
+
 out_schema = 'inters_agg'
             
 #===============================================================================
@@ -40,9 +41,9 @@ out_schema = 'inters_agg'
 #===============================================================================
 
 def run_join_agg_grids(
-        country_l = ['bgd'],
+        country_l = None,
         grid_size_l=[
-            100000, 
+            100000,  #412.6 secs (using views)
             #2e5, #big for testing
             ],
         
@@ -71,6 +72,7 @@ def run_join_agg_grids(
     
     log = init_log(name=f'jgrid', fp=os.path.join(out_dir, today_str+'.log'))
     
+    if grid_size_l is None: grid_size_l=gridssize_default_l
     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
     #if epsg_id is None: epsg_id=equal_area_epsg
     
@@ -104,39 +106,87 @@ def _build_grid_inters_join(
         epsg_id=equal_area_epsg
         ):
     """build a table with the spatial join results"""
+    #===========================================================================
+    # defautls
+    #===========================================================================
+    start=datetime.now() 
     
+    #==================================================================
+    # using views is too slow (400secs)
+    # tableName_grid='agg'
+    # tableName_inters='pts_osm_fathom'
+    #==================================================================
+    
+    #use the base tables (44 secs)
+    tableName_grid = f'agg_{country_key}_{grid_size:07d}'
+    tableName_inters=f'{country_key.lower()}'
+ 
+    #===========================================================================
+    # setup
+    #===========================================================================
+    
+    
+    pg_exe(f"""DROP TABLE IF EXISTS {out_schema}.{tableName}""")
+    
+    #get the column names
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
-        #remove if it exists
         with conn.cursor() as cur:
-            cur.execute(f"""DROP TABLE IF EXISTS {out_schema}.{tableName}""")
+            cur.execute(f"""SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = %s
+                        ORDER BY ordinal_position;
+                        """, (tableName_inters,))
+            
+            coln_l = [e[0] for e in cur.fetchall()]
+            
+    print(f'columns\n    {coln_l}')
+ 
+    
+    
             
             
     #perform the join
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         with conn.cursor() as cur:
-            cmd_str=f"""
-                CREATE TABLE {out_schema}.{tableName} AS
-                    SELECT pts.country_key, pts.gid, pts.id, polys.grid_size, polys.I, polys.J, ST_Transform(pts.geometry, {epsg_id}) as geom 
-                        FROM inters.{country_key} AS pts
+            #build the query
+            cmd_str=f"""CREATE TABLE {out_schema}.{tableName} AS
+                            SELECT """
+            
+            #get all the columns  
+            for e in [e for e in coln_l if not e=='geometry']:
+                cmd_str+=f'pts.{e}, '
+                            
+ 
+
+            cmd_str+=f"""polys.grid_size, polys.I, polys.J, ST_Transform(pts.geometry, {epsg_id}) as geom 
+                        FROM inters.{tableName_inters} AS pts
                         JOIN grids.{tableName_grid} AS polys
                     ON ST_Contains(polys.geom, ST_Transform(pts.geometry, {epsg_id}))
-                        WHERE pts.country_key=%s AND polys.grid_size=%s
+                        WHERE pts.country_key=%s AND polys.grid_size=%s AND polys.country_key=%s
  
                     
                     """
             print(cmd_str)
-            cur.execute(cmd_str, (country_key.upper(),grid_size))
+            cur.execute(cmd_str, (country_key.upper(), grid_size, country_key))
             
     #clean up
+    log.info(f'cleaning')
     pg_spatialIndex(conn_d, out_schema, tableName)
     pg_vacuum(conn_d, f'{out_schema}.{tableName}')
     
             
     #get stats
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"""SELECT COUNT(*) FROM {out_schema}.{tableName}""")
-            print(cur.fetchall())
+    print(pg_exe(f"""SELECT COUNT(*) FROM {out_schema}.{tableName}""", log=log, return_fetch=True))
+ 
+            
+            
+    #wrap
+    meta_d = {
+        'tdelta':(datetime.now() - start).total_seconds(), 
+        'RAM_GB':psutil.virtual_memory()[3] / 1000000000, 
+        'postgres_GB':get_directory_size(postgres_dir)}
+        #'output_MB':os.path.getsize(ofp)/(1024**2)
+    log.info(f'finishedw/ \n{meta_d}')
  
 
 
