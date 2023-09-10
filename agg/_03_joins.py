@@ -13,7 +13,7 @@ from datetime import datetime
 from itertools import product
 
 import psycopg2
-print('psycopg2.__version__=' + psycopg2.__version__)
+#print('psycopg2.__version__=' + psycopg2.__version__)
 
 from sqlalchemy import create_engine, URL
 

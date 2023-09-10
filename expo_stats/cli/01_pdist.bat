@@ -3,14 +3,14 @@
 @echo off
  
 set gridsizes=1020 240 60
-set countries=deu
+set countries=zaf bra can deu
  
 
 :: Activate environment
 call %~dp0..\..\env\conda_activate
 
 :: execute
-python -O main_03_joins.py --gridsizes %gridsizes% --countries %countries%
+python -O %~dp0..\_01_pdist.py
  
 
 cmd.exe /k
