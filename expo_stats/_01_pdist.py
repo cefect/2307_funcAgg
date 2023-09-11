@@ -16,7 +16,7 @@ from itertools import product
 import concurrent.futures
 
 import psycopg2
-print('psycopg2.__version__=' + psycopg2.__version__)
+#print('psycopg2.__version__=' + psycopg2.__version__)
 
 from sqlalchemy import create_engine, URL
 
@@ -44,22 +44,7 @@ from definitions import (
 schema='inters_agg'
 
 
-def _futures_buid_grid(grid_size, country_key, i, min_size, out_dir):
-    tableName=f'pts_osm_fathom_{country_key}_{grid_size:07d}'
-    log = get_log_stream()
 
-    #set filepath
-    uuid = hashlib.shake_256(f'{tableName}_{min_size}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
-    ofp = os.path.join(out_dir,f'{tableName}_{uuid}.geojson')
-
-    if not os.path.exists(ofp):
-        dx = _calc_grid_country(tableName, log, min_size)
-        dx.to_pickle(ofp)
-        log.info(f'wrote {dx.shape} to \n    {ofp}')
-    else:
-        log.info(f'    filepath exists... skipping')
-
-    return i, ofp
 
 
 def run_build_pdist(
@@ -71,6 +56,8 @@ def run_build_pdist(
         min_size=5,
         #nonzero_frac_thresh=0.99,
         max_workers=None,
+        
+        debug_len=None,
  
         ):
     """fit pdist to each clump
@@ -111,41 +98,30 @@ def run_build_pdist(
     #===========================================================================
     # retrieve dataframe from postgis
     #===========================================================================
-    if max_workers is None:
-        res_d = dict()
-        for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
-            tableName=f'pts_osm_fathom_{country_key}_{grid_size:07d}'
-            log.info(f'on {i}: {tableName}') 
-            
-            #set filepath
-     
-            uuid = hashlib.shake_256(f'{tableName}_{min_size}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
-            ofp = os.path.join(out_dir,f'{tableName}_{uuid}.geojson')
-            
-            if not os.path.exists(ofp):
-     
-                dx = _calc_grid_country(tableName, log, min_size)
-                dx.to_pickle(ofp)
-                
-                log.info(f'wrote {dx.shape} to \n    {ofp}')
-                
-            else:
-                log.info(f'    filepath exists... skipping')
-                
-            res_d[i] = ofp
-            
-    #===========================================================================
-    # PARALLEL
-    #===========================================================================
-    else:
-        res_d = dict()
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_futures_buid_grid, grid_size, country_key, i, min_size, out_dir) 
-                       for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l))]
+ 
+    res_d = dict()
+    for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
+        tableName=f'pts_osm_fathom_{country_key}_{grid_size:07d}'
+        log.info(f'on {i}: {tableName}') 
         
-        for future in concurrent.futures.as_completed(futures):
-            i, ofp = future.result()
-            res_d[i] = ofp
+        #set filepath
+ 
+        uuid = hashlib.shake_256(f'{tableName}_{min_size}_{debug_len}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+        ofp = os.path.join(out_dir,f'{tableName}_{uuid}.pkl')
+        
+        if not os.path.exists(ofp):
+ 
+            dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len)
+            dx.to_pickle(ofp)
+            
+            log.info(f'wrote {dx.shape} to \n    {ofp}')
+            
+        else:
+            log.info(f'    filepath exists... skipping')
+            
+        res_d[i] = ofp
+            
+ 
         
         
         
@@ -161,8 +137,9 @@ def run_build_pdist(
                     }
     
     log.info(meta_d)
-            
-def _calc_grid_country(tableName, log, min_size):
+    
+    
+def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
     """calc pdist for a single table"""
     
     log=log.getChild(tableName)
@@ -183,58 +160,48 @@ def _calc_grid_country(tableName, log, min_size):
         
     log.info(f'queried {len(ij_dx)} grids on {tableName}')
     
+    #slice
+    bx = ij_dx['count'] >min_size    
+    
+    ij_dx_sel = ij_dx.loc[bx, :]
+    
+    #slice for debugging
+    if not debug_len is None:
+        assert __debug__
+        log.warning(f'trimming to {debug_len} for debugging')
+        ij_dx_sel = ij_dx_sel.iloc[:4,:]
+    
+    
+    
+    log.info(f'computing on {len(ij_dx_sel)}/{len(ij_dx)} w/ count>{min_size}')
+    
     #=======================================================================
     # #loop on each 'i' group
     #=======================================================================
     """to reduce i/o calls... pulling a column at a time"""
     res_d = dict()
-    cnt=0
-    bx = ij_dx['count'] >min_size
-    for i, ij_gdx0 in ij_dx[bx].groupby('i'):
-        
-         
-        #load group to geop[andas
-        pts_dx = _get_i_group(tableName, i).set_index(
-            ['country_key', 'gid', 'id', 'grid_size', 'i', 'j'])
-        
-        """pts_df.columns"""
-        
-        #group on each cell
- 
-        log.info(f'computing i={i} ({len(pts_dx)}) on {len(haz_coln_l)} columns')
-        for j, ij_gdx1 in ij_gdx0.groupby('j'):
+
+    if max_workers is None:
+        for i, ij_gdx0 in ij_dx_sel.groupby('i'):
             
-            #get the slice            
-            keys_d=ij_gdx1.index.to_frame(index=False).to_dict('records')[0]
-            
-            pts_gdx = pts_dx.xs(j, level='j')     
-            
-            keys_d['count']=len(pts_gdx)
- 
-        
-            #compute each haz            
-            d = dict()
-            for haz_coln, ser in pts_gdx.items():
-                log.debug(f'{i}.{haz_coln}')
-                d[haz_coln] = _get_agg_stats_on_ser(ser)
+             
+            keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0)
                 
-            #clean up
-            res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
-            res_df.index.set_names(['haz', 'metric'], inplace=True)
-            
-            #add the indexers
-            for k1,v1 in keys_d.items():
-                res_df[k1]=v1                
-            res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
-            
             #store
             res_d[keys_d['gid']] = res_df 
-            cnt+=1
             
-        #=======================================================================
-        # if cnt>3:
-        #     break
-        #=======================================================================
+    #===========================================================================
+    # PARALLEL
+    #===========================================================================
+    else: 
+        log.info(f'concurrent.futures.ProcessPoolExecutor(max_workers={max_workers})')
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            futures = {executor.submit(_worker_calc_stats_i_group, i, ij_gdx0, tableName): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
+            
+            for future in tqdm(concurrent.futures.as_completed(futures)):
+                gid, res_df = future.result()
+                res_d[gid] = res_df
+ 
             
     #===========================================================================
     # wrap
@@ -245,9 +212,47 @@ def _calc_grid_country(tableName, log, min_size):
     
     return res_dx
  
+def _worker_calc_stats_i_group(i, ij_gdx0, tableName):
+    log = get_log_stream()
+    keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0)
+    return keys_d['gid'], res_df
+            
+
+def _calc_stats_i_group(tableName, log, i, ij_gdx0):
+    #load group to geop[andas
+    pts_dx = _sql_to_df_igroup(tableName, i).set_index(
+        ['country_key', 'gid', 'id', 'grid_size', 'i', 'j'])
+    """pts_df.columns"""
+    
+    #group on each cell
+    """should probably parallelize here instead"""
+    log.debug(f'{tableName} computing i={i} ({len(pts_dx)}) on {len(haz_coln_l)} columns')
+    for j, ij_gdx1 in ij_gdx0.groupby('j'):
+        #get the slice
+        keys_d = ij_gdx1.index.to_frame(index=False).to_dict('records')[0]
+        pts_gdx = pts_dx.xs(j, level='j')
+        keys_d['count'] = len(pts_gdx)
+        #compute each haz
+        d = dict()
+        for haz_coln, ser in pts_gdx.items():
+            log.debug(f'{i}.{haz_coln}')
+            d[haz_coln] = _get_agg_stats_on_ser(ser)
         
+        #clean up
+        res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
+        res_df.index.set_names(['haz', 'metric'], inplace=True)
+        #add the indexers
+        for k1, v1 in keys_d.items():
+            res_df[k1] = v1
+        
+        res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
+    
+    return keys_d, res_df
+
+      
 
 def plot_exponential_dist(params, data):
+    """plotting an exponential distribution (for debugging"""
     import matplotlib.pyplot as plt
 # Plot the raw histogram and the fitted distribution
     _ = plt.hist(data, bins=20, density=True, alpha=0.6, color='g')
@@ -305,7 +310,7 @@ def _get_agg_stats_on_ser(ser):
             
              
 
-def _get_i_group(tableName, i, conn_d=postgres_d):
+def _sql_to_df_igroup(tableName, i, conn_d=postgres_d):
     """load a filtered table to geopanbdas"""
     
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
@@ -323,19 +328,21 @@ def _get_i_group(tableName, i, conn_d=postgres_d):
         #             WHERE i={i}""", engine)
         #=======================================================================
               
-def _post_to_gpd(schema, tableName, conn_d=postgres_d): 
-    """load a table into geopandas"""                                           
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:        
- 
-        
-        #set engine for geopandas
-        engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
-        return gpd.read_postgis(f"SELECT * FROM {schema}.{tableName}", engine)
+#===============================================================================
+# def _post_to_gpd(schema, tableName, conn_d=postgres_d): 
+#     """load a table into geopandas"""                                           
+#     with psycopg2.connect(get_conn_str(conn_d)) as conn:        
+#  
+#         
+#         #set engine for geopandas
+#         engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
+#         return gpd.read_postgis(f"SELECT * FROM {schema}.{tableName}", engine)
+#===============================================================================
     
 
 
 if __name__ == '__main__':
-    run_build_pdist(max_workers=4)
+    run_build_pdist(max_workers=4, debug_len=10)
     
     
     
