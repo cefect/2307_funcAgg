@@ -20,6 +20,13 @@ import matplotlib.pyplot as plt
 cm = 1 / 2.54
 
 
+def _get_cmap(color_keys, name='Set1'):
+    cmap = plt.cm.get_cmap(name=name)
+    ik_d = dict(zip(color_keys, np.linspace(0, 1, len(color_keys))))
+    hex = lambda x:matplotlib.colors.rgb2hex(x)
+ 
+    return {k:hex(cmap(ni)) for k, ni in ik_d.items()}
+
 def get_matrix_fig(  
                        row_keys, #row labels for axis
                        col_keys, #column labels for axis (1 per column)
