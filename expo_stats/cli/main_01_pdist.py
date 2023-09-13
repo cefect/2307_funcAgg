@@ -15,6 +15,7 @@ from definitions import index_country_fp_d, equal_area_epsg
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='compute pdist on each agg group')
     parser.add_argument('--maxworkers', type=int,default=4, help='workers ofr processing pool')
+    parser.add_argument('--outdir', type=str,default=None, help='output direcytory')
  
  
     parser.add_argument('--gridsizes', nargs='+', type=int, default=gridsize_default_l, help='Grid size list')
@@ -25,7 +26,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     run_build_pdist(
-        #out_dir=args.out_dir,
+        out_dir=args.outdir,
         #conn_d=args.conn,
         max_workers=args.maxworkers,
         grid_size_l=args.gridsizes,

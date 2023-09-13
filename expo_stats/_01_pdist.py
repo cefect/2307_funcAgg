@@ -27,6 +27,9 @@ import pandas as pd
 import geopandas as gpd
 idx = pd.IndexSlice
 
+
+import matplotlib.pyplot as plt
+
 from scipy.stats import expon
 
 
@@ -114,7 +117,7 @@ def run_build_pdist(
             
             if not os.path.exists(ofp):
                 
-                dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len)
+                dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len, out_dir=out_dir)
                 
                 
                 #append indexers
@@ -189,7 +192,7 @@ def run_build_pdist(
     log.info(meta_d)
     
     
-def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
+def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, out_dir=None):
     """calc pdist for a single table"""
     
     log=log.getChild(tableName)
@@ -235,7 +238,7 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
         for i, ij_gdx0 in ij_dx_sel.groupby('i'):
             
              
-            keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0)
+            keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0, out_dir=out_dir)
                 
             #store
             res_d[keys_d['gid']] = res_df 
@@ -246,7 +249,7 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
     else: 
         log.info(f'concurrent.futures.ProcessPoolExecutor(max_workers={max_workers})')
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_worker_calc_stats_i_group, i, ij_gdx0, tableName): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
+            futures = {executor.submit(_worker_calc_stats_i_group, i, ij_gdx0, tableName,out_dir): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
             
             for future in tqdm(concurrent.futures.as_completed(futures)):
                 gid, res_df = future.result()
@@ -262,13 +265,13 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
     
     return res_dx
  
-def _worker_calc_stats_i_group(i, ij_gdx0, tableName):
+def _worker_calc_stats_i_group(i, ij_gdx0, tableName, out_dir):
     log = get_log_stream()
-    keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0)
+    keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0, out_dir=out_dir)
     return keys_d['gid'], res_df
             
 
-def _calc_stats_i_group(tableName, log, i, ij_gdx0):
+def _calc_stats_i_group(tableName, log, i, ij_gdx0, plot_only=True, out_dir=None):
     #load group to geop[andas
     pts_dx = _sql_to_df_igroup(tableName, i).set_index(
         ['country_key', 'gid', 'id', 'grid_size', 'i', 'j'])
@@ -282,25 +285,83 @@ def _calc_stats_i_group(tableName, log, i, ij_gdx0):
         keys_d = ij_gdx1.index.to_frame(index=False).to_dict('records')[0]
         pts_gdx = pts_dx.xs(j, level='j')
         keys_d['count'] = len(pts_gdx)
-        #compute each haz
-        d = dict()
-        for haz_coln, ser in pts_gdx.items():
-            log.debug(f'{i}.{haz_coln}')
-            d[haz_coln] = _get_agg_stats_on_ser(ser)
         
-        #clean up
-        res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
-        res_df.index.set_names(['haz', 'metric'], inplace=True)
-        #add the indexers
-        for k1, v1 in keys_d.items():
-            res_df[k1] = v1
-        
-        res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
+        if plot_only:
+            _write_hist(pts_gdx, keys_d, out_dir=out_dir)
+            
+            res_df=pd.DataFrame()
+        else:
+            #compute each haz
+            d = dict()
+            for haz_coln, ser in pts_gdx.items():
+                log.debug(f'{i}.{haz_coln}')
+                d[haz_coln] = _get_agg_stats_on_ser(ser)
+            
+            #clean up
+            res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
+            res_df.index.set_names(['haz', 'metric'], inplace=True)
+            #add the indexers
+            for k1, v1 in keys_d.items():
+                res_df[k1] = v1
+            
+            res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
     
     return keys_d, res_df
 
-      
+def _write_hist(dx, keys_d, out_dir=None, maxd=500):
+    """write a plot"""
+    
+    df = dx.reset_index(drop=True)
+    
+    if np.all(df==0) or len(df)<5:
+        return
+    
+    #setup plot
+    plt.close('all')
+    #fig, ax = plt.subplots()
+ 
+    #set up data
+    mdex = dx.index
+    
+    lab_d = {k:mdex.unique(k)[0] for k in ['country_key', 'grid_size', 'gid']}
+    
+    
+    #plot
+    df.hist(sharey=True, sharex=True, bins=np.linspace(0, maxd, 20))
+    
+    
+    fig = plt.gcf()
+    
+    ax = fig.gca()
+    
+    #text
+    tstr= '\n'.join([f'{k}={v}' for k,v in lab_d.items()])
+    
+    tstr +=f'\ncnt={len(df)}'
+    
+    ax.text(0.95, 0.05, tstr, 
+                            transform=ax.transAxes, va='bottom', ha='right', 
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                            )
+    #===========================================================================
+    # post
+    #===========================================================================
 
+    
+    ax.set_xlim(0, maxd)
+    ax.set_xlabel('depth (cm)')
+    
+    uuid = hashlib.shake_256(f'{lab_d}_{keys_d}_{today_str}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+    nstr = '_'.join([str(e) for e in lab_d.values()])
+    ofp = os.path.join(out_dir, f'samp_hist_{nstr}_{today_str}_{uuid}.svg')
+    fig.savefig(ofp, dpi = 300,   transparent=True)
+    
+    """
+    
+    plt.show()
+    """
+    
+    
 def plot_exponential_dist(params, data):
     """plotting an exponential distribution (for debugging"""
     import matplotlib.pyplot as plt
@@ -404,9 +465,10 @@ def _sql_to_df_igroup(tableName, i, conn_d=postgres_d):
 
 
 if __name__ == '__main__':
-    run_build_pdist(max_workers=None, 
+    run_build_pdist(max_workers=2, 
                     grid_size_l=[1020, 240, 60],
-                    debug_len=None)
+                    debug_len=None,
+                    out_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist\plots')
     
     
     
