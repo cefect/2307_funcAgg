@@ -4,7 +4,7 @@
  
 set gridsizes=1020 240 60
 set countries=bgd
-set maxworkers=4
+set maxworkers=6
  
 
 :: Activate environment

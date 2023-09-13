@@ -48,7 +48,7 @@ schema='inters_agg'
 
 
 def run_build_pdist(
-        country_l = ['bgd', 'deu'],
+        country_l = ['bgd'],
         grid_size_l=None,
         
         conn_d=postgres_d,
@@ -98,36 +98,76 @@ def run_build_pdist(
     #===========================================================================
     # retrieve dataframe from postgis
     #===========================================================================
- 
+    meta_lib=dict()
     res_d = dict()
     for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
         tableName=f'pts_osm_fathom_{country_key}_{grid_size:07d}'
-        log.info(f'on {i}: {tableName}') 
+        start_i=datetime.now() 
+        
         
         #set filepath
+        try:
+            uuid = hashlib.shake_256(f'{tableName}_{min_size}_{debug_len}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+            ofp = os.path.join(out_dir,f'{tableName}_{uuid}.pkl')
+            
+            log.info(f'on {i}: {tableName}') 
+            
+            if not os.path.exists(ofp):
+                
+                dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len)
+                dx.to_pickle(ofp)
+                
+                log.info(f'wrote {dx.shape} to \n    {ofp}')
+                
+            else:
+                log.info(f'    filepath exists... skipping\n    {ofp}')
+                dx = pd.read_pickle(ofp)
+                
+            
+            
+            #get some meta
+            cnt_ar = dx.index.get_level_values('count').values
+            meta_lib[i] = {
+                'len':len(dx), 'ofn':os.path.basename(ofp), 'grid_size':grid_size, 'country_key':country_key,
+                'count_max':cnt_ar.max(), 'count_mean':cnt_ar.mean(),
+                'loc_max':dx.xs('loc', level='metric').values.max(),'loc_mean':dx.xs('loc', level='metric').values.mean(), #includes all hazard layers
+                'scale_max':dx.xs('scale', level='metric').values.max(), 'scale_mean':dx.xs('scale', level='metric').values.mean(),
+                'output_MB':os.path.getsize(ofp)/(1024**2),
+                'tdelta_secs':(datetime.now()-start).total_seconds(),
+                'now':datetime.now(),
+                }
+            
+            #store
+            res_d[i] = ofp
  
-        uuid = hashlib.shake_256(f'{tableName}_{min_size}_{debug_len}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
-        ofp = os.path.join(out_dir,f'{tableName}_{uuid}.pkl')
+        except Exception as e:
+            log.error(f'failed on  {i}: {tableName} w/ \n    {e}')
+            meta_lib[i]={
+                'error':str(e),
+                'tdelta_secs':(datetime.now()-start).total_seconds(),
+                'now':datetime.now(),
+                }
         
-        if not os.path.exists(ofp):
  
-            dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len)
-            dx.to_pickle(ofp)
-            
-            log.info(f'wrote {dx.shape} to \n    {ofp}')
-            
-        else:
-            log.info(f'    filepath exists... skipping')
-            
-        res_d[i] = ofp
             
  
         
+ 
         
+    #===========================================================================
+    # write meta
+    #===========================================================================
+    
+    meta_df = pd.DataFrame.from_dict(meta_lib).T
+    
+    ofp = os.path.join(out_dir, f'meta_{len(meta_df)}_{today_str}.csv')
+    meta_df.to_csv(ofp, index=False)
+    log.info(f'wrote meta {meta_df.shape} to \n    {ofp}')
         
     #===========================================================================
     # wrap
     #===========================================================================
+    
     log.info(f'finished on {len(res_d)}')
     meta_d = {
                     'tdelta':(datetime.now()-start).total_seconds(),
@@ -313,13 +353,25 @@ def _get_agg_stats_on_ser(ser):
 def _sql_to_df_igroup(tableName, i, conn_d=postgres_d):
     """load a filtered table to geopanbdas"""
     
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:
-        #set engine for geopandas
-        engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
-        return pd.read_sql_query(f"""
+    conn =  psycopg2.connect(get_conn_str(conn_d))
+    #set engine for geopandas
+    engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
+    try:
+        result = pd.read_sql_query(f"""
                 SELECT country_key, gid, id, f010_fluvial, f050_fluvial, f100_fluvial, f500_fluvial, grid_size, i, j 
                     FROM {schema}.{tableName}
                     WHERE i={i}""", engine)
+        
+    except Exception as e:
+        raise IOError(f'failed query w/ \n    {e}')
+    finally:
+        # Dispose the engine to close all connections
+        engine.dispose()
+        # Close the connection
+        conn.close()
+        
+
+    return result
         
         #=======================================================================
         # return gpd.read_postgis(f"""
@@ -342,7 +394,9 @@ def _sql_to_df_igroup(tableName, i, conn_d=postgres_d):
 
 
 if __name__ == '__main__':
-    run_build_pdist(max_workers=4, debug_len=10)
+    run_build_pdist(max_workers=None, 
+                    grid_size_l=[1020, 240, 60],
+                    debug_len=None)
     
     
     
