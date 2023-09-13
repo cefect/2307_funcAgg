@@ -115,6 +115,16 @@ def run_build_pdist(
             if not os.path.exists(ofp):
                 
                 dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len)
+                
+                
+                #append indexers
+                #===============================================================
+                # raise IOError('check this')
+                # for k,v in {'grid_size':grid_size, 'country_key':country_key}.items():
+                #     dx[k]=v
+                # dx = dx.set_index(['grid_size', 'country_key'], append=True)
+                #===============================================================
+                
                 dx.to_pickle(ofp)
                 
                 log.info(f'wrote {dx.shape} to \n    {ofp}')
@@ -235,7 +245,7 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None):
     #===========================================================================
     else: 
         log.info(f'concurrent.futures.ProcessPoolExecutor(max_workers={max_workers})')
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(_worker_calc_stats_i_group, i, ij_gdx0, tableName): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
             
             for future in tqdm(concurrent.futures.as_completed(futures)):
@@ -266,7 +276,7 @@ def _calc_stats_i_group(tableName, log, i, ij_gdx0):
     
     #group on each cell
     """should probably parallelize here instead"""
-    log.debug(f'{tableName} computing i={i} ({len(pts_dx)}) on {len(haz_coln_l)} columns')
+    log.info(f'    {tableName} computing i={i} ({len(pts_dx)}) on {len(haz_coln_l)} columns')
     for j, ij_gdx1 in ij_gdx0.groupby('j'):
         #get the slice
         keys_d = ij_gdx1.index.to_frame(index=False).to_dict('records')[0]
