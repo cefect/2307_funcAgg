@@ -108,7 +108,7 @@ print('loaded matplotlib %s'%matplotlib.__version__)
 import matplotlib.patches as mpatches
 
 
-import os, glob, hashlib
+import os, glob, hashlib, string
 import pandas as pd
 import numpy as np
 idx = pd.IndexSlice
@@ -648,7 +648,8 @@ def plot_hist_combine_violin(
         std_dev_multiplier=1,
         min_wet_cnt=5,
         country_key='bgd',
-        bw_method=0.05,
+        bw_method=0.1,
+        sample_frac=0.05,
         ):
     """plot the combined histograms
     
@@ -689,7 +690,7 @@ def plot_hist_combine_violin(
     # setup figure
     #===========================================================================
     row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
-    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex=True, sharey=True)
+    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, sharex=True, sharey=True, add_subfigLabel=False)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
@@ -699,6 +700,7 @@ def plot_hist_combine_violin(
     #===========================================================================
     # loop and plot
     #===========================================================================
+    #letter=list(string.ascii_lowercase)[j]
  
     for (row_key, col_key), gserx0 in dx.xs(country_key, level='country_key').groupby(kl[:2]):
         log.info(f'{row_key} x {col_key}')
@@ -711,6 +713,7 @@ def plot_hist_combine_violin(
         # #get the data
         #===================================================================
         gdx = gserx0.droplevel(kl[:2])
+        gdx = gdx.sample(n=int(len(gdx)*sample_frac))
         
         #split the data
         metric_df_raw = gdx.xs('metric', level=0, axis=1)
@@ -747,8 +750,8 @@ def plot_hist_combine_violin(
         tstr = f'cnt={len(bx)}\nwet_cnt={bx.sum()}\n'
  
               
-        ax.text(0.95, 0.05, tstr, 
-                            transform=ax.transAxes, va='bottom', ha='right', 
+        ax.text(0.95, 0.95, tstr, 
+                            transform=ax.transAxes, va='top', ha='right', 
                             bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
                             )
             
@@ -763,18 +766,26 @@ def plot_hist_combine_violin(
     #===========================================================================
     # post
     #===========================================================================
- 
+    fig.suptitle(country_key)
      
     for row_key, col_key, ax in rc_ax_iter:
         ax.grid()
+        
+        #first row
+        if row_key==row_keys[0]:
+            ax.set_title(f'{col_key}m grid')
+        
         #last row
         if row_key==row_keys[-1]:
   
             ax.set_xlabel(f'WSH (cm)')
+            
+            #ax.get_ticks()
+            ax.set_xticklabels([int(e) for e in gd.keys()])  # rotation is optional
              
         #first col
         if col_key==col_keys[0]:
-            ax.set_ylabel('density')
+            ax.set_ylabel(f'{haz_label_d[row_key]} density')
              
  
     #===========================================================================
