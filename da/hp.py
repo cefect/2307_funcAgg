@@ -158,8 +158,13 @@ def get_matrix_fig(
         log.info('built %ix%i w/ figsize=%s'%(len(col_keys), len(row_keys), figsize))
         return fig, ax_d
 
-#===============================================================================
-# PLOTERS----------
-#===============================================================================
-
+ 
+def _set_violinparts_style(violin_parts, color, alpha=0.5):
+    for pc in violin_parts.pop('bodies'):
+        pc.set_facecolor(color)
+        #pc.set_edgecolor('black')
+        pc.set_alpha(alpha)
+    
+    for k, line in violin_parts.items():
+        line.set_color(color)
 

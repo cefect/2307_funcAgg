@@ -117,7 +117,7 @@ from datetime import datetime
 from scipy.stats import expon
 
 from coms import init_log, today_str
-from da.hp import get_matrix_fig, _get_cmap
+from da.hp import get_matrix_fig, _get_cmap, _set_violinparts_style
 
 from definitions import wrk_dir, haz_label_d, temp_dir
 
@@ -139,10 +139,12 @@ def _get_filepaths(search_dir):
 
 def load_pdist_concat(
         search_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist',
-        infer_keys=True, #temporary because I forgot to add the indexers
+        infer_keys=False, #temporary because I forgot to add the indexers
         ):
     
-    """load pdist results and concat"""
+    """load pdist results and concat
+    
+    NOTE: probably need to switch to dask once we add the other countries"""
     
     #===========================================================================
     # retrieve filepaths
@@ -183,29 +185,480 @@ def load_pdist_concat(
                 
                 df_d[fn]=dx.sort_index(sort_remaining=True)
       
-        serx = pd.concat(df_d.values()).sort_index(sort_remaining=True).iloc[:,0]
+        dx = pd.concat(df_d.values()).sort_index(sort_remaining=True)
         
-        serx.to_pickle(ofp)
-        print(f'wrote {len(serx)} to \n    {ofp}')
+        dx.to_pickle(ofp)
+        print(f'wrote {dx.shape} to \n    {ofp}')
         
     else:
         print(f'loading cached from \n    {ofp}')
-        serx = pd.read_pickle(ofp)
+        dx = pd.read_pickle(ofp)
     
-    print(f'finished w/ {len(serx)}')
+    print(f'finished w/ {len(dx)}')
     
-    return serx
-    
-
+    return dx
     
 
+    
 
-def plot_pdist_metric_v_count(
+
+#===============================================================================
+# def plot_pdist_metric_v_count(
+#  
+#         out_dir=None,
+#         yval='loc'
+#         ):
+#     """scatter plots of pdist data vs. count"""
+#     
+#     #===========================================================================
+#     # defaults
+#     #===========================================================================
+#     
+#     if out_dir is None:
+#         out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
+#     if not os.path.exists(out_dir):os.makedirs(out_dir)
+#     
+#     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
+#     
+#  
+#     #===========================================================================
+#     # load data
+#     #===========================================================================
+#     serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
+#     mdex = serx.index
+#     
+#     #get a data grouper
+#     keys_l = ['haz',  'grid_size', 'country_key']    
+#     #serx_grouper = serx.groupby(keys_l)
+#     
+#     
+#     log.info(f' loaded {serx.index.shape} ')
+#     
+#     
+#     #===========================================================================
+#     # setup figure
+#     #===========================================================================
+#     row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_l]
+#     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex='col', sharey=True)
+#     
+#     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+#     
+#     #color map
+#     #retrieve the color map
+#     cmap = plt.cm.get_cmap(name='Set1')    
+#     ik_d = dict(zip(color_keys, np.linspace(0, 1, len(color_keys))))
+#     hex = lambda x:matplotlib.colors.rgb2hex(x)
+#     color_d = {k:hex(cmap(ni)) for k, ni in ik_d.items()}
+#     
+#     
+# 
+#     #===========================================================================
+#     # loop and plot
+#     #===========================================================================
+#     cnt=0
+#     for (row_key, col_key, color_key), gserxR in serx.groupby(keys_l):
+#         log.info(f'{row_key} x {col_key} x {color_key}')
+#         ax = ax_d[row_key][col_key]
+#  
+#         #get the data
+#         gserx = gserxR.droplevel(keys_l).unstack('metric').reset_index(level='count')
+#         
+#         #remove all zeros
+#         bx = gserx['count']>(gserx['zero_cnt']+gserx['null_cnt'])
+#         
+#         gserx1 = gserx[bx]
+#         
+#         """
+#         gserx.hist()
+#         plt.show()
+#         """
+#  
+#         
+#         ax.plot(gserx1['count'], gserx1[yval],color=color_d[color_key], alpha=0.5,
+#                  marker='.', linestyle='none', label=color_key)
+#         
+#         #ax.hist(gserx.index.get_level_values('count'))
+#         
+#  
+#         
+#         cnt+=1
+#             
+#     #===========================================================================
+#     # text
+#     #===========================================================================
+# 
+#     serx_grouper = serx.groupby([keys_l[0], keys_l[1]])
+#     for row_key, col_key, ax in rc_ax_iter:
+#         
+#         gserx0 = serx_grouper.get_group((row_key, col_key))
+#         
+#         tstr=''
+#         
+#         for color_key, gserx1 in gserx0.groupby(keys_l[2]):
+#             gdx=gserx1.droplevel(keys_l).unstack('metric').reset_index(level='count')
+#             bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
+#             
+#             tstr += f'{color_key}_cnt={len(bx)}\n{color_key}_dry_cnt={len(bx)-bx.sum()}\n'
+#              
+#             #f'sector=%s\n'%mdf['sector_attribute'][0]
+#             #f'real_frac={bx.sum()/len(bx):.4f}'
+#              
+#         ax.text(0.95, 0.05, tstr, 
+#                             transform=ax.transAxes, va='bottom', ha='right', 
+#                             bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+#                             )
+#         
+#         
+#     #===========================================================================
+#     # post
+#     #===========================================================================
+# 
+#     
+#     for row_key, col_key, ax in rc_ax_iter:
+#  
+#         #last row
+#         if row_key==row_keys[-1]:
+#  
+#             ax.set_xlabel('agg. size')
+#             
+#         #first col
+#         if col_key==col_keys[0]:
+#             ax.set_ylabel(f'{yval} (cm)')
+#             
+#             if row_key==row_keys[0]:
+#                 ax.legend()
+#                 
+#     
+#     #===========================================================================
+#     # write
+#     #===========================================================================
+#     ofp = os.path.join(out_dir, f'pdist_scatter_count-{yval}_{len(col_keys)}x{len(row_keys)}_{today_str}.png')
+#     fig.savefig(ofp, dpi = 300,   transparent=True)
+#     log.info(f'wrote to \n    %s'%ofp)
+#     
+#     return ofp
+#     """
+#     plt.show()
+#     """
+#         
+#  
+#  
+# 
+# def plot_pdist_metric_violin(
+#  
+#         out_dir=None,
+#         yval='loc'
+#         ):
+#     """scatter plots of pdist data vs. count"""
+#     
+#     #===========================================================================
+#     # defaults
+#     #===========================================================================
+#     
+#     if out_dir is None:
+#         out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
+#     if not os.path.exists(out_dir):os.makedirs(out_dir)
+#     
+#     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
+#     
+#  
+#     #===========================================================================
+#     # load data
+#     #===========================================================================
+#     serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
+#     mdex = serx.index
+#     
+#     #get a data grouper
+#     keys_d = {'row':'haz',  'col':'grid_size', 'color':'country_key'}
+#     kl = list(keys_d.values())    
+#     #serx_grouper = serx.groupby(keys_l)
+#     
+#     
+#     log.info(f' loaded {serx.index.shape} for yval={yval}')
+#     
+#     
+#     #===========================================================================
+#     # setup figure
+#     #===========================================================================
+#     row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+#     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex=True, sharey=True)
+#     
+#     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+#     
+#     #color map
+#     #retrieve the color map
+#     color_d= _get_cmap(color_keys)
+#     
+#     
+# 
+#     #===========================================================================
+#     # loop and plot
+#     #===========================================================================
+#     cnt=0
+#     for (row_key, col_key), gserx0 in serx.groupby(kl[:2]):
+#         log.info(f'{row_key} x {col_key}')
+#         ax = ax_d[row_key][col_key]
+#  
+#         #make a violin plot for each color on the same axis
+#         cl = list()
+#         for i, (color_key, gserx1) in enumerate(gserx0.groupby(kl[2])):
+#             cl.append(color_key)
+#             color=color_d[color_key]
+#             #get the data
+#             gdx = gserx1.droplevel(kl).unstack('metric').reset_index(level='count')
+#         
+#             #remove all zeros
+#             bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
+#             
+#             gserx2 = gdx.loc[bx,yval]
+#             
+#             #voilin plot
+#             violin_parts = ax.violinplot(gserx2.values, positions=[i], 
+#                                          showmeans=True, showmedians=False, showextrema=False,
+#  
+#                                          )
+#             
+#             
+#             
+#             # Change the color of each part of the violin plot
+#             for pc in violin_parts.pop('bodies'):
+#                 pc.set_facecolor(color)
+#                 #pc.set_edgecolor('black')
+#                 pc.set_alpha(.8)
+#                 
+#             for k, line in violin_parts.items():
+#                 line.set_color('black')
+#                 
+#             cnt+=1
+#                 
+#                 
+#         #fix ticks
+#         ax.set_xticks(np.arange(len(cl)))
+#         ax.set_xticklabels(cl)
+#  
+#     #===========================================================================
+#     # text
+#     #===========================================================================
+# 
+#     #===========================================================================
+#     # serx_grouper = serx.groupby([keys_l[0], keys_l[1]])
+#     # for row_key, col_key, ax in rc_ax_iter:
+#     #     
+#     #     gserx0 = serx_grouper.get_group((row_key, col_key))
+#     #     
+#     #     tstr=''
+#     #     
+#     #     for color_key, gserx1 in gserx0.groupby(keys_l[2]):
+#     #         gdx=gserx1.droplevel(keys_l).unstack('metric').reset_index(level='count')
+#     #         bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
+#     #         
+#     #         tstr += f'{color_key}_cnt={len(bx)}\n{color_key}_dry_cnt={len(bx)-bx.sum()}\n'
+#     #          
+#     #         #f'sector=%s\n'%mdf['sector_attribute'][0]
+#     #         #f'real_frac={bx.sum()/len(bx):.4f}'
+#     #          
+#     #     ax.text(0.95, 0.05, tstr, 
+#     #                         transform=ax.transAxes, va='bottom', ha='right', 
+#     #                         bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+#     #                         )
+#     #===========================================================================
+#         
+#         
+#     #===========================================================================
+#     # post
+#     #===========================================================================
+#     
+#     #build legend
+#     legend_handles = [mpatches.Patch(color=c, label=k) for k,c in color_d.items()]
+#     
+#     for row_key, col_key, ax in rc_ax_iter:
+#  
+#         #last row
+#         if row_key==row_keys[-1]:
+#  
+#             ax.set_xlabel(kl[2])
+#             
+#         #first col
+#         if col_key==col_keys[0]:
+#             ax.set_ylabel(f'{yval} (cm)')
+#             
+#             
+#         #last col
+#         if col_key==col_keys[-1]:   
+#             if row_key==row_keys[0]:
+#                 ax.legend(handles=legend_handles)
+#                 
+#     
+#     #===========================================================================
+#     # write
+#     #===========================================================================
+#     ofp = os.path.join(out_dir, f'pdist_violin_{yval}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+#     fig.savefig(ofp, dpi = 300,   transparent=True)
+#     log.info(f'wrote to \n    %s'%ofp)
+#     plt.close('all')
+#     
+#     return ofp
+#     """
+#     plt.show()
+#     """
+#         
+#  
+#     
+# def plot_pdist_paramterized(
+#  
+#         out_dir=None,
+#         std_dev_multiplier=2,
+#  
+#         ):
+#     """use average parameter values to plot pdist for each group"""
+#     
+#     #===========================================================================
+#     # defaults
+#     #===========================================================================
+#     
+#     if out_dir is None:
+#         out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
+#     if not os.path.exists(out_dir):os.makedirs(out_dir)
+#     
+#     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
+#     
+#  
+#     #===========================================================================
+#     # load data
+#     #===========================================================================
+#     serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
+#     mdex = serx.index
+#     
+#     #get a data grouper
+#     keys_d = {'row':'haz',  'col':'grid_size', 'color':'country_key'}
+#     kl = list(keys_d.values())    
+#     #serx_grouper = serx.groupby(keys_l)
+#     
+#     
+#     log.info(f' loaded {serx.index.shape}')
+#     
+#     #===========================================================================
+#     # setup figure
+#     #===========================================================================
+#     row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+#     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex=True, sharey=True)
+#     
+#     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+#     
+#     #color map
+#  
+#     color_d = _get_cmap(color_keys)
+#     
+#     #===========================================================================
+#     # loop and plot
+#     #===========================================================================
+#     xar = np.linspace(0, 500, 100) #dummy xrange
+#     cnt=0
+#     for (row_key, col_key), gserx0 in serx.groupby(kl[:2]):
+#         log.info(f'{row_key} x {col_key}')
+#         ax = ax_d[row_key][col_key]
+#  
+#         #make a violin plot for each color on the same axis
+#         cl = list()
+#         for i, (color_key, gserx1) in enumerate(gserx0.groupby(kl[2])):
+#             cl.append(color_key)
+#             color=color_d[color_key]
+#             #get the data
+#             gdx = gserx1.droplevel(kl).unstack('metric').reset_index(level='count')
+#         
+#             #remove all zeros
+#             bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
+#             
+#             gdx1 = gdx.loc[bx,['loc', 'scale']].sort_values('loc', ignore_index=True)
+#             
+#             #get location indexers
+#             s = gdx1['loc']
+#             def get_idx(search_val):
+#                 return (s - search_val).abs().idxmin()
+#             
+#             std_dev = s.std()            
+#             
+#             #plot each
+#             for k, index_val, line_kwargs in [
+#                 ('mean', get_idx(s.mean()), dict(alpha=0.8, label=color_key)),
+#                 ('upper_std',get_idx(s.mean()+std_dev*std_dev_multiplier),dict(alpha=0.2)),
+#                 ('lower_std',get_idx(s.mean()-std_dev*std_dev_multiplier), dict(alpha=0.2)),
+#                 ]:
+#                 
+#                 loc, scale = gdx1.loc[index_val, 'loc'],  gdx1.loc[index_val, 'scale']
+#                 pdist_ar = expon.pdf(xar, loc, scale)
+#                 ax.plot(xar, pdist_ar, color=color, **line_kwargs)
+#                 
+#             log.debug(f"finished on {i}")
+#             
+#             """
+#             plt.show()
+#             """
+#     
+#===============================================================================
+
+def _resample_df(df_raw, n=2):
+    
+    df1 = df_raw.T
+    
+    df1['group'] = df1.reset_index().index//n
+    
+    df2 = df1.reset_index().set_index('group')
+    
+    df3 = df2.groupby('group').mean().reset_index(drop=True).set_index(df_raw.columns.name).dropna(axis=0, how='all')
+    df3.index = df3.index - df3.index[0] #shfit back to heads
+    
+    #fix end
+    df3.loc[df1.index[-1]] = np.nan
+    
+    res_df = df3.T
+    
+    assert len(res_df)==len(df_raw)
+    assert len(res_df.columns) == len(df_raw.columns)//n+1
+    
+    return res_df
+
+def _resample_ser(ser, n=2):
+    """resample data through averaging"""
+    df = ser.to_frame().reset_index()
+    
+    #add the group
+    df['group'] = df.index//n
+    
+    #aggregate
+    rserx = df.groupby('group').mean().set_index('index').iloc[:,0].rename(ser.name).dropna()
+    rserx.index = rserx.index - rserx.index[0] #shfit back to heads
+    
+    #fix end
+    rserx.loc[ser.index[-1]] = ser.iloc[-1]
+    
+    assert len(rserx) == len(ser)//2+1
+    
+    return rserx
+    
+
+ 
+    
+
+
+
+def plot_hist_combine_violin(
  
         out_dir=None,
-        yval='loc'
+        std_dev_multiplier=1,
+        min_wet_cnt=5,
+        country_key='bgd',
+        bw_method=0.05,
         ):
-    """scatter plots of pdist data vs. count"""
+    """plot the combined histograms
+    
+    
+    Params
+    -------
+    min_wet_cnt: int
+        fitler to exclude aggregations with few exposures
+        
+    """
     
     #===========================================================================
     # defaults
@@ -215,159 +668,14 @@ def plot_pdist_metric_v_count(
         out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
-    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name=f'pdist.{country_key}')
     
  
     #===========================================================================
     # load data
     #===========================================================================
-    serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
-    mdex = serx.index
-    
-    #get a data grouper
-    keys_l = ['haz',  'grid_size', 'country_key']    
-    #serx_grouper = serx.groupby(keys_l)
-    
-    
-    log.info(f' loaded {serx.index.shape} ')
-    
-    
-    #===========================================================================
-    # setup figure
-    #===========================================================================
-    row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_l]
-    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex='col', sharey=True)
-    
-    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
-    
-    #color map
-    #retrieve the color map
-    cmap = plt.cm.get_cmap(name='Set1')    
-    ik_d = dict(zip(color_keys, np.linspace(0, 1, len(color_keys))))
-    hex = lambda x:matplotlib.colors.rgb2hex(x)
-    color_d = {k:hex(cmap(ni)) for k, ni in ik_d.items()}
-    
-    
-
-    #===========================================================================
-    # loop and plot
-    #===========================================================================
-    cnt=0
-    for (row_key, col_key, color_key), gserxR in serx.groupby(keys_l):
-        log.info(f'{row_key} x {col_key} x {color_key}')
-        ax = ax_d[row_key][col_key]
- 
-        #get the data
-        gserx = gserxR.droplevel(keys_l).unstack('metric').reset_index(level='count')
-        
-        #remove all zeros
-        bx = gserx['count']>(gserx['zero_cnt']+gserx['null_cnt'])
-        
-        gserx1 = gserx[bx]
-        
-        """
-        gserx.hist()
-        plt.show()
-        """
- 
-        
-        ax.plot(gserx1['count'], gserx1[yval],color=color_d[color_key], alpha=0.5,
-                 marker='.', linestyle='none', label=color_key)
-        
-        #ax.hist(gserx.index.get_level_values('count'))
-        
- 
-        
-        cnt+=1
-            
-    #===========================================================================
-    # text
-    #===========================================================================
-
-    serx_grouper = serx.groupby([keys_l[0], keys_l[1]])
-    for row_key, col_key, ax in rc_ax_iter:
-        
-        gserx0 = serx_grouper.get_group((row_key, col_key))
-        
-        tstr=''
-        
-        for color_key, gserx1 in gserx0.groupby(keys_l[2]):
-            gdx=gserx1.droplevel(keys_l).unstack('metric').reset_index(level='count')
-            bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
-            
-            tstr += f'{color_key}_cnt={len(bx)}\n{color_key}_dry_cnt={len(bx)-bx.sum()}\n'
-             
-            #f'sector=%s\n'%mdf['sector_attribute'][0]
-            #f'real_frac={bx.sum()/len(bx):.4f}'
-             
-        ax.text(0.95, 0.05, tstr, 
-                            transform=ax.transAxes, va='bottom', ha='right', 
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
-        
-        
-    #===========================================================================
-    # post
-    #===========================================================================
-
-    
-    for row_key, col_key, ax in rc_ax_iter:
- 
-        #last row
-        if row_key==row_keys[-1]:
- 
-            ax.set_xlabel('agg. size')
-            
-        #first col
-        if col_key==col_keys[0]:
-            ax.set_ylabel(f'{yval} (cm)')
-            
-            if row_key==row_keys[0]:
-                ax.legend()
-                
-    
-    #===========================================================================
-    # write
-    #===========================================================================
-    ofp = os.path.join(out_dir, f'pdist_scatter_count-{yval}_{len(col_keys)}x{len(row_keys)}_{today_str}.png')
-    fig.savefig(ofp, dpi = 300,   transparent=True)
-    log.info(f'wrote to \n    %s'%ofp)
-    
-    return ofp
-    """
-    plt.show()
-    """
-        
- 
-    
-    
-    
-
-
-
-def plot_pdist_metric_violin(
- 
-        out_dir=None,
-        yval='loc'
-        ):
-    """scatter plots of pdist data vs. count"""
-    
-    #===========================================================================
-    # defaults
-    #===========================================================================
-    
-    if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
-    
-    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
-    
- 
-    #===========================================================================
-    # load data
-    #===========================================================================
-    serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
-    mdex = serx.index
+    dx = load_pdist_concat().droplevel(['i', 'j'])
+    mdex = dx.index
     
     #get a data grouper
     keys_d = {'row':'haz',  'col':'grid_size', 'color':'country_key'}
@@ -375,8 +683,7 @@ def plot_pdist_metric_violin(
     #serx_grouper = serx.groupby(keys_l)
     
     
-    log.info(f' loaded {serx.index.shape} for yval={yval}')
-    
+    log.info(f' loaded {dx.shape}')
     
     #===========================================================================
     # setup figure
@@ -386,216 +693,99 @@ def plot_pdist_metric_violin(
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
-    #color map
-    #retrieve the color map
-    color_d= _get_cmap(color_keys)
-    
-    
-
-    #===========================================================================
-    # loop and plot
-    #===========================================================================
-    cnt=0
-    for (row_key, col_key), gserx0 in serx.groupby(kl[:2]):
-        log.info(f'{row_key} x {col_key}')
-        ax = ax_d[row_key][col_key]
- 
-        #make a violin plot for each color on the same axis
-        cl = list()
-        for i, (color_key, gserx1) in enumerate(gserx0.groupby(kl[2])):
-            cl.append(color_key)
-            color=color_d[color_key]
-            #get the data
-            gdx = gserx1.droplevel(kl).unstack('metric').reset_index(level='count')
-        
-            #remove all zeros
-            bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
-            
-            gserx2 = gdx.loc[bx,yval]
-            
-            #voilin plot
-            violin_parts = ax.violinplot(gserx2.values, positions=[i], 
-                                         showmeans=True, showmedians=False, showextrema=False,
- 
-                                         )
-            
-            
-            
-            # Change the color of each part of the violin plot
-            for pc in violin_parts.pop('bodies'):
-                pc.set_facecolor(color)
-                #pc.set_edgecolor('black')
-                pc.set_alpha(.8)
-                
-            for k, line in violin_parts.items():
-                line.set_color('black')
-                
-            cnt+=1
-                
-                
-        #fix ticks
-        ax.set_xticks(np.arange(len(cl)))
-        ax.set_xticklabels(cl)
- 
-    #===========================================================================
-    # text
-    #===========================================================================
-
-    #===========================================================================
-    # serx_grouper = serx.groupby([keys_l[0], keys_l[1]])
-    # for row_key, col_key, ax in rc_ax_iter:
-    #     
-    #     gserx0 = serx_grouper.get_group((row_key, col_key))
-    #     
-    #     tstr=''
-    #     
-    #     for color_key, gserx1 in gserx0.groupby(keys_l[2]):
-    #         gdx=gserx1.droplevel(keys_l).unstack('metric').reset_index(level='count')
-    #         bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
-    #         
-    #         tstr += f'{color_key}_cnt={len(bx)}\n{color_key}_dry_cnt={len(bx)-bx.sum()}\n'
-    #          
-    #         #f'sector=%s\n'%mdf['sector_attribute'][0]
-    #         #f'real_frac={bx.sum()/len(bx):.4f}'
-    #          
-    #     ax.text(0.95, 0.05, tstr, 
-    #                         transform=ax.transAxes, va='bottom', ha='right', 
-    #                         bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-    #                         )
-    #===========================================================================
-        
-        
-    #===========================================================================
-    # post
-    #===========================================================================
-    
-    #build legend
-    legend_handles = [mpatches.Patch(color=c, label=k) for k,c in color_d.items()]
-    
-    for row_key, col_key, ax in rc_ax_iter:
- 
-        #last row
-        if row_key==row_keys[-1]:
- 
-            ax.set_xlabel(kl[2])
-            
-        #first col
-        if col_key==col_keys[0]:
-            ax.set_ylabel(f'{yval} (cm)')
-            
-            
-        #last col
-        if col_key==col_keys[-1]:   
-            if row_key==row_keys[0]:
-                ax.legend(handles=legend_handles)
-                
-    
-    #===========================================================================
-    # write
-    #===========================================================================
-    ofp = os.path.join(out_dir, f'pdist_violin_{yval}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
-    fig.savefig(ofp, dpi = 300,   transparent=True)
-    log.info(f'wrote to \n    %s'%ofp)
-    plt.close('all')
-    
-    return ofp
-    """
-    plt.show()
-    """
-        
- 
-    
-def plot_pdist_paramterized(
- 
-        out_dir=None,
-        std_dev_multiplier=2,
- 
-        ):
-    """use average parameter values to plot pdist for each group"""
-    
-    #===========================================================================
-    # defaults
-    #===========================================================================
-    
-    if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
-    
-    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='pdist')
-    
- 
-    #===========================================================================
-    # load data
-    #===========================================================================
-    serx = load_pdist_concat().droplevel(['i', 'j']) #.loc[idx[:,:,:,:,:,yval]].rename(yval)
-    mdex = serx.index
-    
-    #get a data grouper
-    keys_d = {'row':'haz',  'col':'grid_size', 'color':'country_key'}
-    kl = list(keys_d.values())    
-    #serx_grouper = serx.groupby(keys_l)
-    
-    
-    log.info(f' loaded {serx.index.shape}')
-    
-    #===========================================================================
-    # setup figure
-    #===========================================================================
-    row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
-    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, sharex=True, sharey=True)
-    
-    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
-    
-    #color map
- 
+    #color map 
     color_d = _get_cmap(color_keys)
     
     #===========================================================================
     # loop and plot
     #===========================================================================
-    xar = np.linspace(0, 500, 100) #dummy xrange
-    cnt=0
-    for (row_key, col_key), gserx0 in serx.groupby(kl[:2]):
-        log.info(f'{row_key} x {col_key}')
-        ax = ax_d[row_key][col_key]
  
-        #make a violin plot for each color on the same axis
-        cl = list()
-        for i, (color_key, gserx1) in enumerate(gserx0.groupby(kl[2])):
-            cl.append(color_key)
-            color=color_d[color_key]
-            #get the data
-            gdx = gserx1.droplevel(kl).unstack('metric').reset_index(level='count')
+    for (row_key, col_key), gserx0 in dx.xs(country_key, level='country_key').groupby(kl[:2]):
+        log.info(f'{row_key} x {col_key}')
+        ax = ax_d[row_key][col_key] 
+ 
+        color_key=country_key
+        color=color_d[color_key]
         
-            #remove all zeros
-            bx = gdx['count']>(gdx['zero_cnt']+gdx['null_cnt'])
+        #===================================================================
+        # #get the data
+        #===================================================================
+        gdx = gserx0.droplevel(kl[:2])
+        
+        #split the data
+        metric_df_raw = gdx.xs('metric', level=0, axis=1)
+        
+        #remove all zeros
+        bx = metric_df_raw['wet_cnt']>min_wet_cnt
+        
+        #metric_df = gdx.xs('metric', level=0, axis=1)[bx]
+        
+        hist_df_raw = gdx.xs('hist', level=0, axis=1)[bx]
+        
+        hist_df_raw.columns.name='wsh'
+        
+        #ressample to reduce x discretization
+        log.info(f'    resampling w/ {hist_df_raw.shape}')
+        hist_df = _resample_df(hist_df_raw).dropna(axis=1, how='all')
+        
+        #=======================================================================
+        # violin plots plot
+        #=======================================================================
+        log.info(f'    building violin plots on {hist_df.shape} w/ bw_method={bw_method}')
+        gd = {k:v.dropna().values.reshape(-1) for k,v in hist_df.items()}
+        
+        violin_parts = ax.violinplot(gd.values(), widths=1.0, showmeans=True, showextrema=False,  bw_method=bw_method)
+        
+        # Change the color of each part of the violin plot
+        _set_violinparts_style(violin_parts, color)
+ 
+ 
+        #===================================================================
+        # text
+        #===================================================================
+        
+        tstr = f'cnt={len(bx)}\nwet_cnt={bx.sum()}\n'
+ 
+              
+        ax.text(0.95, 0.05, tstr, 
+                            transform=ax.transAxes, va='bottom', ha='right', 
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                            )
             
-            gdx1 = gdx.loc[bx,['loc', 'scale']].sort_values('loc', ignore_index=True)
+ 
+        log.debug(f"finished")
             
-            #get location indexers
-            s = gdx1['loc']
-            def get_idx(search_val):
-                return (s - search_val).abs().idxmin()
-            
-            std_dev = s.std()            
-            
-            #plot each
-            for k, index_val, line_kwargs in [
-                ('mean', get_idx(s.mean()), dict(alpha=0.8, label=color_key)),
-                ('upper_std',get_idx(s.mean()+std_dev*std_dev_multiplier),dict(alpha=0.2)),
-                ('lower_std',get_idx(s.mean()-std_dev*std_dev_multiplier), dict(alpha=0.2)),
-                ]:
-                
-                loc, scale = gdx1.loc[index_val, 'loc'],  gdx1.loc[index_val, 'scale']
-                pdist_ar = expon.pdf(xar, loc, scale)
-                ax.plot(xar, pdist_ar, color=color, **line_kwargs)
-                
-            log.debug(f"finished on {i}")
-            
-            """
-            plt.show()
-            """
-    
+        """
+        ax.clear()
+        plt.show()
+        """
+        
+    #===========================================================================
+    # post
+    #===========================================================================
+ 
+     
+    for row_key, col_key, ax in rc_ax_iter:
+        ax.grid()
+        #last row
+        if row_key==row_keys[-1]:
+  
+            ax.set_xlabel(f'WSH (cm)')
+             
+        #first col
+        if col_key==col_keys[0]:
+            ax.set_ylabel('density')
+             
+ 
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'hist_combine_violin_{country_key}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    fig.savefig(ofp, dpi = 300,   transparent=True)
+    log.info(f'wrote to \n    %s'%ofp)
+    plt.close('all')
+     
+    return ofp
  
     
 if __name__=='__main__':
@@ -607,7 +797,9 @@ if __name__=='__main__':
     #plot_pdist_metric_violin(yval='scale')
     
     
-    plot_pdist_paramterized()
+    #plot_pdist_paramterized()
+    
+    plot_hist_combine_violin()
 
  
     
