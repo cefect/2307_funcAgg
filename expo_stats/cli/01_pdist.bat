@@ -4,7 +4,7 @@
  
 set gridsizes=1020 60 240
 set countries=bgd deu
-set maxworkers=6
+set maxworkers=4
  
  
 

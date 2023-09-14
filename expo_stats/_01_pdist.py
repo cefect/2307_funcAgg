@@ -379,7 +379,7 @@ def _get_stats_igroup(tableName, log, i, ij_gdx0, use_icache=True, **kwargs):
     #===========================================================================
     else:
         assert use_icache
-        log.info(f'i={i} exists... loading from {ofp}')
+        log.debug(f'i={i} exists... loading from {ofp}')
         res_dx = pd.read_pickle(ofp)
         
             
@@ -399,6 +399,8 @@ def _get_agg_stats_on_ser(ser):
     
     ar = ser.dropna().values
     
+    bins = np.linspace(0, 500, 21 )  # Creates 10 bins between 0 and 100
+    
     if len(ar)>2:
         d['mean'] = np.mean(ar)
         d['std'] = np.std(ar)
@@ -417,7 +419,7 @@ def _get_agg_stats_on_ser(ser):
         # compute histogram
         #===========================================================================
         #ar = np.array([0., 0.,   0., 0., 0.,0.])
-        bins = np.linspace(0, 500, 21 )  # Creates 10 bins between 0 and 100
+        
         
         """this will often throw the following warning
         this is safe to ignore as we are not generating the histgraoms for plotting, but for comparing
@@ -428,6 +430,12 @@ def _get_agg_stats_on_ser(ser):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=RuntimeWarning)
             hist, bin_edges = np.histogram(ar, bins, density=True)
+            
+    else:
+        hist, bin_edges = np.histogram(np.full(1, 0.0), bins, density=True)
+        
+        hist = np.full(len(hist), np.nan)
+ 
          
  
     
@@ -572,8 +580,8 @@ def _sql_to_df_igroup(tableName, i, conn_d=postgres_d):
 
 
 if __name__ == '__main__':
-    run_build_pdist(max_workers=2, 
-                    grid_size_l=[1020, 240, 60],
+    run_build_pdist(max_workers=None, 
+                    grid_size_l=[1020],
                     debug_len=None,
                     #out_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist\plots',
                     use_icache=True,
