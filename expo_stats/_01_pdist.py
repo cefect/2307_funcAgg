@@ -10,7 +10,7 @@ fitting probability distributions to the aggregated -intersect datasetes
 #===============================================================================
 # IMPORTS-----
 #===============================================================================
-import os, hashlib, sys, subprocess, psutil
+import os, hashlib, sys, subprocess, psutil, warnings
 from datetime import datetime
 from itertools import product
 import concurrent.futures
@@ -41,7 +41,7 @@ from agg.coms_agg import get_conn_str, pg_exe
 
 from definitions import (
     index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l,
-    haz_coln_l
+    haz_coln_l, temp_dir
     )
 
 schema='inters_agg'
@@ -61,6 +61,7 @@ def run_build_pdist(
         max_workers=None,
         
         debug_len=None,
+        use_icache=True,
  
         ):
     """fit pdist to each clump
@@ -74,6 +75,9 @@ def run_build_pdist(
     nonzero_frac_thresh: float
         minimum non-zero fraction of clump to accept
         using this to exclude edge/fringe clumps
+        
+    use_icache: bool
+        whether to use the cached pickles for the 'i' groups (from tmp_dir)
         
     """
     
@@ -103,34 +107,38 @@ def run_build_pdist(
     #===========================================================================
     meta_lib=dict()
     res_d = dict()
-    for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
+ 
+    for en_i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
         tableName=f'pts_osm_fathom_{country_key}_{grid_size:07d}'
         start_i=datetime.now() 
         
+        log.info(f'on {en_i}: {tableName}')
         
         #set filepath
         try:
             uuid = hashlib.shake_256(f'{tableName}_{min_size}_{debug_len}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
             ofp = os.path.join(out_dir,f'{tableName}_{uuid}.pkl')
             
-            log.info(f'on {i}: {tableName}') 
+             
             
-            if not os.path.exists(ofp):
+            if (not os.path.exists(ofp)) or (not debug_len is None):
                 
-                dx = _calc_grid_country(tableName, log, min_size, max_workers, debug_len=debug_len, out_dir=out_dir)
+                dx = _calc_grid_country(tableName, log, min_size, max_workers, 
+                                        debug_len=debug_len, out_dir=out_dir, use_icache=use_icache)
                 
                 
-                #append indexers
-                #===============================================================
-                # raise IOError('check this')
-                # for k,v in {'grid_size':grid_size, 'country_key':country_key}.items():
-                #     dx[k]=v
-                # dx = dx.set_index(['grid_size', 'country_key'], append=True)
-                #===============================================================
+                #append indexers 
+                for k,v in {'grid_size':grid_size, 'country_key':country_key}.items():
+                    dx[k]=v
+                dx = dx.set_index(['grid_size', 'country_key'], append=True).reorder_levels(
+                    ['grid_size', 'country_key','gid', 'i', 'j', 'haz']).sort_index(sort_remaining=True)
                 
-                dx.to_pickle(ofp)
+ 
+                #write
+                if debug_len is None:
+                    dx.to_pickle(ofp)
                 
-                log.info(f'wrote {dx.shape} to \n    {ofp}')
+                    log.info(f'wrote {dx.shape} to \n    {ofp}')
                 
             else:
                 log.info(f'    filepath exists... skipping\n    {ofp}')
@@ -139,23 +147,30 @@ def run_build_pdist(
             
             
             #get some meta
-            cnt_ar = dx.index.get_level_values('count').values
-            meta_lib[i] = {
+            #cnt_ar = dx.index.get_level_values('count').values
+            mdx=dx.xs('metric', level=0, axis=1)
+            """
+            view(mdx)
+            view(dx)
+            """
+            meta_lib[en_i] = {
                 'len':len(dx), 'ofn':os.path.basename(ofp), 'grid_size':grid_size, 'country_key':country_key,
-                'count_max':cnt_ar.max(), 'count_mean':cnt_ar.mean(),
-                'loc_max':dx.xs('loc', level='metric').values.max(),'loc_mean':dx.xs('loc', level='metric').values.mean(), #includes all hazard layers
-                'scale_max':dx.xs('scale', level='metric').values.max(), 'scale_mean':dx.xs('scale', level='metric').values.mean(),
-                'output_MB':os.path.getsize(ofp)/(1024**2),
-                'tdelta_secs':(datetime.now()-start).total_seconds(),
+                'count_max':mdx['count'].max(), 'count_mean':mdx['count'].mean(),
+                'max':mdx['max'].max(), 'min':mdx['min'].min(),
+                'wet_cnt':mdx['wet_cnt'].sum(), 'zero_cnt':mdx['zero_cnt'].sum(),
+ 
+                #'output_MB':os.path.getsize(ofp)/(1024**2),
+                'max_workers':max_workers,'debug_len':debug_len,
+                'tdelta_secs':(datetime.now()-start_i).total_seconds(),
                 'now':datetime.now(),
                 }
             
             #store
-            res_d[i] = ofp
+            res_d[en_i] = ofp
  
         except Exception as e:
-            log.error(f'failed on  {i}: {tableName} w/ \n    {e}')
-            meta_lib[i]={
+            log.error(f'failed on  {en_i}: {tableName} w/ \n    {e}')
+            meta_lib[en_i]={
                 'error':str(e),
                 'tdelta_secs':(datetime.now()-start).total_seconds(),
                 'now':datetime.now(),
@@ -192,7 +207,7 @@ def run_build_pdist(
     log.info(meta_d)
     
     
-def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, out_dir=None):
+def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, out_dir=None, use_icache=True):
     """calc pdist for a single table"""
     
     log=log.getChild(tableName)
@@ -203,7 +218,9 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, ou
     #         cant control how it splits        
     #     gdf = _post_to_gpd('inters_agg', tableName, conn_d=conn_d)"""
     #===========================================================================
-    #get iterater of grid indexes
+    #===========================================================================
+    # #get iterater of grid indexes
+    #===========================================================================
     ij_dx = pd.DataFrame(
         pg_exe(f"""SELECT i, j, COUNT(*) FROM inters_agg.{tableName} GROUP BY i, j""", return_fetch=True), 
         columns=['i', 'j', 'count']).sort_values(['i', 'j'], ignore_index=True)
@@ -211,9 +228,11 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, ou
     ij_dx.index.name='gid'
     ij_dx = ij_dx.set_index(['i', 'j'], append=True)
         
-    log.info(f'queried {len(ij_dx)} grids on {tableName}')
+    log.debug(f'queried {len(ij_dx)} grids on {tableName}')
     
-    #slice
+    #===========================================================================
+    # #slice
+    #===========================================================================
     bx = ij_dx['count'] >min_size    
     
     ij_dx_sel = ij_dx.loc[bx, :]
@@ -231,17 +250,15 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, ou
     #=======================================================================
     # #loop on each 'i' group
     #=======================================================================
-    """to reduce i/o calls... pulling a column at a time"""
+    """to reduce i/o calls... pulling a column of i cells at a time"""
     res_d = dict()
 
     if max_workers is None:
         for i, ij_gdx0 in ij_dx_sel.groupby('i'):
-            
-             
-            keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0, out_dir=out_dir)
+ 
+            res_d[i] = _get_stats_igroup(tableName, log, i, ij_gdx0, out_dir=out_dir, use_icache=use_icache)
                 
-            #store
-            res_d[keys_d['gid']] = res_df 
+ 
             
     #===========================================================================
     # PARALLEL
@@ -249,64 +266,190 @@ def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, ou
     else: 
         log.info(f'concurrent.futures.ProcessPoolExecutor(max_workers={max_workers})')
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_worker_calc_stats_i_group, i, ij_gdx0, tableName,out_dir): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
+            futures = {executor.submit(_worker_get_stats_igroup, i, ij_gdx0, tableName,out_dir, use_icache): i for i, ij_gdx0 in ij_dx_sel.groupby('i')}
             
-            for future in tqdm(concurrent.futures.as_completed(futures)):
-                gid, res_df = future.result()
-                res_d[gid] = res_df
+            for future in concurrent.futures.as_completed(futures):
+                i, res_dx = future.result()
+                res_d[i] = res_dx
  
             
     #===========================================================================
     # wrap
     #===========================================================================
-    res_dx = pd.concat(res_d.values()).reorder_levels(['gid', 'i', 'j', 'haz', 'count','metric']).sort_index(sort_remaining=True)
+    res_dx = pd.concat(res_d.values()).reorder_levels(['gid', 'i', 'j', 'haz']).sort_index(sort_remaining=True)
     
-    log.info(f'finished {tableName} w/ {len(res_dx)} in {(datetime.now()-start).total_seconds():.2f}secs')
+    log.info(f'finishedw/ {len(res_dx)} in {(datetime.now()-start).total_seconds():.2f} secs')
     
     return res_dx
  
-def _worker_calc_stats_i_group(i, ij_gdx0, tableName, out_dir):
-    log = get_log_stream()
-    keys_d, res_df = _calc_stats_i_group(tableName, log, i, ij_gdx0, out_dir=out_dir)
-    return keys_d['gid'], res_df
+def _worker_get_stats_igroup(i, ij_gdx0, tableName, out_dir, use_icache):
+    log = get_log_stream(name=f'{tableName}_{str(os.getpid())}')
+    res_dx = _get_stats_igroup(tableName, log, i, ij_gdx0, out_dir=out_dir, use_icache=use_icache)
+    return i, res_dx
             
 
-def _calc_stats_i_group(tableName, log, i, ij_gdx0, plot_only=True, out_dir=None):
-    #load group to geop[andas
-    pts_dx = _sql_to_df_igroup(tableName, i).set_index(
-        ['country_key', 'gid', 'id', 'grid_size', 'i', 'j'])
-    """pts_df.columns"""
+
+def _calc_stats_igroup(ij_gdx0, pts_dx, log, **kwargs):
+    """calc the stats for this group of i grids (by iterating over j)"""
     
-    #group on each cell
+    #===========================================================================
+    # setup
+    #===========================================================================
+
+    res_d = dict()
+    cnt = 0
+    
+    #===========================================================================
+    # loop and compute each gruop
+    #===========================================================================
     """should probably parallelize here instead"""
-    log.info(f'    {tableName} computing i={i} ({len(pts_dx)}) on {len(haz_coln_l)} columns')
     for j, ij_gdx1 in ij_gdx0.groupby('j'):
+        cnt += 1
         #get the slice
         keys_d = ij_gdx1.index.to_frame(index=False).to_dict('records')[0]
         pts_gdx = pts_dx.xs(j, level='j')
         keys_d['count'] = len(pts_gdx)
+        #===================================================================
+        # if plot_only:
+        #     _write_hist(pts_gdx, keys_d, out_dir=out_dir)
+        #
+        #     res_d[j]=pd.DataFrame()
+        # else:
+        #===================================================================
+        #compute each haz
+        d, hist_d = dict(), dict()
+        for haz_coln, ser in pts_gdx.items():
+            log.debug(f'{haz_coln}')
+            d[haz_coln], hist_d[haz_coln] = _get_agg_stats_on_ser(ser)
         
-        if plot_only:
-            _write_hist(pts_gdx, keys_d, out_dir=out_dir)
-            
-            res_df=pd.DataFrame()
-        else:
-            #compute each haz
-            d = dict()
-            for haz_coln, ser in pts_gdx.items():
-                log.debug(f'{i}.{haz_coln}')
-                d[haz_coln] = _get_agg_stats_on_ser(ser)
-            
-            #clean up
-            res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
-            res_df.index.set_names(['haz', 'metric'], inplace=True)
-            #add the indexers
-            for k1, v1 in keys_d.items():
-                res_df[k1] = v1
-            
-            res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
+        #clean up
+        res_df = pd.DataFrame.from_dict(d).stack().swaplevel().sort_index().rename('val').to_frame()
+        res_df.index.set_names(['haz', 'metric'], inplace=True)
+        #add the indexers
+        for k1, v1 in keys_d.items():
+            res_df[k1] = v1
+        
+        res_df.set_index(list(keys_d.keys()), append=True, inplace=True)
+        #add hist
+        res_df1 = res_df.unstack('metric').droplevel(0, axis=1).reset_index(level='count')
+        res_df1.columns.name = None
+        #join to same index
+        hist_df = pd.DataFrame.from_dict(hist_d).T
+        hist_df = res_df1.index.to_frame().reset_index(drop=True).join(hist_df, on='haz').set_index(res_df1.index.names)
+        #merge
+        res_d[j] = pd.concat({'metric':res_df1, 'hist':hist_df}, axis=1)
     
-    return keys_d, res_df
+        #wrap j loop
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    res_dx = pd.concat(res_d.values())
+    return res_dx
+
+def _get_stats_igroup(tableName, log, i, ij_gdx0, use_icache=True, **kwargs):
+    """compute stats for an 'i' group of grids"""
+    
+    #get write info
+    uuid = hashlib.shake_256(f'{tableName}_{ij_gdx0}_{i}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+    odi = os.path.join(temp_dir, 'pdist', '_get_stats_igroup', tableName)
+    if not os.path.exists(odi): os.makedirs(odi)
+    
+    ofp = os.path.join(odi,f'{tableName}_{i:07d}_{uuid}.pkl')
+    
+    #===========================================================================
+    # build it
+    #===========================================================================
+    if (not os.path.exists(ofp)) or (not use_icache):
+            
+        #load group to geop[andas
+        pts_dx = _sql_to_df_igroup(tableName, i).set_index(
+            ['country_key', 'gid', 'id', 'grid_size', 'i', 'j'])
+        """pts_df.columns"""
+        
+        #group on each cell
+        jvals = ij_gdx0.index.unique('j')
+        log.info(f'    computing i={i} w/ {len(ij_gdx0)} j vals ({len(pts_dx)}) on {len(haz_coln_l)} columns')
+        res_dx = _calc_stats_igroup(ij_gdx0, pts_dx, log, **kwargs)
+        
+        log.debug(f'writing {res_dx.shape} to \n    {ofp}')
+        res_dx.to_pickle(ofp)
+        
+    #===========================================================================
+    # load it
+    #===========================================================================
+    else:
+        assert use_icache
+        log.info(f'i={i} exists... loading from {ofp}')
+        res_dx = pd.read_pickle(ofp)
+        
+            
+            
+    
+    return res_dx
+
+def _get_agg_stats_on_ser(ser):
+    """compoute stats on single group series"""
+    d = dict()
+    #d['cnt'] = len(ser) #gather this higher
+    d['zero_cnt'] = (ser==0.0).sum()
+    d['null_cnt'] = ser.isna().sum()
+    d['wet_cnt'] = len(ser)-( d['zero_cnt']+d['null_cnt'])
+    
+    
+    
+    ar = ser.dropna().values
+    
+    if len(ar)>2:
+        d['mean'] = np.mean(ar)
+        d['std'] = np.std(ar)
+        d['min']=np.min(ar)
+        d['max']=np.max(ar)
+        
+        """
+        ser.hist()
+        
+        import matplotlib.pyplot as plt
+        plt.show()
+        ser.value_counts(dropna=False)
+        """
+        
+        #===========================================================================
+        # compute histogram
+        #===========================================================================
+        #ar = np.array([0., 0.,   0., 0., 0.,0.])
+        bins = np.linspace(0, 500, 21 )  # Creates 10 bins between 0 and 100
+        
+        """this will often throw the following warning
+        this is safe to ignore as we are not generating the histgraoms for plotting, but for comparing
+            numpy\lib\histograms.py:885: RuntimeWarning: invalid value encountered in divide  return n/db/n.sum(), bin_edges
+            
+        """
+        
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            hist, bin_edges = np.histogram(ar, bins, density=True)
+         
+ 
+    
+    #===========================================================================
+    # # Fit an exponential distribution to the data
+    # """"NO! the data is not exponentially distributed"""
+    # if np.all(ar==0):
+    #     d['loc'], d['scale'] = 0,0
+    # else:
+    #     
+    #     params = expon.fit(ar)
+    #     
+    #     d['loc'], d['scale'] = params[0], params[1]
+    #     d['mean'], d['var'], d['skew'], d['kurt'] = expon.stats(*params, moments='mvsk')
+    #===========================================================================
+        
+ 
+    
+    return d, pd.Series(np.append(hist, np.nan), index=bin_edges, name='hist')
+    
+ 
+
 
 def _write_hist(dx, keys_d, out_dir=None, maxd=500):
     """write a plot"""
@@ -377,42 +520,6 @@ def plot_exponential_dist(params, data):
     plt.title(title)
     plt.show()
 
-def _get_agg_stats_on_ser(ser):
-    """compoute stats on single group series"""
-    d = dict()
-    #d['cnt'] = len(ser) #gather this higher
-    d['zero_cnt'] = (ser==0.0).sum()
-    d['null_cnt'] = ser.isna().sum()
-    
-    ar = ser.dropna().values
-    
-    """
-    ser.hist()
-    
-    import matplotlib.pyplot as plt
-    plt.show()
-    ser.value_counts(dropna=False)
-    """
- 
-    
-    # Fit an exponential distribution to the data
-    if np.all(ar==0):
-        d['loc'], d['scale'] = 0,0
-    else:
-        
-        params = expon.fit(ar)
-        
-        d['loc'], d['scale'] = params[0], params[1]
-        d['mean'], d['var'], d['skew'], d['kurt'] = expon.stats(*params, moments='mvsk')
-        
-        """
-        print(d)         
-        plot_exponential_dist(params, ar)
-        """
-    
-    return d
-    
- 
 
     
     
@@ -468,7 +575,9 @@ if __name__ == '__main__':
     run_build_pdist(max_workers=2, 
                     grid_size_l=[1020, 240, 60],
                     debug_len=None,
-                    out_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist\plots')
+                    #out_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist\plots',
+                    use_icache=True,
+                    )
     
     
     

@@ -125,7 +125,7 @@ def get_log_stream(name=None, level=logging.INFO):
         handler = logging.StreamHandler(
             stream=sys.stdout, #send to stdout (supports colors)
             ) 
-        formatter = logging.Formatter(log_format_str) 
+        formatter = logging.Formatter(log_format_str, datefmt='%H:%M:%S') 
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     return logger
