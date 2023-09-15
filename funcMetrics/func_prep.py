@@ -8,7 +8,7 @@ pre-processing on functions
 #===============================================================================
 # IMPORTS---------
 #===============================================================================
-import os
+import os, hashlib
 import numpy as np
 import pandas as pd
 
@@ -21,7 +21,7 @@ from coms import (
     ) 
 
 
-from definitions import wrk_dir, haz_label_d, temp_dir, dfunc_pkl_fp
+from definitions import wrk_dir, haz_label_d, temp_dir, dfunc_pkl_fp, temp_dir
 
 
 #===============================================================================
@@ -511,20 +511,27 @@ def join_to_funcLib(func_fp,
     
     return ofp
 
-def trim_flemo(
+
+def _print_lib(mdex): 
+    dfid_cnt, mod_cnt = len(mdex.unique('df_id')), len(mdex.unique('model_id'))
+    print(f'for {len(mdex)} w/ mod_cnt={mod_cnt} and dfid_cnt={dfid_cnt}')
+    print(f'    '+', '.join(mdex.unique('abbreviation').to_list()))
+    
+
+def slice_lib(
         lib_fp=None,
-        out_dir=None,
-        use_null_coln_l = [
+ 
+        use_null_coln_d = {
+            3:[#FLEMO
             #'unicede_occupancy_attribute',
             'construction_material_attribute',
             #'building_quality_attribute',
             'number_of_floors_attribute',
             'basement_occurance_attribute',
             'precaution_attribute',
-            ]
+            ]}
         ):
-    """apply some filters to FLEMO
-    reduces to 3 resi + 2 commericial building curves
+    """apply some to the library
     
     Parms
     -----
@@ -533,12 +540,7 @@ def trim_flemo(
         
     """
     
-    #===========================================================================
-    # defaults
-    #===========================================================================
-    if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'trim_FLEMO')
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
+
     
     
     #===========================================================================
@@ -547,15 +549,33 @@ def trim_flemo(
  
     #load library
  
-    lib_serx = pd.read_pickle(lib_fp)
-    mdex =lib_serx.index
+    lib_serx_raw = pd.read_pickle(lib_fp)
+    mdex =lib_serx_raw.index
+    _print_lib(mdex)
+ 
+    #===========================================================================
+    # global slicing
+    #===========================================================================
+    mdf = mdex.to_frame()
+    bx = np.logical_and(
+        #True,
+        mdf['coverage_attribute']=='building', #5,389
+        np.logical_and(
+            mdf['sector_attribute']=='residential', #4,251
+            #True,
+            mdf['country_attribute']=='DEU')
+        )
     
+    lib_serx1 = lib_serx_raw[bx.values]
+    
+    _print_lib(lib_serx1.index)
     #===========================================================================
     # slice
     #===========================================================================
     res_d = dict()
-    for model_id, gserx in lib_serx.groupby('model_id'):
-        
+    for model_id, gserx in lib_serx1.groupby('model_id'):
+        dfid_l = gserx.index.unique('df_id')
+        print(f'model_id {model_id} got {len(dfid_l)} funcs')
         #=======================================================================
         # ammend FLEMO
         #=======================================================================
@@ -573,8 +593,8 @@ def trim_flemo(
                     mdf['sector_attribute'].isin(['residential', 'commercial'])
                     )
                 )
-            for coln in use_null_coln_l:
-                print(mdf[coln].value_counts(dropna=False))
+            for coln in use_null_coln_d[model_id]:
+                #print(mdf[coln].value_counts(dropna=False))
                 
                 #select rows of interest
                 """nan values are used when no other info is available"""
@@ -583,7 +603,7 @@ def trim_flemo(
                 #append slicer
                 bx = np.logical_and(bx, bx_i)
                 
-                print(f'for \'{coln}\' selected {bx_i.sum()} entries with combined selection of {bx.sum()}')
+                print(f'    for \'{coln}\' selected {bx_i.sum()} entries with combined selection of {bx.sum()}')
                 
             print(f'selected {bx.sum()}/{len(bx)}')
             """
@@ -592,6 +612,10 @@ def trim_flemo(
             res_d[model_id] = gserx[bx.values]
                 
             
+        #=======================================================================
+        # elif model_id==16:
+        #     print(model_id)
+        #=======================================================================
         
         #=======================================================================
         # no changes
@@ -604,18 +628,53 @@ def trim_flemo(
     # wrap
     #===========================================================================
     lib_serx_new = pd.concat(res_d.values())
+    _print_lib(lib_serx_new.index)
+
+    
+    return lib_serx_new
+
+def get_funcLib(
+        lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230915.pkl',
+        out_dir=None,
+        **kwargs):
+    """retrieve the function library serx
+    
+    
+    Params
+    ---------
+    lib_fp: str
+        filepath to complete serx of functions (figur2018 with some additions)
+    """
+    
     
     #===========================================================================
-    # write
+    # defaults
     #===========================================================================
-    dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
-    ofp = os.path.join(out_dir, f'dfuncLib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    if out_dir is None:
+        out_dir = os.path.join(temp_dir, 'funcMetrics', 'get_funcLib')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
     
-    lib_serx_new.to_pickle(ofp)
+    #===========================================================================
+    # get hash
+    #===========================================================================
+    uuid = hashlib.shake_256((lib_fp).encode("utf-8"), usedforsecurity=False).hexdigest(8)
+    ofp = os.path.join(out_dir, f'dfuncLib_sliced_{uuid}.pkl')
     
-    print(f'wrote to \n    {ofp}')
     
-    return ofp
+    #===========================================================================
+    # build
+    #===========================================================================
+    if not os.path.exists(ofp):
+        serx = slice_lib(lib_fp, **kwargs)
+        serx.to_pickle(ofp)
+        print(f'wrote to\n    {ofp}')
+    else:
+        print(f'loading from cache\n    {ofp}')
+        serx = pd.read_pickle(ofp)
+    
+    _print_lib(serx.index)
+    
+    return serx
             
         
     
@@ -631,9 +690,13 @@ if __name__ == '__main__':
     #===========================================================================
     # join_to_funcLib(
     #     r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl',
-    #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl')  
+    #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl') 
     #===========================================================================
-    trim_flemo(r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl')
+    
+     
+    #slice_lib()
+    
+    get_funcLib()
 
 
 
