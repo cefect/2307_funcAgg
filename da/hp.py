@@ -7,7 +7,7 @@ plot helpers
 '''
 
 
-import os, string
+import os, string, itertools
 from datetime import datetime
 
 
@@ -26,6 +26,17 @@ def _get_cmap(color_keys, name='Set1'):
     hex = lambda x:matplotlib.colors.rgb2hex(x)
  
     return {k:hex(cmap(ni)) for k, ni in ik_d.items()}
+
+
+def _get_markers(keys, markers = plt.Line2D.filled_markers):
+ 
+    imarker = itertools.cycle(markers)
+        
+    return {k:next(imarker) for k in keys}
+        
+    
+    
+    
 
 def get_matrix_fig(  
                        row_keys, #row labels for axis

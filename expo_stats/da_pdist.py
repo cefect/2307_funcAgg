@@ -108,7 +108,7 @@ print('loaded matplotlib %s'%matplotlib.__version__)
 import matplotlib.patches as mpatches
 
 
-import os, glob, hashlib, string
+import os, glob, hashlib, string, itertools, psutil
 import pandas as pd
 import numpy as np
 idx = pd.IndexSlice
@@ -116,8 +116,8 @@ from datetime import datetime
 
 from scipy.stats import expon
 
-from coms import init_log, today_str
-from da.hp import get_matrix_fig, _get_cmap, _set_violinparts_style
+from coms import init_log, today_str, view
+from da.hp import get_matrix_fig, _get_cmap, _set_violinparts_style, _get_markers
 
 from definitions import wrk_dir, haz_label_d, temp_dir
 
@@ -154,11 +154,13 @@ def load_pdist_concat(
     
     #===========================================================================
     # get cache filepath
-    #===========================================================================
+    #===========================================================================    
+    out_dir = os.path.join(temp_dir, 'pdist', 'load_pdist_concat')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
 
     
     uuid = hashlib.shake_256('_'.join(fp_l).encode("utf-8"), usedforsecurity=False).hexdigest(16)
-    ofp = os.path.join(temp_dir,f'pdist_{len(fp_l)}_{uuid}.pkl')
+    ofp = os.path.join(out_dir,f'pdist_{len(fp_l)}_{uuid}.pkl')
     
     
     
@@ -626,7 +628,7 @@ def _resample_ser(ser, n=2):
     df['group'] = df.index//n
     
     #aggregate
-    rserx = df.groupby('group').mean().set_index('index').iloc[:,0].rename(ser.name).dropna()
+    rserx = df.groupby('group').mean().set_index(ser.index.name).iloc[:,0].rename(ser.name).dropna()
     rserx.index = rserx.index - rserx.index[0] #shfit back to heads
     
     #fix end
@@ -642,22 +644,22 @@ def _resample_ser(ser, n=2):
 
 
 
-def plot_hist_combine_violin(
- 
-        out_dir=None,
-        std_dev_multiplier=1,
-        min_wet_cnt=5,
+def plot_hist_combine_country_violin(
         country_key='bgd',
+        out_dir=None,
+        #std_dev_multiplier=1,
+        min_wet_frac=0.05,
+        
         bw_method=0.1,
-        sample_frac=0.05,
+        sample_frac=1.0,
         ):
-    """plot the combined histograms
+    """plot the combined histograms for a single country as violines per bar
     
     
     Params
     -------
-    min_wet_cnt: int
-        fitler to exclude aggregations with few exposures
+    min_wet_frac: float
+        fitler to exclude cells with very little exposure
         
     """
     
@@ -717,9 +719,19 @@ def plot_hist_combine_violin(
         
         #split the data
         metric_df_raw = gdx.xs('metric', level=0, axis=1)
+        metric_df_raw['wet_frac'] = metric_df_raw['wet_cnt']/metric_df_raw['count']
+        """
+        view(metric_df_raw)
+        """
         
-        #remove all zeros
-        bx = metric_df_raw['wet_cnt']>min_wet_cnt
+        #apply filter
+        bx = metric_df_raw['wet_frac']>min_wet_frac
+        
+        if not bx.any():
+            log.warning(f'    no values exceed min_wet_frac={min_wet_frac}')
+            continue
+            
+        log.info(f'    selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
         
         #metric_df = gdx.xs('metric', level=0, axis=1)[bx]
         
@@ -747,7 +759,7 @@ def plot_hist_combine_violin(
         # text
         #===================================================================
         
-        tstr = f'cnt={len(bx)}\nwet_cnt={bx.sum()}\n'
+        tstr = f'cnt={len(bx)}\nselect_cnt={bx.sum()}\n'
  
               
         ax.text(0.95, 0.95, tstr, 
@@ -769,7 +781,7 @@ def plot_hist_combine_violin(
     fig.suptitle(country_key)
      
     for row_key, col_key, ax in rc_ax_iter:
-        ax.grid()
+        #ax.grid()
         
         #first row
         if row_key==row_keys[0]:
@@ -798,6 +810,209 @@ def plot_hist_combine_violin(
      
     return ofp
  
+
+def plot_hist_combine_mean_line(
+ 
+        out_dir=None,
+        std_dev_multiplier=1,
+        min_wet_frac=0.05,
+        
+        bw_method=0.1,
+        sample_frac=1.0,
+        ):
+    """plot mean lines of hist bars
+    
+    
+    Params
+    -------
+    min_wet_frac: float
+        fitler to exclude cells with very little exposure
+        
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'da', 'pdist', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name=f'pdist')
+    start=datetime.now()
+    
+    #===========================================================================
+    # load data
+    #===========================================================================
+    dx = load_pdist_concat().droplevel(['i', 'j'])
+    mdex = dx.index
+    
+    #get a data grouper
+    keys_d = {'row':'haz',  'col':'grid_size', 'color':'country_key'}
+    kl = list(keys_d.values())    
+ 
+    log.info(f' loaded {dx.shape}')
+    
+    #===========================================================================
+    # setup figure
+    #===========================================================================
+    row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, sharex=True, sharey=True, add_subfigLabel=False)
+    
+    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+    
+    #color map 
+    color_d = _get_cmap(color_keys)
+    
+    marker_d = _get_markers(color_keys, markers=['s', 'o'])
+    
+    #===========================================================================
+    # loop and plot
+    #===========================================================================
+    #letter=list(string.ascii_lowercase)[j]
+ 
+    for (row_key, col_key), gdx0 in dx.groupby(kl[:2]):
+        log.info(f'{row_key} x {col_key}')
+        ax = ax_d[row_key][col_key] 
+        
+        tstr=''
+        for color_key, gdx1 in gdx0.groupby(kl[2]):
+            marker=marker_d[color_key]
+            color=color_d[color_key]
+            
+            #===================================================================
+            # #get the data
+            #===================================================================
+            gdx = gdx1.droplevel(kl)
+            if not sample_frac is None:
+                #log.warning(f'sampling w/ sample_frac={sample_frac}')
+                gdx = gdx.sample(n=int(len(gdx)*sample_frac))
+            
+            #split the data
+            metric_df_raw = gdx.xs('metric', level=0, axis=1)
+            metric_df_raw['wet_frac'] = metric_df_raw['wet_cnt']/metric_df_raw['count']
+            """
+            view(metric_df_raw)
+            """
+            
+            #apply filter
+            bx = metric_df_raw['wet_frac']>min_wet_frac
+            
+            if not bx.any():
+                log.warning(f'    no values exceed min_wet_frac={min_wet_frac}')
+                continue
+                
+            log.info(f'    selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
+            
+            #metric_df = gdx.xs('metric', level=0, axis=1)[bx]
+            
+            hist_df_raw = gdx.xs('hist', level=0, axis=1)[bx]
+            
+            hist_df_raw.columns.name='wsh'
+            
+
+ 
+            #===================================================================
+            # plot mean line
+            #===================================================================
+            #ressample to reduce x discretization
+            log.info(f'    resampling w/ {hist_df_raw.shape}')
+            
+            hist_mean_ser = hist_df_raw.mean(axis=0).dropna()
+            
+            xar, yar = hist_mean_ser.index.astype(float).values, hist_mean_ser.values
+            
+            line_kwargs = dict(color=color, marker = marker, markersize=3, fillstyle='none')
+            ax.plot(xar, yar,  alpha=0.8, label=color_key, **line_kwargs)
+            
+            #===================================================================
+            # plot error fills
+            #===================================================================
+            hist_std_ser = hist_df_raw.std(axis=0).dropna()
+            
+            # Calculate upper and lower bounds
+            upper_bound = yar + hist_std_ser.values*std_dev_multiplier
+            lower_bound = np.maximum(0, yar - hist_std_ser.values*std_dev_multiplier)
+            
+            assert xar.shape==upper_bound.shape
+            
+            # Plot error fills
+            ax.fill_between(xar, lower_bound, upper_bound, color=color, alpha=0.1)
+            
+            #add markers
+            for bnd_ar in [lower_bound, upper_bound]:
+                ax.plot(xar, bnd_ar,alpha=0.1,**line_kwargs)
+     
+     
+            #===================================================================
+            # text
+            #===================================================================
+            
+            tstr += f'{color_key.upper()}: {bx.sum():,}/{len(bx):,}\n'
+ 
+              
+        ax.text(0.4, 0.95, tstr, 
+                            transform=ax.transAxes, va='center', ha='left', 
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                            )
+            
+ 
+        log.debug(f"finished")
+            
+        """
+        ax.clear()
+        plt.show()
+        """
+        
+    #===========================================================================
+    # post
+    #===========================================================================
+ 
+     
+    for row_key, col_key, ax in rc_ax_iter:
+        #ax.grid()
+        
+        #first row
+        if row_key==row_keys[0]:
+            ax.set_title(f'{col_key}m grid')
+            
+            if col_key==col_keys[-1]:
+                ax.legend()
+        
+        #last row
+        if row_key==row_keys[-1]:
+  
+            ax.set_xlabel(f'WSH (cm)')
+ 
+             
+        #first col
+        if col_key==col_keys[0]:
+            ax.set_ylabel(f'{haz_label_d[row_key]} density')
+             
+ 
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'hist_combine_mean_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    fig.savefig(ofp, dpi = 300,   transparent=True)
+    
+    plt.close('all')
+    
+    
+ 
+    meta_d = {
+                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'RAM_GB':psutil.virtual_memory () [3]/1000000000,
+                    #'file_GB':get_directory_size(out_dir),
+                    'output_MB':os.path.getsize(ofp)/(1024**2)
+                    }
+    
+    log.info(meta_d)
+    
+    log.info(f'wrote to \n    %s\n    {meta_d}'%ofp)
+     
+    return ofp
+ 
     
 if __name__=='__main__':
     
@@ -809,8 +1024,12 @@ if __name__=='__main__':
     
     
     #plot_pdist_paramterized()
+    #===========================================================================
+    # for k in ['bgd', 'deu']:
+    #     plot_hist_combine_country_violin(country_key=k, sample_frac=1.0)
+    #===========================================================================
     
-    plot_hist_combine_violin()
+    plot_hist_combine_mean_line(sample_frac=0.05)
 
  
     

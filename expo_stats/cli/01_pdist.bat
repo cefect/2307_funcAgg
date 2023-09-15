@@ -2,8 +2,8 @@
 
 @echo off
  
-set gridsizes=1020 60 240
-set countries=bgd deu
+set gridsizes=60
+set countries=bgd
 set maxworkers=4
  
  
