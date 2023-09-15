@@ -580,7 +580,7 @@ def plot_hist_combine_country_violin(
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
     #color map 
-    color_d = _get_cmap(color_keys)
+    #color_d = _get_cmap(color_keys)
     
     #===========================================================================
     # loop and plot
@@ -592,7 +592,8 @@ def plot_hist_combine_country_violin(
         ax = ax_d[row_key][col_key] 
  
         color_key=country_key
-        color=color_d[color_key]
+        #color=color_d[color_key]
+        color='black'
         
         #===================================================================
         # #get the data
@@ -631,10 +632,11 @@ def plot_hist_combine_country_violin(
         #=======================================================================
         log.info(f'    building violin plots on {hist_df.shape} w/ bw_method={bw_method}')
         gd = {k:v.dropna().values.reshape(-1) for k,v in hist_df.items()}
-        
+ 
         violin_parts = ax.violinplot(gd.values(), widths=1.0, showmeans=True, showextrema=False,  bw_method=bw_method)
         
         # Change the color of each part of the violin plot
+ 
         _set_violinparts_style(violin_parts, color)
  
  
@@ -642,7 +644,7 @@ def plot_hist_combine_country_violin(
         # text
         #===================================================================
         
-        tstr = f'cnt={len(bx)}\nselect_cnt={bx.sum()}\n'
+        tstr = f'total: {len(bx):,}\nwet: {bx.sum():,}\n'
  
               
         ax.text(0.95, 0.95, tstr, 
@@ -661,7 +663,7 @@ def plot_hist_combine_country_violin(
     #===========================================================================
     # post
     #===========================================================================
-    fig.suptitle(country_key)
+    #fig.suptitle(country_key)
      
     for row_key, col_key, ax in rc_ax_iter:
         #ax.grid()
@@ -676,7 +678,8 @@ def plot_hist_combine_country_violin(
             ax.set_xlabel(f'WSH (cm)')
             
             #ax.get_ticks()
-            ax.set_xticklabels([int(e) for e in gd.keys()])  # rotation is optional
+            ax.set_xticks([i+0.5 for i in range(len(gd))])
+            ax.set_xticklabels([int(e) for e in gd.keys()], rotation=45)  # rotation is optional
              
         #first col
         if col_key==col_keys[0]:
@@ -907,12 +910,10 @@ if __name__=='__main__':
     
     
     #plot_pdist_paramterized()
-    #===========================================================================
-    # for k in ['bgd', 'deu']:
-    #     plot_hist_combine_country_violin(country_key=k, sample_frac=1.0)
-    #===========================================================================
+    plot_hist_combine_country_violin(country_key='deu', sample_frac=1.0)
+ 
     
-    plot_hist_combine_mean_line(sample_frac=0.05)
+    #plot_hist_combine_mean_line(sample_frac=0.05)
 
  
     
