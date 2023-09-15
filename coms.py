@@ -7,7 +7,7 @@ Created on Aug. 24, 2023
 #===============================================================================
 # IMPORTS-------
 #===============================================================================
-import os, logging, pprint, webbrowser, sys
+import os, logging, pprint, webbrowser, sys, glob
 import logging.config
 from datetime import datetime
 
@@ -141,6 +141,34 @@ def get_directory_size(directory):
             fp = os.path.join(path, f)
             total_size += os.path.getsize(fp)
     return total_size / (1024**3)
+
+
+def _get_filepaths(search_dir):
+    # Use os.path.join to ensure the path is constructed correctly for the OS
+    search_pattern = os.path.join(search_dir, '**', '*.pkl')
+
+    # Use glob.glob with recursive set to True to find all .pkl files in the directory
+    pkl_files = glob.glob(search_pattern, recursive=True)
+
+    return pkl_files
+
+#===============================================================================
+# PANDAS-----
+#===============================================================================
+
+def pd_mdex_append_level(
+        mdex, d
+        ):
+    """add a simple level from the d"""
+    
+    mdf = mdex.to_frame().reset_index(drop=True)
+    
+    for k,v in d.items():
+        mdf[k]=v
+        
+    return pd.MultiIndex.from_frame(mdf)
+    
+
 #===============================================================================
 # GEOPANDAS-------
 #===============================================================================

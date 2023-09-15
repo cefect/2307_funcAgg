@@ -5,6 +5,9 @@ Created on Sep. 15, 2023
 
 pre-processing on functions
 '''
+#===============================================================================
+# IMPORTS---------
+#===============================================================================
 import os
 import numpy as np
 import pandas as pd
@@ -14,14 +17,16 @@ import matplotlib.pyplot as plt
 
 
 from coms import (
-    init_log, today_str, get_directory_size,dstr, view
+    init_log, today_str, get_directory_size,dstr, view, pd_mdex_append_level
     ) 
 
 
-from definitions import wrk_dir, haz_label_d, temp_dir
+from definitions import wrk_dir, haz_label_d, temp_dir, dfunc_pkl_fp
 
 
-
+#===============================================================================
+# FUNCS--------
+#===============================================================================
 def _get_mdex(vidnm, df_d):
     # join some tabs
     df1 = df_d['damage_function'].set_index(vidnm)
@@ -180,7 +185,8 @@ def load_dfunc_serx(
     relative_loss_df['wd_rl_id'] = relative_loss_df.groupby('df_id').cumcount()
     
     #merge with unique wd_rl_id and df_id columns
-    wd_rl_df = pd.merge(wd_df, relative_loss_df, on=['df_id', 'wd_rl_id']).drop('wd_rl_id', axis=1).rename(columns={'wd_value':'wd', 'relative_loss_value':'rl'})
+    wd_rl_df = pd.merge(wd_df, relative_loss_df, on=['df_id', 'wd_rl_id']
+                        ).drop('wd_rl_id', axis=1).rename(columns={'wd_value':'wd', 'relative_loss_value':'rl'})
     
     
     #===========================================================================
@@ -193,7 +199,8 @@ def load_dfunc_serx(
  
     # create mdex
  
-    serx = df3.set_index(mdex_df.columns.to_list()+['wd']).swaplevel(i=0, j=1).sort_index(level=['model_id', 'df_id','wd'], sort_remaining=False).iloc[:,0]
+    serx = df3.set_index(mdex_df.columns.to_list()+['wd']).swaplevel(i=0, j=1).sort_index(
+        level=['model_id', 'df_id','wd'], sort_remaining=False).iloc[:,0]
     print(f'finished w/ {len(serx)} w/ model_id\n    %s'%serx.index.unique('model_id'))
     
     """
@@ -342,25 +349,90 @@ def prep_wagenaar2018(
     
 
 
-#===============================================================================
-# def generate_scatter_plot(df):
-#     
-#  
-# 
-#     # Create a scatter plot
-#     plt
-#     
-#     # Set the title and labels
-#     plt.title('Scatter plot: wd_mean vs interpolation')
-#     plt.xlabel('wd_mean')
-#     plt.ylabel('interpolation')
-#     
-#     # Show the plot
-#     plt.show()
-#===============================================================================
-
- 
-
+def join_to_funcLib(func_fp,
+        out_dir=None,   
+        lib_fp=None,
+        model_id=1001,
+        abbr='Wagenaar (2018)',
+        ):
+    """join a new function to the function library"""
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'lib')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    #===========================================================================
+    # load
+    #===========================================================================
+    func_raw = pd.read_pickle(func_fp)
+    
+    #load library
+    if lib_fp is None: lib_fp = dfunc_pkl_fp
+    lib_serx = pd.read_pickle(lib_fp)
+    mdex =lib_serx.index
+    
+    """
+    view(lib_serx)
+    """
+    
+    #===========================================================================
+    # #prep the new function
+    #===========================================================================
+    
+    #rename
+    fser1 = func_raw.iloc[:,0].rename(lib_serx.name)
+    fser1.index.name=mdex.names[-1]
+    
+    
+    
+    #add the model id
+    #model_id = mdex.unique('model_id').max()
+    
+    fserx1 = pd.concat({model_id:fser1}, names=['model_id'])
+    
+    #add some meta
+    meta_d = {
+        'abbreviation':abbr,
+        'figueriredo2018':False,
+        'damage_formate_attribute':'relative',
+        'function_formate_attribute':'discrete',
+        'coverage_attribute':'building',
+        'sector_attribute':'residential',
+        'df_id':mdex.unique('df_id').max()+1 }
+    
+    fserx1.index = pd_mdex_append_level(fserx1.index, meta_d)
+    
+    #fill in blanks
+    meta_d2 = dict()
+    for k in mdex.names:
+        if not k in fserx1.index.names:
+            meta_d2[k] = np.nan
+            
+    fserx1.index = pd_mdex_append_level(fserx1.index, meta_d2)
+    
+    fserx2 = fserx1.reorder_levels(mdex.names)
+    #===========================================================================
+    # append
+    #===========================================================================
+    lib_serx_new = pd.concat([lib_serx, fserx2], axis=0)
+    
+    print(f'added {abbr} to obtain {len(lib_serx_new)}')
+    
+    #===========================================================================
+    # write
+    #===========================================================================
+    dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
+    ofp = os.path.join(out_dir, f'dfunc_lib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    
+    lib_serx_new.to_pickle(ofp)
+    
+    print(f'wrote to \n    {ofp}')
+    
+    return ofp
 
 
     
@@ -368,4 +440,8 @@ def prep_wagenaar2018(
     
 if __name__ == '__main__':
     
-    prep_wagenaar2018()  
+    #prep_wagenaar2018()
+    
+    join_to_funcLib(
+        r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl'
+        )  
