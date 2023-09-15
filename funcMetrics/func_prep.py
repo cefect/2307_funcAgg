@@ -272,7 +272,7 @@ def write_dfunc_serx(out_dir=None, **kwargs):
     # defaults
     #===========================================================================
     if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', 'funcMetrics', 'figueiredo2018', today_str)
+        out_dir=os.path.join(wrk_dir, 'outs', 'funcs', 'figueiredo2018', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     #===========================================================================
@@ -436,7 +436,7 @@ def join_to_funcLib(func_fp,
     # defaults
     #===========================================================================
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'lib')
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'join')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     
@@ -478,6 +478,7 @@ def join_to_funcLib(func_fp,
         'function_formate_attribute':'discrete',
         'coverage_attribute':'building',
         'sector_attribute':'residential',
+        'country_attribute':'DEU',        
         'df_id':mdex.unique('df_id').max()+1 }
     
     fserx1.index = pd_mdex_append_level(fserx1.index, meta_d)
@@ -502,7 +503,7 @@ def join_to_funcLib(func_fp,
     # write
     #===========================================================================
     dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
-    ofp = os.path.join(out_dir, f'dfunc_lib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    ofp = os.path.join(out_dir, f'dfuncLib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
     
     lib_serx_new.to_pickle(ofp)
     
@@ -510,18 +511,129 @@ def join_to_funcLib(func_fp,
     
     return ofp
 
-
+def trim_flemo(
+        lib_fp=None,
+        out_dir=None,
+        use_null_coln_l = [
+            #'unicede_occupancy_attribute',
+            'construction_material_attribute',
+            #'building_quality_attribute',
+            'number_of_floors_attribute',
+            'basement_occurance_attribute',
+            'precaution_attribute',
+            ]
+        ):
+    """apply some filters to FLEMO
+    reduces to 3 resi + 2 commericial building curves
+    
+    Parms
+    -----
+    use_null_coln_l: list
+        list of column names to build fiter to select based on null
+        
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'trim_FLEMO')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    #===========================================================================
+    # load
+    #===========================================================================
+ 
+    #load library
+ 
+    lib_serx = pd.read_pickle(lib_fp)
+    mdex =lib_serx.index
+    
+    #===========================================================================
+    # slice
+    #===========================================================================
+    res_d = dict()
+    for model_id, gserx in lib_serx.groupby('model_id'):
+        
+        #=======================================================================
+        # ammend FLEMO
+        #=======================================================================
+        if model_id==3:
+            """
+            view(gserx)
+            """
+            mdf = gserx.index.to_frame().reset_index(drop=True)
+ 
+            #simple selection
+            bx = np.logical_and(
+                mdf['coverage_attribute']=='building',
+                np.logical_and(
+                    mdf['building_quality_attribute'].isin(['low/medium quality', np.nan]),
+                    mdf['sector_attribute'].isin(['residential', 'commercial'])
+                    )
+                )
+            for coln in use_null_coln_l:
+                print(mdf[coln].value_counts(dropna=False))
+                
+                #select rows of interest
+                """nan values are used when no other info is available"""
+                bx_i = mdf[coln].isna() 
+                
+                #append slicer
+                bx = np.logical_and(bx, bx_i)
+                
+                print(f'for \'{coln}\' selected {bx_i.sum()} entries with combined selection of {bx.sum()}')
+                
+            print(f'selected {bx.sum()}/{len(bx)}')
+            """
+            view(gserx[bx.values])
+            """
+            res_d[model_id] = gserx[bx.values]
+                
+            
+        
+        #=======================================================================
+        # no changes
+        #=======================================================================
+        else:
+            res_d[model_id] = gserx
+            
+            
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    lib_serx_new = pd.concat(res_d.values())
+    
+    #===========================================================================
+    # write
+    #===========================================================================
+    dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
+    ofp = os.path.join(out_dir, f'dfuncLib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    
+    lib_serx_new.to_pickle(ofp)
+    
+    print(f'wrote to \n    {ofp}')
+    
+    return ofp
+            
+        
     
     
     
 if __name__ == '__main__':
     
-    load_dfunc_serx()
+    #load_dfunc_serx()
+    #write_dfunc_serx()
     
     #prep_wagenaar2018()
     
-    #join_to_funcLib(r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl')  
-
+    #===========================================================================
+    # join_to_funcLib(
+    #     r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl',
+    #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl')  
+    #===========================================================================
+    trim_flemo(r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl')
 
 
 
