@@ -354,6 +354,7 @@ def join_to_funcLib(func_fp,
         lib_fp=None,
         model_id=1001,
         abbr='Wagenaar (2018)',
+        wd_scale=0.01, #for scaling to meters
         ):
     """join a new function to the function library"""
     
@@ -387,6 +388,7 @@ def join_to_funcLib(func_fp,
     fser1 = func_raw.iloc[:,0].rename(lib_serx.name)
     fser1.index.name=mdex.names[-1]
     
+    fser1.index = fser1.index*wd_scale
     
     
     #add the model id

@@ -47,7 +47,7 @@ def slice_serx(serx_raw,
     return serx.droplevel(drop_lvl_names)
     
 
-
+ 
 
 
 
