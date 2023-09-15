@@ -13,7 +13,7 @@ plot damage functions
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'present'
+env_type = 'draft'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -35,11 +35,12 @@ import matplotlib.pyplot as plt
  
 #set teh styles
 plt.style.use('default')
-
+font_size=8
 def set_doc_style():
  
-    font_size=8
-    matplotlib.rc('font', **{'family' : 'serif','weight' : 'normal','size'   : font_size})
+    
+    matplotlib.rc('font', **{'family' : 'serif','weight' : 'normal','size': font_size})
+    matplotlib.rc('legend',fontsize=font_size)
      
     for k,v in {
         'axes.titlesize':font_size,
@@ -113,8 +114,10 @@ import numpy as np
 
 from datetime import datetime
 
+
 from coms import init_log, today_str, view
 from da.hp import get_matrix_fig, _get_cmap
+from funcMetrics.func_prep import get_funcLib
 
 from definitions import wrk_dir, dfunc_pkl_fp, clean_names_d, haz_label_d
 
@@ -151,6 +154,14 @@ def _update_fancy_names(model_names_d, serx):
             model_names_d[model_id] = serx.xs(model_id, level='model_id').index.unique('abbreviation')[0].replace(' et al.', '.')
     
     return 
+
+def _hide_ax(ax):
+    """turn off most axis components"""
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
 
 def plot_dfunc_matrix(
         fp=None,
@@ -481,11 +492,12 @@ def plot_dfunc_matrix(
 #===============================================================================
 
 def plot_cWeight(
-        pick_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\01_cWeight\cWeight_132_20230915.pkl',
+        pick_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\01_cWeight\cWeight_576_20230915.pkl',
         out_dir=None,
         figsize=None,
         ):
     
+    raise IOError('fix legend, check Wagenaar?, check ticks')
         #===========================================================================
     # defaults
     #===========================================================================
@@ -505,6 +517,8 @@ def plot_cWeight(
     #===========================================================================
     serx = pd.read_pickle(pick_fp)
     mdex = serx.index
+    
+
         
     keys_d = {'row':'df_id',  'col':'haz', 'color':'grid_size'}
     kl = list(keys_d.values())    
@@ -516,6 +530,7 @@ def plot_cWeight(
     #===========================================================================
     row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
+                               constrained_layout=False,
                                sharex=True, sharey=True, add_subfigLabel=False, figsize=figsize)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
@@ -525,12 +540,15 @@ def plot_cWeight(
     #add tinws
     twin_ax_d=dict()
     for row_key, col_key, ax in rc_ax_iter:
-        ax.set_xlim((0, 5.0))
+        ax.set_xlim((0, 6.0))
+        
         if not row_key in twin_ax_d:
             twin_ax_d[row_key] = dict()
             
         if not col_key in twin_ax_d[row_key]:
-            twin_ax_d[row_key][col_key] = ax.twinx()
+            ax2 = ax.twinx()
+            ax2.set_ylim(0, 0.12)
+            twin_ax_d[row_key][col_key] = ax2
         
     
     #===========================================================================
@@ -550,7 +568,7 @@ def plot_cWeight(
         wd_rl_df = gserx0.xs(color_keys[0], level=keys_d['color']).reset_index().drop(serx.name, axis=1)
         xar, yar = wd_rl_df['wd'], wd_rl_df['rl']
         
-        ax.plot(xar, yar, color='black', marker='x', linestyle='dashed')
+        ax.plot(xar, yar, color='black', marker='o', linestyle='dashed', alpha=0.5, markersize=3,fillstyle='none')
         
         #=======================================================================
         # plot weighted curvature
@@ -562,12 +580,20 @@ def plot_cWeight(
             
             ax2.plot(ser, color=color_d[color_key], alpha=0.8, label=color_key)
             
-    
+    #===========================================================================
+    # get some meat
+    #===========================================================================
+    #get model-dfid lookup
+    fserx = get_funcLib()
+    meta_df = fserx.index.to_frame().reset_index(drop=True).loc[:, ['df_id', 'model_id', 'abbreviation']
+                                      ].drop_duplicates().set_index('df_id') 
+ 
+    for i, row in meta_df.iterrows():
+        if not row['model_id'] in clean_names_d:
+            clean_names_d[row['model_id']] = row['abbreviation']
     #===========================================================================
     # post
-    #===========================================================================
- 
-     
+    #===========================================================================    
     for row_key, col_key, ax in rc_ax_iter:
         ax2 = twin_ax_d[row_key][col_key]
         #ax.grid()
@@ -577,29 +603,46 @@ def plot_cWeight(
             ax.set_title(haz_label_d[col_key])
             
             if col_key==col_keys[-1]:
-                ax2.legend(title='grid size (m)')
+                ax2.legend(title='grid size (m)', fontsize=font_size)
         
         #last row
-        if row_key==row_keys[-1]:
-  
-            ax.set_xlabel(f'WSH (cm)')
+        if row_key==row_keys[-1]: 
+            pass 
+            #ax.set_xlabel(f'WSH (cm)')
  
              
         #first col
         if col_key==col_keys[0]:
-            ax.set_ylabel(f'relative loss')
+ 
+            ax.set_ylabel(clean_names_d[meta_df.loc[row_key, 'model_id']])
             
         #last col
         if col_key==col_keys[-1]:
-            ax2.set_ylabel('A*P')
+            #ax2.set_ylabel('A*P')
+            pass
         else:
             ax2.set_yticklabels([])
+            
+            
+    #macro labelling
+    #plt.subplots_adjust(left=1.0)
+    macro_ax = fig.add_subplot(111, frame_on=False)
+    _hide_ax(macro_ax) 
+    macro_ax.set_ylabel(f'relative loss', labelpad=20)
+    macro_ax.set_xlabel(f'WSH (m)')
+    
+    macro_ax2 = macro_ax.twinx()
+    _hide_ax(macro_ax2)
+    macro_ax2.set_ylabel('A*P', rotation=-90, labelpad=20)
+    """
+    plt.show()
+    """
             
         
     #===========================================================================
     # write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'wCurve_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'wCurve_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = 300,   transparent=True)
     
     plt.close('all')

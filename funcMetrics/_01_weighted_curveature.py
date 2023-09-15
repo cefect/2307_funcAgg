@@ -24,6 +24,7 @@ from coms import (
     )
 
 from funcMetrics.coms_fm import slice_serx
+from funcMetrics.func_prep import get_funcLib
 from expo_stats.coms_exp import load_pdist_concat
  
 
@@ -288,9 +289,11 @@ def get_depth_weights(search_dir, log=None, min_wet_frac=0.05):
  
 def run_depth_weighted_curvature(
         search_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist',
-        curves_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\lib\dfunc_lib_17_359_20230915.pkl',
+        fserx = None,
+        #curves_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\lib\dfunc_lib_17_359_20230915.pkl',
         hwd_scale=0.01,
-        country_key='deu',df_id=941,
+        country_key='deu',
+        #df_id=941,
         out_dir=None,
         max_depth=None,
         ):
@@ -324,15 +327,18 @@ def run_depth_weighted_curvature(
     #===========================================================================
     # load curves
     #===========================================================================
-    log.info(f'loading curves from \n    {curves_fp}')
-    serx_raw = pd.read_pickle(curves_fp).xs(df_id, level='df_id')
-    
-    serx_raw = pd.concat({df_id:serx_raw}, names=['df_id']) #add the level back for consistency
+    if fserx is None: fserx = get_funcLib()
+    #log.info(f'loading curves from \n    {curves_fp}')
+    #===========================================================================
+    # serx_raw = pd.read_pickle(curves_fp).xs(df_id, level='df_id')
+    # 
+    # serx_raw = pd.concat({df_id:serx_raw}, names=['df_id']) #add the level back for consistency
+    #===========================================================================
     
     
     #extend
     """using full index as we are changing the index (not just adding values"""
-    serx_extend = force_max_depth(serx_raw, max_depth, log).rename('rl')
+    serx_extend = force_max_depth(fserx, max_depth, log).rename('rl')
     
     #===========================================================================
     # get depth weights
