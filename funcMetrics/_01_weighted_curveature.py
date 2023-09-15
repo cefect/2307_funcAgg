@@ -16,10 +16,11 @@ import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
 
+import scipy.integrate
 #from tqdm import tqdm
 
 from coms import (
-    init_log, today_str, _get_filepaths
+    init_log, today_str, _get_filepaths, view
     )
 
 from funcMetrics.coms_fm import slice_serx
@@ -98,9 +99,11 @@ def compute_weighted_curvature(
     log = log.getChild('wCurve')
     log.info(f'on {len(fser)} wd values')
     
-    assert fser.index.name=='wd'
+    if not fser.index.name=='wd':
+        raise IOError(fser.index.name)
     
-    fser.index = fser.index.values.round(3).astype(float)
+    """no.. this messes up joining
+    fser.index = fser.index.values.round(3).astype(float)"""
     
     #===========================================================================
     # compute the mean
@@ -131,6 +134,7 @@ def compute_weighted_curvature(
     #===========================================================================
     wd_dom=fser.index.values
     #iterate over each value within the function
+    res_d = dict()
     for x, y in fser.items():
         
         #=======================================================================
@@ -143,27 +147,42 @@ def compute_weighted_curvature(
         #=======================================================================
         #slice the fser to all values within this
         if x<wd_mean:
-            bx = np.logical_and(wd_dom>=x, wd_dom<=wd_mean)
+            bx = np.logical_and(wd_dom>=x, wd_dom<wd_mean)
         else:
             bx = np.logical_and(wd_dom<=x, wd_dom>=wd_mean)
             
-        assert bx.sum()>=2
+        assert bx.sum()>=1
         
         curved_line = fser[bx]
+        
+        #append mean points
+        curved_line.loc[wd_mean] = rl_mean        
+        curved_line = curved_line.sort_index()
  
         
-        #calculate the area between the straight and curved line
-        #area=
+        #=======================================================================
+        # #calculate the area between the straight and curved line
+        #=======================================================================
+        curve_area = scipy.integrate.trapezoid(curved_line.values, x=curved_line.index)
+        line_area = scipy.integrate.trapezoid(straight_line.values, x=straight_line.index)
+
+        res_d[x] = line_area - curve_area
         
-        #plot
+        #=======================================================================
+        # #plot
+        #=======================================================================
         
-        fig, ax = plt.subplots() 
+        #=======================================================================
+        # fig, ax = plt.subplots() 
+        # 
+        # 
+        # ax.plot(fser, color='red', alpha=0.2, linewidth=0.5)
+        # ax.plot(curved_line, color='red')
+        # ax.plot(straight_line, color='black')
+        # ax.plot(wd_mean, rl_mean, marker='x', color='purple')
+        #=======================================================================
         
-        
-        ax.plot(fser, color='red', alpha=0.2, linewidth=0.5)
-        ax.plot(curved_line, color='red')
-        ax.plot(straight_line, color='black')
-        ax.plot(wd_mean, rl_mean, marker='x', color='purple')
+
  
         
         """
@@ -172,13 +191,15 @@ def compute_weighted_curvature(
         
         fser.plot()
         """
-
         
+    #===========================================================================
+    # wrap
+    #===========================================================================
     
+    rser = pd.Series(res_d, name='lc_area')
+    rser.index.name = 'wd'
     
- 
-    
-    return res_dx
+    return rser
 
 def get_depth_weights(search_dir, log=None, min_wet_frac=0.05):
     """calculate the depth weights"""
@@ -305,7 +326,7 @@ def run_depth_weighted_curvature(
     
     #extend
     """using full index as we are changing the index (not just adding values"""
-    serx_extend = force_max_depth(serx_raw, max_depth, log)
+    serx_extend = force_max_depth(serx_raw, max_depth, log).rename('rl')
     
     #===========================================================================
     # get depth weights
@@ -317,29 +338,47 @@ def run_depth_weighted_curvature(
     #===========================================================================
     # compute metric
     #===========================================================================
+    res_d = dict()
     for df_id, gserx in serx_extend.groupby('df_id'):
         #prep inputs
-        s = slice_serx(gserx, xs_d=None).droplevel(['df_id', 'model_id'])
+        s = slice_serx(gserx, xs_d=None).droplevel(['df_id', 'model_id']).rename('rl')
         
         #compute on each depth histogram population
+        res_l=list()
         for (grid_size, haz), ghdx in hist_dx.groupby(hg_keys):
-            print(grid_size, haz)
-            compute_weighted_curvature(s, ghdx.iloc[0,:], log)
+            
+            #get the area
+            rser = compute_weighted_curvature(s.copy(), ghdx.iloc[0,:], log)
+ 
+            
+            #add indexers
+            res_l.append(pd.concat({grid_size:pd.concat({haz:rser}, names=['haz'])}, names=['grid_size']))
+            
+        #merge
+        res_d[df_id] = pd.concat(res_l).to_frame().join(s)
+        
+        """
+        view(res_d[df_id])
+        view(rdx)
+        """
     
-    #add back the big index
-    res_dx.index = serx_extend.index
+    #merge
+    """leaving all the function metdata off... this could be re-joined later using df_id if necessary"""
+    rdx = pd.concat(res_d, names=['df_id'])
     
-    """
-    view(res_dx)
-    """
-    
+    #===========================================================================
+    # set(rserx.index.names).difference(serx_raw.index.names)
+    # 
+    # .reorder_levels(serx_raw.index.names + ['grid_size', 'max_depth_forcing', 'haz'])
+    #===========================================================================
+ 
     #===========================================================================
     # #write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'derivs_{len(res_dx)}_{today_str}.pkl')
-    res_dx.to_pickle(ofp)
+    ofp = os.path.join(out_dir, f'lc_area_{len(rdx)}_{today_str}.pkl')
+    rdx.to_pickle(ofp)
     
-    log.info(f'wrote {str(res_dx.shape)} to \n    {ofp}')
+    log.info(f'wrote {len(rdx)} to \n    {ofp}')
     
     return ofp
     
