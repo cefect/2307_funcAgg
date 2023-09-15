@@ -27,12 +27,11 @@ from definitions import wrk_dir, haz_label_d, temp_dir, dfunc_pkl_fp
 #===============================================================================
 # FUNCS--------
 #===============================================================================
-def _get_mdex(vidnm, df_d):
-    # join some tabs
-    df1 = df_d['damage_function'].set_index(vidnm)
-    meta_d = dict()
-    link_colns = set() # columns for just linking
-    for tabName in [
+
+
+
+def _get_mdex(vidnm, df_d,
+              link_tabName_l=[
         'damage_format', 
         'function_format', 
         'coverage', 
@@ -42,13 +41,38 @@ def _get_mdex(vidnm, df_d):
         'building_quality', 
         'number_of_floors', 
         'basement_occurance', 
-        'precaution']:
+        'precaution',
+ 
+        ]):
+    
+    #print(df_d.keys())
+    
+    #===========================================================================
+    # helpers
+    #===========================================================================
+    def _join_desc(tabName, jdf):
+        container_tabName = '%s_container' % tabName
+        assert container_tabName in df_d, container_tabName
+        container_jdf = df_d[container_tabName]
+        container_jcoln = container_jdf.columns[0]
+        assert container_jcoln in jdf.columns
+        jdf1 = jdf.join(container_jdf.set_index(container_jcoln), on=container_jcoln)
+        return jdf1
+    
+    #===========================================================================
+    # # join tabs on DF+id
+    #===========================================================================
+    df1 = df_d['damage_function'].set_index(vidnm)
+    meta_d = dict()
+    link_colns = set() # columns for just linking
+    for tabName in link_tabName_l:
         #===================================================================
         # #get id frame
         #===================================================================
         jdf = df_d[tabName].copy()
         # index
-        assert vidnm == jdf.columns[0]
+        if not vidnm == jdf.columns[0]:
+            raise AssertionError(f'bad index on {tabName}')
         if not jdf[vidnm].is_unique:
             raise AssertionError('non-unique indexer \'%s\' on \'%s\'' % (vidnm, tabName))
         jdf = jdf.set_index(vidnm)
@@ -56,12 +80,7 @@ def _get_mdex(vidnm, df_d):
         #===================================================================
         # #add descriptions
         #===================================================================
-        container_tabName = '%s_container' % tabName
-        assert container_tabName in df_d, container_tabName
-        container_jdf = df_d[container_tabName]
-        container_jcoln = container_jdf.columns[0]
-        assert container_jcoln in jdf.columns
-        jdf1 = jdf.join(container_jdf.set_index(container_jcoln), on=container_jcoln)
+        jdf1 = _join_desc(tabName, jdf)
         #===================================================================
         # join to main
         #===================================================================
@@ -70,14 +89,34 @@ def _get_mdex(vidnm, df_d):
         # meta
         #===================================================================
         meta_d[tabName] = {'shape':str(jdf1.shape), 'jcoln':vidnm, 'columns':jdf1.columns.tolist(), 
-            'container_tabn':container_tabName, 
-            'desc_colns':container_jdf.columns.tolist(), 
+            #'container_tabn':container_tabName, 
+            #'desc_colns':container_jdf.columns.tolist(), 
             'link_colns':jdf.columns.tolist()}
     
+
+    
+    #===========================================================================
+    # join tabs on model_id
+    #===========================================================================
+    icoln = 'model_id'
+    for tabName in ['country']:
+        jdf = df_d[tabName].copy().set_index(icoln)
+        
+        #add all these as linkers to be removed
+        link_colns.update(jdf.columns)
+        
+        #join in desciprtion columns
+        jdf1 = _join_desc(tabName, jdf)
+        
+        #join to main
+        df1 = df1.join(jdf1, on=icoln)
+ 
+    
+    #===========================================================================
+    # wrap
+    #===========================================================================
     # drop link columns
     df2 = df1.drop(link_colns, axis=1)
-    
- 
     
     return df2.reset_index()
 
@@ -117,10 +156,26 @@ def load_dfunc_serx(
             mdex_df_raw['function_formate_attribute']=='discrete',
             mdex_df_raw['damage_formate_attribute']=='relative',
             ),
-        mdex_df_raw['coverage_attribute']=='building',
+        #mdex_df_raw['coverage_attribute']=='building',
+        pd.Series(True, index=mdex_df_raw.index)
         )
     
     mdex_df = mdex_df_raw[bx]
+    
+     
+    """
+    mdex_df_raw['coverage_attribute'].unique()
+    deu_df = mdex_df_raw.loc[mdex_df_raw['country_attribute']=='DEU']
+    
+    deu_df = mdex_df.loc[mdex_df['country_attribute']=='DEU']
+    
+    view(deu_df.loc[deu_df['model_id']!=3, :])
+    
+    deu_df['abbreviation'].unique()
+    
+    
+    view(mdex_df_raw)
+    """
     print(f'filtered curves to get {bx.sum()}/{len(mdex_df_raw)}')
     
     #===========================================================================
@@ -211,11 +266,30 @@ def load_dfunc_serx(
     
  
  
-def write_dfunc_serx(**kwargs):
+def write_dfunc_serx(out_dir=None, **kwargs):
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'funcMetrics', 'figueiredo2018', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    #===========================================================================
+    # load
+    #===========================================================================
     
     serx = load_dfunc_serx(**kwargs)
     
-    serx.to_pickle(r'l:\10_IO\2307_funcAgg\ins\figueiredo2018\dfunc_lib_figu2018_20230906.pkl')
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'dfuncLib_figu2018_{today_str}.pkl')
+    serx.to_pickle(ofp)
+    
+    print(f'wrote {len(serx)} to \n    {ofp}')
+    
+    return ofp
     
 
 def prep_wagenaar2018(
@@ -442,8 +516,19 @@ def join_to_funcLib(func_fp,
     
 if __name__ == '__main__':
     
+    load_dfunc_serx()
+    
     #prep_wagenaar2018()
     
-    join_to_funcLib(
-        r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl'
-        )  
+    #join_to_funcLib(r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl')  
+
+
+
+
+
+
+
+
+
+
+
