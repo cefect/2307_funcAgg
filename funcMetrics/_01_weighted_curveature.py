@@ -166,8 +166,14 @@ def compute_weighted_curvature(
         curve_area = scipy.integrate.trapezoid(curved_line.values, x=curved_line.index)
         line_area = scipy.integrate.trapezoid(straight_line.values, x=straight_line.index)
 
-        res_d[x] = line_area - curve_area
+        delta_area = abs(line_area - curve_area)
         
+        #=======================================================================
+        # weight
+        #=======================================================================
+        depth_weight = np.interp(x, hser.index.values, hser.values, left=0)
+        
+        res_d[x] = delta_area*depth_weight
         #=======================================================================
         # #plot
         #=======================================================================
@@ -305,12 +311,12 @@ def run_depth_weighted_curvature(
  
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', '01_deriv')
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', '01_cWeight')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
  
     
-    log = init_log(name=f'deriv', fp=os.path.join(out_dir, today_str+'.log'))
+    log = init_log(name=f'cWeight', fp=os.path.join(out_dir, today_str+'.log'))
     
     if max_depth is None:
         from funcMetrics.coms_fm import max_depth
@@ -336,7 +342,7 @@ def run_depth_weighted_curvature(
     
     hg_keys = ['grid_size', 'haz']
     #===========================================================================
-    # compute metric
+    # compute metric0
     #===========================================================================
     res_d = dict()
     for df_id, gserx in serx_extend.groupby('df_id'):
@@ -352,10 +358,12 @@ def run_depth_weighted_curvature(
  
             
             #add indexers
-            res_l.append(pd.concat({grid_size:pd.concat({haz:rser}, names=['haz'])}, names=['grid_size']))
+            rser1 = pd.concat({grid_size:pd.concat({haz:rser}, names=['haz'])}, names=['grid_size'])
+            
+            res_l.append(rser1.to_frame().join(s).set_index('rl', append=True).iloc[:,0])
             
         #merge
-        res_d[df_id] = pd.concat(res_l).to_frame().join(s)
+        res_d[df_id] = pd.concat(res_l)
         
         """
         view(res_d[df_id])
@@ -375,7 +383,7 @@ def run_depth_weighted_curvature(
     #===========================================================================
     # #write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'lc_area_{len(rdx)}_{today_str}.pkl')
+    ofp = os.path.join(out_dir, f'cWeight_{len(rdx)}_{today_str}.pkl')
     rdx.to_pickle(ofp)
     
     log.info(f'wrote {len(rdx)} to \n    {ofp}')
