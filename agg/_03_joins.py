@@ -26,9 +26,9 @@ from coms import (
     ) 
 
 from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe
-from agg._01_grids import gridssize_default_l
+ 
 
-from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir
+from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l
 
 
 
@@ -41,9 +41,9 @@ out_schema = 'inters_agg'
 #===============================================================================
 
 def run_join_agg_grids(
-        country_l = None,
+        country_l = ['deu'],
         grid_size_l=[
-            100000,  #412.6 secs (using views)
+            1020,  #412.6 secs (using views)
             #2e5, #big for testing
             ],
         
@@ -72,7 +72,7 @@ def run_join_agg_grids(
     
     log = init_log(name=f'jgrid', fp=os.path.join(out_dir, today_str+'.log'))
     
-    if grid_size_l is None: grid_size_l=gridssize_default_l
+    if grid_size_l is None: grid_size_l=gridsize_default_l
     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
     #if epsg_id is None: epsg_id=equal_area_epsg
     
