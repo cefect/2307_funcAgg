@@ -96,7 +96,7 @@ def compute_weighted_curvature(
         histogram of computed exposures
         
     """
- 
+    raise IOError('link grid cent, have grouped histograms')
     log = log.getChild('wCurve')
     log.info(f'on {len(fser)} wd values')
     
