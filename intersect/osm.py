@@ -57,8 +57,12 @@ def _exe_osmimum(osmium_cmd, *args, log=None):
     log.debug(f'executing \'osmium {osmium_cmd}\'')
     log.debug(f'args:{args}')
     
-    p = subprocess.run(['osmium', osmium_cmd,*args], stderr=sys.stderr, stdout=sys.stdout, check=True)        
-    assert p.returncode==0        
+    try:
+        p = subprocess.run(['osmium', osmium_cmd,*args], stderr=sys.stderr, stdout=sys.stdout, check=True)
+    except Exception as e:
+        raise IOError(f'osmium command failed w/ \n    {e}')        
+    if not p.returncode==0:
+        raise AssertionError(f'osmium command failed')        
     log.debug(f'completed')
     
     return p
@@ -70,7 +74,7 @@ def get_tag_filter(
         #precompiled_index_fp=r'l:\10_IO\2210_AggFSyn\ins\osm_20230725\tag_filters\index.pkl',
         lib_dir= None,
         overwrite=False,
-        logger=None
+        logger=None, use_cache=True,
         ):
     """
     retrieve pbf file with tag filter applied
@@ -106,15 +110,15 @@ def get_tag_filter(
     fnstr = os.path.basename(pbf_raw_fp).replace('.osm.pbf', '').replace('-latest', '') #nice country string
     filter_fp = os.path.join(lib_dir, f'{fnstr}_{uuid}.pbf') 
     
-    log.debug(f'on {filter_fp}')
+    log.debug(f'for {filter_fp}')
     
-    if not os.path.exists(filter_fp):   
+    if (not os.path.exists(filter_fp)) or (not use_cache):   
         log.info(f'applying tags-filter')
         _ = _exe_osmimum('tags-filter', pbf_raw_fp, filter_str, '-o', filter_fp, '--progress', log=log)
  
         
     else:
-        log.debug(f'tag_filter already exists')
+        log.debug(f'tag_filter already exists...loading from cache')
         
  
     assert os.path.exists(filter_fp)
@@ -127,7 +131,7 @@ def get_box_filter(
         pbf_fp,
         bounds,
         lib_dir= None,
-        logger=None,
+        logger=None, use_cache=True,
         ):
     """
     filter a pbf file by bounds
@@ -138,21 +142,29 @@ def get_box_filter(
     log = logger.getChild('boxFilter')
     log.debug(f'applying bounds filter \'{bounds}\' to \n    {pbf_fp}')
     #setup the directory
-    lib_dir = get_lib_dir(lib_dir, '02_box')    
+    fnstr = os.path.basename(pbf_fp).split('_')[0] #nice countyry string
+    
+    if lib_dir is None: 
+        lib_dir = os.path.join(osm_cache_dir, fnstr, '02_box')
+        
+    if not os.path.exists(lib_dir): os.makedirs(lib_dir)
+ 
     
     #get the file
     uuid = hashlib.sha256(f'{pbf_fp}_{bounds}'.encode("utf-8")).hexdigest()    
-    fnstr = os.path.basename(pbf_fp).split('_')[0] #nice countyry string
+    
     filter_fp = os.path.join(lib_dir, f'{fnstr}_{uuid}.pbf')
  
     
-    if not os.path.exists(filter_fp):   
- 
+    if (not os.path.exists(filter_fp)) or (not use_cache): 
+        log.debug(f'executing extract --bbox on {pbf_fp}')
+        _ = _exe_osmimum('extract', pbf_fp, '--bbox', 
+                         f'{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}',
+                         '-s','simple','-o',filter_fp,'--overwrite',log=log)
         
-        _ = _exe_osmimum('extract', pbf_fp, '--bbox', f'{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}','-s','simple','-o',filter_fp,log=log)
-        
+        log.debug(f'wrote box_filter to {filter_fp}')
     else:
-        log.debug(f'box_filter already exists')
+        log.debug(f'box_filter already exists.. .loading from cache\n    {filter_fp}')
         
  
     assert os.path.exists(filter_fp)
@@ -161,7 +173,7 @@ def get_box_filter(
 
 def export_pbf_to_geojson(pbf_fp,
            lib_dir= None,
-           logger=None,
+           logger=None,use_cache=True,
            ):
     """export a pbf file into a GIS file
     
@@ -179,18 +191,18 @@ def export_pbf_to_geojson(pbf_fp,
     fnstr = os.path.basename(pbf_fp).split('_')[0] #nice countyry string
     ofp = os.path.join(lib_dir, f'{fnstr}_{uuid}.geojson')
     
-    log.debug(f'exporting\n    from:{pbf_fp}\n    to:{ofp}')
+    
     """
     print(ofp)
     """
     
-    if not os.path.exists(ofp):   
- 
+    if (not os.path.exists(ofp)) or (not use_cache):   
+        log.debug(f'exporting\n    from:{pbf_fp}\n    to:{ofp}')
         
-        _ = _exe_osmimum('export', pbf_fp, '--geometry-types=polygon','-o',ofp, log=log)
+        _ = _exe_osmimum('export', pbf_fp, '--geometry-types=polygon','-o',ofp, '--overwrite',log=log)
         
     else:
-        log.debug(f'exported file already exists')
+        log.debug(f'exported file already exists...loading from cache\n    {ofp}')
         
  
     assert os.path.exists(ofp)
@@ -283,6 +295,7 @@ def retrieve_osm_buildings(
         bounds,
         #lib_dir=None,      
         logger=None,
+        use_cache=True,
         ):
     """retrieve osm buildings
     
@@ -310,15 +323,15 @@ def retrieve_osm_buildings(
     # filters
     #===========================================================================
     #tag filter
-    filter_tag_fp = get_tag_filter(pbf_fp, logger=log)
+    filter_tag_fp = get_tag_filter(pbf_fp, logger=log, use_cache=True) #this one is country-wide
     
     #bounding box filter
-    filter_tag_box_fp = get_box_filter(filter_tag_fp, bounds, logger=log)
+    filter_tag_box_fp = get_box_filter(filter_tag_fp, bounds, logger=log, use_cache=use_cache)
     
     #===========================================================================
     # #export data
     #===========================================================================
-    osm_filter_fp = export_pbf_to_geojson(filter_tag_box_fp, logger=log)
+    osm_filter_fp = export_pbf_to_geojson(filter_tag_box_fp, logger=log, use_cache=use_cache)
  
     
     #===========================================================================
@@ -328,6 +341,7 @@ def retrieve_osm_buildings(
                     'tdelta':(datetime.now()-start).total_seconds(),
                     'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     'file_GB':os.path.getsize(osm_filter_fp)/(1024**3),
+                    'use_cache':use_cache,
                     #'output_MB':os.path.getsize(ofp)/(1024**2)
                     }
             

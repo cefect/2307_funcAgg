@@ -243,9 +243,7 @@ def _wbt_sample(rlay_fp, gdf_pts,  hazard_key, log, out_dir=None,
         assert samp_gdf2[hazard_key].min()>-9998, 'still some nulls?'
     else:
         log.warning(f'got all nulls')
-    
  
-    samp_gdf2.dtypes
     return samp_gdf2
 
 def run_agg_samples_on_country(

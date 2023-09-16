@@ -1,6 +1,6 @@
 :: run the hazard-building intersect script
 
-SET COUNTRY_KEY=AUS
+SET COUNTRY_KEY=DEU
 SET HAZARD_KEYS=500_fluvial 100_fluvial 050_fluvial 010_fluvial
 SET MAX_WORKERS=4
  

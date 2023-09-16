@@ -25,7 +25,9 @@ from concurrent.futures import ProcessPoolExecutor
 
 from intersect.osm import retrieve_osm_buildings
 
-from definitions import wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir, equal_area_epsg
+from definitions import (
+    wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir, equal_area_epsg,
+    fathom_vals_d)
 from definitions import temp_dir as temp_dirM
 
 #whitebox
@@ -70,47 +72,58 @@ def ogr_get_layer_names(fp):
     
     return layer_names_list
     
-def ogr_export_geometry(fp, ofp):
+def ogr_export_geometry(fp, ofp, log=None):
     """use ogr2ogr to extract only the geometry from a file
     
     much faster than geojson"""
+    log = log.getChild('ogr2ogr')
     
     #get the layer names
+    log.debug(f'retriving layer name')
     layerName = ogr_get_layer_names(fp)[0]
-    
-    #setup paths
-    fstr = os.path.basename(fp).split('.')[0]
-    #ofp = os.path.join(out_dir, f'{fstr}_geom.geojson')
-    
-    if os.path.exists(ofp):
-        os.remove(ofp)
-        
  
-    #extract only the centroids
-    #cmd_str = f"SELECT ST_Centroid(geometry) FROM {layer_names_l[0]}"
-    
-    #geometry only
-    #cmd_str = f"SELECT geometry FROM {layerName}"
     
     #geometry and centroid\
     cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM \'{layerName}\'"
     
+    args=['ogr2ogr', '-overwrite','-skipfailures', '-f', 'GPKG', '-dialect', 
+          'SQLite', '-sql',cmd_str, ofp, fp]
     
-    p = subprocess.run(['ogr2ogr', '-f', 'GeoJSON', '-dialect', 'SQLite', '-sql',cmd_str, ofp, fp], 
-                       stderr=sys.stderr, stdout=sys.stdout, check=True)
- 
-    
+    log.debug(f'subprocess on '+'\n    '.join(args))
+    p = subprocess.run(args,stderr=sys.stderr, stdout=sys.stdout, check=True)   
     
 
 
     assert p.returncode==0  
     
+    log.debug(f'finished on {ofp}')
+    
     return ofp
     
+def ogr_clean_polys(fp, ofp, log=None):
+    """use ogr2ogr to clean and simplify the layer"""
+    log = log.getChild('ogr2ogr')
+ 
+    log.info(f'    cleaning polygons')
+    args = ['ogr2ogr', '-f', 'GPKG', '-overwrite','-skipfailures','-simplify','0.00001',
+                        '-nlt','POLYGON','-makevalid','-nln','osm_polys_clean',
+                        '-select','geometry', ofp, fp]
+    
+ 
+    log.debug(f'subprocess on '+'\n    '.join(args))
+    
+    p = subprocess.run(args,stderr=sys.stderr, stdout=sys.stdout, check=True)   
     
 
 
+    assert p.returncode==0  
+    
+    log.debug(f'finished on {ofp}')
+    
+    return ofp
+
 def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
+                      use_cache=False, pre_clean_polys=True,
                       ):
     """intelligent retrival of building centroids"""
     #===========================================================================
@@ -121,17 +134,19 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     if out_dir is None: out_dir=os.path.join(lib_dir,'bldg_cent', country_key)
     if not os.path.exists(out_dir): os.makedirs(out_dir)
     
+    log = log.getChild('get_osm')
     #get record
     uuid = hashlib.shake_256(f'{country_key}_{bounds}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
-    ofp = os.path.join(out_dir, f'{pfx}_{uuid}.geojson')
+    ofp = os.path.join(out_dir, f'{pfx}_{uuid}.gpkg')
     
+    log.debug(f'for {country_key} w/ bounds: {bounds} and ofp: {ofp}')
     #===========================================================================
     # build
     #===========================================================================
-    if not os.path.exists(ofp):
+    if not os.path.exists(ofp) or (not use_cache):
         """this retrieves precompiled files if they are available"""
         log.debug(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
-        poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log)
+        poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log, use_cache=True)
         
         if os.path.getsize(poly_fp)<1e3:
             log.error(f'empty osm poly file... skipping')
@@ -139,33 +154,17 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
         #=======================================================================
         # #drop to centroid                
         #=======================================================================
-        log.debug(f'extracting centroid from osm building poly file {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
+        log.debug(f'extracting centroid from osm building poly file w/ {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
+ 
+        #optional cleaning
+        if pre_clean_polys:            
+            poly_clean_fp = ogr_clean_polys(poly_fp, os.path.join(temp_dir, f'{pfx}_clean_{uuid}.gpkg'), log=log)
+        else:
+            poly_clean_fp=poly_fp
         
-        
- #==============================================================================
- #        TOO SLOW
- #        poly_gdf = gpd.read_file(poly_fp)
- #        
- #        if len(poly_gdf)==0:
- #            log.warning(f'for {country_key}.{bounds} got no polygons... skipping ')
- #            return None 
- #            
- #        
- #        
- #        log.info(f'converting {len(poly_gdf)} polys to centroids')
- #        
- #        #add area (Equal Area Cylindrical CRS). drop to centroid 
- #        cent_gdf = gpd.GeoDataFrame(
- #            poly_gdf.geometry.to_crs(equal_area_epsg).area.rename('area')
- #            ).set_geometry(poly_gdf.geometry.centroid)
- # 
- #        
- #        cent_gdf.to_file(ofp)
- #        
- #        log.info(f'wrote {len(cent_gdf)} to \n    {ofp}')
- #==============================================================================
-        
-        ogr_export_geometry(poly_fp, ofp)
+        #use ogr to export centroids
+        ogr_export_geometry(poly_clean_fp, ofp, log=log)
+        #_wbt_centroid(poly_fp, ofp, log=log)
         
         #===========================================================================
         # wrap
@@ -180,7 +179,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     
         
     else:
-        log.debug(f'record exists for {country_key}.{bounds}\n    {ofp}')
+        log.debug(f'record exists ...loading from cache\n    {ofp}')
         
     return ofp
 
@@ -188,8 +187,13 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
 # EXECUTORS--------
 #===============================================================================
 
-def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log):
+def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key,log, nodata_l=None):
     """ sample points with WBT"""
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if nodata_l is None: nodata_l = list(fathom_vals_d.keys())
     #write to file
     """WBT requires a shape file..."""    
     bldg_pts_filter_fp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')    
@@ -212,19 +216,56 @@ def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log):
     # #clean and convert
     #===============================================================================
     log.debug(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
-    bldg_pts_sample_gser = gpd.read_file(bldg_pts_filter_fp)
-    bldg_pts_sample_gser = bldg_pts_sample_gser.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
+    gdf_raw = gpd.read_file(bldg_pts_filter_fp)
+    gdf1 = gdf_raw.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
     
-    raise IOError('fix nodata... see 04_sample')
-    bldg_pts_sample_gser.loc[bldg_pts_sample_gser[hazard_key] == nodata, hazard_key] = np.nan
-    bldg_pts_sample_gser.to_file(ofp)
+    bx = gdf1[hazard_key].astype(float).isin(nodata_l)
+    if bx.any():
+        log.debug(f'    set {bx.sum()}/{len(bx)} nodata vals to nan')
+        bx.loc[bx, hazard_key]=np.nan
+ 
+    gdf1.to_file(ofp)
     
     #write
-    log.info(f'    writing {len(bldg_pts_sample_gser)} samples to: {ofp}')
+    log.info(f'    writing {len(gdf1)} samples to: {ofp}')
     
     return ofp
 
-def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log=None, haz_base_dir=None, nodata=-32767):
+
+def _wbt_centroid(poly_fp,  ofp,log=None):
+    """ sample points with WBT"""
+    #write to file
+    """WBT requires a shape file..."""    
+    #poly_shp_fp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')    
+    #bldg_pts_gser.to_file(bldg_pts_filter_fp)
+    
+    shp_ofp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')    
+    #===========================================================================
+    # execute
+    #===========================================================================
+    def wbt_callback(value):
+        if not "%" in value:
+            log.debug(value)
+            
+    log.debug(f'wbt.centroid_vector on {poly_fp}')
+    res = wbt.centroid_vector(
+        poly_fp, 
+        shp_ofp, 
+ 
+        callback=wbt_callback)
+    
+    assert res==0
+    
+    #===============================================================================
+    # #clean and convert
+    #===============================================================================
+    #===========================================================================
+    # log.debug(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
+    # bldg_pts_sample_gser = gpd.read_file(bldg_pts_filter_fp)
+    #===========================================================================
+
+def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, 
+                  epsg_id, out_dir, log=None, haz_base_dir=None, nodata=-32767):
     
     if log is None: log=get_log_stream()
     
@@ -237,6 +278,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
     uuid = hashlib.shake_256(f'{fnstr}_{epsg_id}_{area_thresh}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
     ofp = os.path.join(out_dir,f'{fnstr}_{uuid}.geojson')
     
+    log.debug(f' w/ {ofp}')
     if not os.path.exists(ofp):
         #=======================================================================
         # #get OSM building footprints
@@ -277,16 +319,9 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_
         # #compute hte stats
         #=======================================================================
         log.info(f'    computing {len(bldg_pts_gser)} samples on {os.path.basename(rlay_fp)}')
-        #=======================================================================
-        # samp_pts = get_raster_point_samples(bldg_pts_gser, rlay_fp, colName=hazard_key, nodata=-32767)
-        # assert len(samp_pts) == len(bldg_pts_gser)
-        # log.debug(f'got counts\n' + str(samp_pts.iloc[:, 0].value_counts(dropna=False)))
-        #=======================================================================
+ 
         
-        #execute tool
-
-        
-        _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log)
+        _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, log)
  
     else:
         log.info(f'    record exists: {ofp}')
@@ -445,7 +480,7 @@ def run_samples_on_country(country_key, hazard_key,
  
 if __name__ == '__main__':
     
-    run_samples_on_country('CAN', '500_fluvial', max_workers=None)
+    run_samples_on_country('DEU', '500_fluvial', max_workers=None)
     
     
     
