@@ -4,7 +4,7 @@ Created on Sep. 6, 2023
 @author: cefect
 
 calculate function aggregation error potential metrics
-    try2 using the curvature weighted by typical exposure
+    trying different methods
 '''
 #===============================================================================
 # IMPORTS-----------
@@ -78,6 +78,196 @@ def force_max_depth(
     
     return res_serx
  
+
+
+def get_depth_weights(search_dir, log=None, min_wet_frac=0.05):
+    """calculate the depth weights"""
+    
+    log = log.getChild('get_depth_weights')
+    #===========================================================================
+    # get cache filepath
+    #=========================================================================== 
+    fp_l = _get_filepaths(search_dir)   
+    out_dir = os.path.join(temp_dir, 'funcMetrics', 'get_depth_weights')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+
+    
+    uuid = hashlib.shake_256((f'{min_wet_frac}'+'_'.join(fp_l)).encode("utf-8"), usedforsecurity=False).hexdigest(16)
+    ofp = os.path.join(out_dir,f'dWeights_{len(fp_l)}_{uuid}.pkl')
+    
+    #===========================================================================
+    # build
+    #===========================================================================
+    if not os.path.exists(ofp):
+        
+        #=======================================================================
+        # load
+        #=======================================================================
+        log.info(f'loading from \n    {search_dir}')
+        dx_raw = load_pdist_concat(search_dir=search_dir).droplevel(['i', 'j'])
+        
+        log.info(f'loaded {dx_raw.shape}')
+        
+        #=======================================================================
+        # #extract
+        #=======================================================================
+        #split the data
+        metric_df_raw = dx_raw.xs('metric', level=0, axis=1)
+        metric_df_raw['wet_frac'] = metric_df_raw['wet_cnt']/metric_df_raw['count']
+        """
+        view(metric_df_raw)
+        """
+        
+        #apply filter
+        bx = metric_df_raw['wet_frac']>min_wet_frac
+        
+        if not bx.any():
+            raise IOError('no valids')
+            
+        log.info(f'    selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
+        
+        #metric_df = gdx.xs('metric', level=0, axis=1)[bx]
+        #=======================================================================
+        # #get mean of grid cells
+        #=======================================================================
+        """leaving other levels for more transparency"""
+        hist_dx = dx_raw[bx].xs('hist', level=0, axis=1).groupby(
+            ['grid_size', 'country_key', 'haz']).mean().dropna(axis=1)
+        
+        hist_dx.columns.name='wsh'
+        
+        #=======================================================================
+        # write
+        #=======================================================================
+        hist_dx.to_pickle(ofp)
+        log.info(f'wrote {hist_dx.shape} to \n    {ofp}')
+        
+    #===========================================================================
+    # load
+    #===========================================================================
+    else:
+        log.info(f'loading from cache')
+        hist_dx = pd.read_pickle(ofp)
+        
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    log.info(f'finished w/ {hist_dx.shape}')
+    
+    return hist_dx
+        
+        
+        
+ 
+def run_depth_weighted_curvature(
+        search_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist',
+        fserx = None,
+        #curves_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\lib\dfunc_lib_17_359_20230915.pkl',
+        hwd_scale=0.01,
+        country_key='deu',
+        #df_id=941,
+        out_dir=None,
+        max_depth=None,
+        min_wet_frac=.9,
+        ):
+    """compute the weighted curvature for a single country and curve
+    
+    
+    Params
+    --------
+    hwd_scale: float
+        value to use to re-scale the wd values on the histogram (convert to m)
+        
+    """
+    raise IOError('instead of wet_frac, use those where the grid centroid is wet')
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()    
+ 
+    
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', '01_cWeight')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+ 
+    
+    log = init_log(name=f'cWeight', fp=os.path.join(out_dir, today_str+'.log'))
+    
+    if max_depth is None:
+        from funcMetrics.coms_fm import max_depth
+    
+    #===========================================================================
+    # load curves
+    #===========================================================================
+    if fserx is None: fserx = get_funcLib() #select functions
+ 
+    #extend
+    """using full index as we are changing the index (not just adding values"""
+    fserx_extend = force_max_depth(fserx, max_depth, log).rename('rl')
+    
+    #===========================================================================
+    # get depth weights
+    #===========================================================================
+    hist_dx =get_depth_weights(search_dir, log=log, min_wet_frac=min_wet_frac).xs(country_key, level='country_key')
+    hist_dx.columns = hist_dx.columns.astype(float)*hwd_scale #convert to meters
+    
+    hg_keys = ['grid_size', 'haz']
+    #===========================================================================
+    # compute metric0
+    #===========================================================================
+    res_d, meta_lib = dict(), dict()
+    for df_id, gserx in fserx_extend.groupby('df_id'):
+        #prep inputs
+        s = slice_serx(gserx, xs_d=None).droplevel(['df_id', 'model_id']).rename('rl')
+        
+        #compute on each depth histogram population
+        res_l=list()
+        meta_d=dict()
+        for i, ((grid_size, haz), ghdx) in enumerate(hist_dx.groupby(hg_keys)):
+            
+            #get the area
+            #rser = compute_weighted_curvature(s.copy(), ghdx.iloc[0,:], log)
+            meta_d[i], rdf = compute_hist_weighted(s.copy(), ghdx.iloc[0,:], log)
+            
+            #add indexers        
+            res_l.append(pd.concat({grid_size:pd.concat({haz:rdf}, names=['haz'])}, names=['grid_size']))            
+            meta_d[i].update(dict(zip(hg_keys, (grid_size, haz))))
+            
+        #=======================================================================
+        # #merge
+        #=======================================================================
+        res_d[df_id] = pd.concat(res_l)
+        meta_lib[df_id] = pd.DataFrame.from_dict(meta_d, orient='index')
+        
+        """
+        view(res_d[df_id])
+        view(rdx)
+        """
+    
+    #merge
+    """leaving all the function metdata off... this could be re-joined later using df_id if necessary"""
+    rdx = pd.concat(res_d, names=['df_id'])
+    
+    #===========================================================================
+    # set(rserx.index.names).difference(serx_raw.index.names)
+    # 
+    # .reorder_levels(serx_raw.index.names + ['grid_size', 'max_depth_forcing', 'haz'])
+    #===========================================================================
+ 
+    #===========================================================================
+    # #write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'cWeight_{len(rdx)}_{today_str}.pkl')
+    rdx.to_pickle(ofp)
+    
+    log.info(f'wrote {len(rdx)} to \n    {ofp}')
+    
+    return ofp
+    
+#===============================================================================
+# metric methods-------------
+#===============================================================================
 def compute_weighted_curvature(
         fser,
         hser,
@@ -85,7 +275,7 @@ def compute_weighted_curvature(
         log,
  
         ):
-    """calculate the gradient of the functions
+    """try2 using the curvature weighted by typical exposure
     
     Params
     -----------
@@ -208,193 +398,75 @@ def compute_weighted_curvature(
     
     return rser
 
-def get_depth_weights(search_dir, log=None, min_wet_frac=0.05):
-    """calculate the depth weights"""
-    
-    log = log.getChild('get_depth_weights')
-    #===========================================================================
-    # get cache filepath
-    #=========================================================================== 
-    fp_l = _get_filepaths(search_dir)   
-    out_dir = os.path.join(temp_dir, 'funcMetrics', 'get_depth_weights')
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
-
-    
-    uuid = hashlib.shake_256((f'{min_wet_frac}'+'_'.join(fp_l)).encode("utf-8"), usedforsecurity=False).hexdigest(16)
-    ofp = os.path.join(out_dir,f'dWeights_{len(fp_l)}_{uuid}.pkl')
-    
-    #===========================================================================
-    # build
-    #===========================================================================
-    if not os.path.exists(ofp):
+def compute_hist_weighted(
+        fser,
+        hser_raw,
         
-        #=======================================================================
-        # load
-        #=======================================================================
-        log.info(f'loading from \n    {search_dir}')
-        dx_raw = load_pdist_concat(search_dir=search_dir).droplevel(['i', 'j'])
-        
-        log.info(f'loaded {dx_raw.shape}')
-        
-        #=======================================================================
-        # #extract
-        #=======================================================================
-        #split the data
-        metric_df_raw = dx_raw.xs('metric', level=0, axis=1)
-        metric_df_raw['wet_frac'] = metric_df_raw['wet_cnt']/metric_df_raw['count']
-        """
-        view(metric_df_raw)
-        """
-        
-        #apply filter
-        bx = metric_df_raw['wet_frac']>min_wet_frac
-        
-        if not bx.any():
-            raise IOError('no valids')
-            
-        log.info(f'    selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
-        
-        #metric_df = gdx.xs('metric', level=0, axis=1)[bx]
-        #=======================================================================
-        # #get mean of grid cells
-        #=======================================================================
-        """leaving other levels for more transparency"""
-        hist_dx = dx_raw[bx].xs('hist', level=0, axis=1).groupby(
-            ['grid_size', 'country_key', 'haz']).mean().dropna(axis=1)
-        
-        hist_dx.columns.name='wsh'
-        
-        #=======================================================================
-        # write
-        #=======================================================================
-        hist_dx.to_pickle(ofp)
-        log.info(f'wrote {hist_dx.shape} to \n    {ofp}')
-        
-    #===========================================================================
-    # load
-    #===========================================================================
-    else:
-        log.info(f'loading from cache')
-        hist_dx = pd.read_pickle(ofp)
-        
-    #===========================================================================
-    # wrap
-    #===========================================================================
-    log.info(f'finished w/ {hist_dx.shape}')
-    
-    return hist_dx
-        
-        
-        
+        log,
  
-def run_depth_weighted_curvature(
-        search_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist',
-        fserx = None,
-        #curves_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\lib\dfunc_lib_17_359_20230915.pkl',
-        hwd_scale=0.01,
-        country_key='deu',
-        #df_id=941,
-        out_dir=None,
-        max_depth=None,
         ):
-    """compute the weighted curvature for a single country and curve
-    
+    """try3 calc from histogram them compare to mode
     
     Params
-    --------
-    hwd_scale: float
-        value to use to re-scale the wd values on the histogram (convert to m)
+    -----------
+    fser: pd.Series
+        depth damage function
+        
+    hser: pd.Sers
+        histogram of computed exposures
         
     """
+    #===========================================================================
+    # defulats
+    #===========================================================================
+    log = log.getChild('hWeight')
+    log.info(f'on {len(fser)} wd values')
+    
+    if not fser.index.name=='wd':
+        raise IOError(fser.index.name)
     
     #===========================================================================
-    # defaults
+    # prep
     #===========================================================================
-    start=datetime.now()    
+    get_rl = lambda x: np.interp(x, fser.index.values, fser.values)
+    
+    #shift histogram to bucket centers
+    hdf = hser_raw.copy().rename('p').to_frame()
+    hdf.index = hdf.index+np.diff(hdf.index)[0]/2
  
     
-    if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', '01_cWeight')
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    #===========================================================================
+    # get fval at mode
+    #===========================================================================
+    meta_d = {'mode_wsh':hdf.idxmax().iloc[0]}    
+    meta_d['mode_rl'] = get_rl(meta_d['mode_wsh'])
     
+    #===========================================================================
+    # get fval for hist
+    #===========================================================================
+    hdf['rl'] = [get_rl(x) for x in hdf.index]
+    
+    
+    hdf['rl_weight'] = hdf['rl']*hdf['p']
+    
+    
+    #(hdf['p']*(1.0/hdf['p'].sum())).sum()
+    
+    #re-scale so probabilities sum to 1
+    hdf['rl_ev'] = hdf['rl_weight']*(1.0/hdf['p'].sum())
+    
+    #===========================================================================
+    # compare
+    #===========================================================================
+    meta_d['rl_ev'] = hdf['rl_ev'].sum()
+    meta_d['diff'] = meta_d['mode_rl'] - meta_d['rl_ev']
+    
+    meta_d['err_frac'] = abs(meta_d['diff'])/meta_d['rl_ev']
+    
+    log.info(f'finished w/ \n    {meta_d}')
+    
+    return meta_d, hdf
  
-    
-    log = init_log(name=f'cWeight', fp=os.path.join(out_dir, today_str+'.log'))
-    
-    if max_depth is None:
-        from funcMetrics.coms_fm import max_depth
-    
-    #===========================================================================
-    # load curves
-    #===========================================================================
-    if fserx is None: fserx = get_funcLib()
-    #log.info(f'loading curves from \n    {curves_fp}')
-    #===========================================================================
-    # serx_raw = pd.read_pickle(curves_fp).xs(df_id, level='df_id')
-    # 
-    # serx_raw = pd.concat({df_id:serx_raw}, names=['df_id']) #add the level back for consistency
-    #===========================================================================
-    
-    
-    #extend
-    """using full index as we are changing the index (not just adding values"""
-    serx_extend = force_max_depth(fserx, max_depth, log).rename('rl')
-    
-    #===========================================================================
-    # get depth weights
-    #===========================================================================
-    hist_dx =get_depth_weights(search_dir, log=log).xs(country_key, level='country_key')
-    hist_dx.columns = hist_dx.columns.astype(float)*hwd_scale
-    
-    hg_keys = ['grid_size', 'haz']
-    #===========================================================================
-    # compute metric0
-    #===========================================================================
-    res_d = dict()
-    for df_id, gserx in serx_extend.groupby('df_id'):
-        #prep inputs
-        s = slice_serx(gserx, xs_d=None).droplevel(['df_id', 'model_id']).rename('rl')
-        
-        #compute on each depth histogram population
-        res_l=list()
-        for (grid_size, haz), ghdx in hist_dx.groupby(hg_keys):
-            
-            #get the area
-            rser = compute_weighted_curvature(s.copy(), ghdx.iloc[0,:], log)
- 
-            
-            #add indexers
-            rser1 = pd.concat({grid_size:pd.concat({haz:rser}, names=['haz'])}, names=['grid_size'])
-            
-            res_l.append(rser1.to_frame().join(s).set_index('rl', append=True).iloc[:,0])
-            
-        #merge
-        res_d[df_id] = pd.concat(res_l)
-        
-        """
-        view(res_d[df_id])
-        view(rdx)
-        """
-    
-    #merge
-    """leaving all the function metdata off... this could be re-joined later using df_id if necessary"""
-    rdx = pd.concat(res_d, names=['df_id'])
-    
-    #===========================================================================
-    # set(rserx.index.names).difference(serx_raw.index.names)
-    # 
-    # .reorder_levels(serx_raw.index.names + ['grid_size', 'max_depth_forcing', 'haz'])
-    #===========================================================================
- 
-    #===========================================================================
-    # #write
-    #===========================================================================
-    ofp = os.path.join(out_dir, f'cWeight_{len(rdx)}_{today_str}.pkl')
-    rdx.to_pickle(ofp)
-    
-    log.info(f'wrote {len(rdx)} to \n    {ofp}')
-    
-    return ofp
     
     
     

@@ -663,7 +663,7 @@ def plot_hist_combine_country_violin(
     #===========================================================================
     # post
     #===========================================================================
-    #fig.suptitle(country_key)
+    fig.suptitle(f'{country_key} (wet frac. {min_wet_frac}, samp frac. {sample_frac})')
      
     for row_key, col_key, ax in rc_ax_iter:
         #ax.grid()
@@ -689,7 +689,7 @@ def plot_hist_combine_country_violin(
     #===========================================================================
     # write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'hist_combine_violin_{country_key}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'hist_combine_violin_{country_key}_{len(col_keys)}x{len(row_keys)}_{int(min_wet_frac*100):03d}_{int(sample_frac*100):03d}_{today_str}.svg')
     fig.savefig(ofp, dpi = 300,   transparent=True)
     log.info(f'wrote to \n    %s'%ofp)
     plt.close('all')
@@ -879,7 +879,7 @@ def plot_hist_combine_mean_line(
     #===========================================================================
     # write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'hist_combine_mean_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'hist_combine_mean_{len(col_keys)}x{len(row_keys)}_{min_wet_frac*100:03d}_{today_str}.svg')
     fig.savefig(ofp, dpi = 300,   transparent=True)
     
     plt.close('all')
@@ -899,10 +899,269 @@ def plot_hist_combine_mean_line(
      
     return ofp
  
+
+def plot_agg_hist_stats_violins(
+ 
+        out_dir=None,
+ 
+        country_key='deu',
+        bw_method=0.1,
+        sample_frac=1.0,
+        min_wet_frac=0.05,
+        figsize=(20*cm, 30*cm),
+        ):
+    """plot metric/stats from histograms as violines
+    
+    
+    Params
+    -------
+    min_wet_frac: float
+        fitler to exclude cells with very little exposure
+        
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'expo_stats', 'da', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name=f'pdist')
+    start=datetime.now()
+    
+    #===========================================================================
+    # load data
+    #===========================================================================
+    dx_raw = load_pdist_concat().droplevel(['i', 'j']).xs('metric', level=0, axis=1).xs(country_key, level='country_key', axis=0)
+    dx_samp = dx_raw.sample(int(len(dx_raw)*sample_frac))
+    
+    #filter wet fracm
+    dx_samp['wet_frac'] = dx_samp['wet_cnt']/dx_samp['count']
+    bx = dx_samp['wet_frac']>=min_wet_frac
+    log.info(f'fioltered {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
+    
+    serx = dx_samp[bx].stack()
+    serx.index.set_names('metric', level=3, inplace=True)
+
+
+    mdex = serx.index
+ 
+    """
+    view(dx.head(100))
+    """
+    #===========================================================================
+    # slice
+    #===========================================================================
+ 
+    
+    #get a data grouper
+    keys_d = {'row':'metric',  'col':'grid_size', 'color':'haz'}
+    kl = list(keys_d.values())    
+ 
+    log.info(f' loaded {len(serx)}')
+    
+    #===========================================================================
+    # setup figure
+    #===========================================================================
+    row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, sharex=True, 
+                               sharey=False, add_subfigLabel=False, figsize=figsize)
+    
+    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()] 
+    
+    color='black'
+    #===========================================================================
+    # color_d = _get_cmap(color_keys, name='viridis')
+    # 
+    # marker_d = _get_markers(color_keys, markers=['s', 'o'])
+    #===========================================================================
+    
+    
+    for (row_key, col_key), gserx0 in serx.groupby(kl[:2]):
+        log.info(f'{row_key} x {col_key}')
+        ax = ax_d[row_key][col_key]
+        
+        
+        #=======================================================================
+        # violin plots plot
+        #=======================================================================
+        log.info(f'    building violin plots on {len(gserx0)} w/ bw_method={bw_method}')
+        gd = {k:v.dropna().values.reshape(-1) for k,v in gserx0.groupby(kl[2])}
+ 
+        violin_parts = ax.violinplot(gd.values(), widths=1.0, showmeans=True, showextrema=False,  bw_method=bw_method)
+        
+        # Change the color of each part of the violin plot
+ 
+        _set_violinparts_style(violin_parts, color)
+        
+    log.info('post')
+    """
+    plt.show()
+    """
+        
+    #===========================================================================
+    # post
+    #===========================================================================
+    fig.suptitle(f'{country_key} (wet frac. {min_wet_frac}, samp frac. {sample_frac})')
+     
+    for row_key, col_key, ax in rc_ax_iter:
+        #ax.grid()
+        
+        #first row
+        if row_key==row_keys[0]:
+            ax.set_title(f'{col_key}m grid')
+        
+        #last row
+        if row_key==row_keys[-1]:
+  
+            #ax.set_xlabel(f'WSH (cm)')
+            
+            #ax.get_ticks()
+            ax.set_xticks([i for i in range(len(gd))])
+            ax.set_xticklabels([haz_label_d[e] for e in gd.keys()], rotation=45)  # rotation is optional
+             
+        #first col
+        if col_key==col_keys[0]:
+            ax.set_ylabel(f'{row_key}')
+ 
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'hist_vars_violin_{country_key}_{len(col_keys)}x{len(row_keys)}_{int(sample_frac*100):03d}_{int(min_wet_frac*100):03d}_{today_str}.svg')
+    fig.savefig(ofp, dpi = 300,   transparent=True)
+    log.info(f'wrote to \n    %s'%ofp)
+    plt.close('all')
+     
+    return ofp
+
+
+def plot_agg_wdhist_1stat(
+ 
+        out_dir=None,
+ 
+        country_key='deu',
+        metric='wet_frac',
+ 
+        sample_frac=1.0,
+        min_wet_frac=0.0,
+        figsize=None,
+        ):
+    """plot single metric/stats from wsh histograms as histograms
+    
+    
+    Params
+    -------
+    min_wet_frac: float
+        fitler to exclude cells with very little exposure
+        
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'expo_stats', 'da', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name=f'pdist')
+    start=datetime.now()
+    
+    #===========================================================================
+    # load data
+    #===========================================================================
+    dx_raw = load_pdist_concat().droplevel(['i', 'j']).xs('metric', level=0, axis=1).xs(country_key, level='country_key', axis=0)
+    dx_samp = dx_raw.sample(int(len(dx_raw)*sample_frac))
+    
+    #filter wet fracm
+    dx_samp['wet_frac'] = dx_samp['wet_cnt']/dx_samp['count']
+    bx = dx_samp['wet_frac']>=min_wet_frac
+    log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
+    
+    serx = dx_samp[bx].stack()
+    serx.index.set_names('metric', level=3, inplace=True)
+    serx=serx.xs(metric, level='metric') #slice to the metric of interest
+
+
+    mdex = serx.index
+ 
+    """
+    view(dx.head(100))
+    """
+    #===========================================================================
+    # slice
+    #===========================================================================
+ 
+    
+    #get a data grouper
+    keys_d = {'row':'haz',  'col':'grid_size'}
+    kl = list(keys_d.values())    
+ 
+    log.info(f' loaded {len(serx)}')
+    
+    #===========================================================================
+    # setup figure
+    #===========================================================================
+    row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, sharex=True, 
+                               sharey=False, add_subfigLabel=False, figsize=figsize)
+    
+    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()] 
+    
+    color='black'
+    #===========================================================================
+    # color_d = _get_cmap(color_keys, name='viridis')
+    # 
+    # marker_d = _get_markers(color_keys, markers=['s', 'o'])
+    #===========================================================================
+ 
+    for (row_key, col_key), gserx in serx.groupby(kl):
+        log.info(f'{row_key} x {col_key}')
+        ax = ax_d[row_key][col_key]
+        
+        ax.hist(gserx.values, color=color, bins = np.linspace(0, 500, 21 ))
+        
+        
+    #===========================================================================
+    # post
+    #===========================================================================
+    fig.suptitle(f'{country_key} {metric} (wet frac. {min_wet_frac}, samp frac. {sample_frac})')
+     
+    for row_key, col_key, ax in rc_ax_iter:
+        #ax.grid()
+        
+        #first row
+        if row_key==row_keys[0]:
+            ax.set_title(f'{col_key}m grid')
+        
+        #last row
+        if row_key==row_keys[-1]:
+  
+            ax.set_xlabel(f'WSH (cm)')
+            
+ 
+             
+        #first col
+        if col_key==col_keys[0]:
+            ax.set_ylabel(f'{row_key}')
+ 
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'agg_wdHist_{metric}_{country_key}_{len(col_keys)}x{len(row_keys)}_{int(sample_frac*100):03d}_{int(min_wet_frac*100):03d}_{today_str}.svg')
+    fig.savefig(ofp, dpi = 300,   transparent=True)
+    log.info(f'wrote to \n    %s'%ofp)
+    plt.close('all')
+     
+    return ofp
+        
     
 if __name__=='__main__':
     
-
+    #plot_agg_hist_stats_violins(sample_frac=0.01)
+    plot_agg_wdhist_1stat(sample_frac=1.0)
 
     #plot_pdist_metric_v_count()
     #plot_pdist_metric_violin(yval='loc')
@@ -910,7 +1169,10 @@ if __name__=='__main__':
     
     
     #plot_pdist_paramterized()
-    plot_hist_combine_country_violin(country_key='deu', sample_frac=1.0)
+    #===========================================================================
+    # for wf in [0.05, 0.5, 0.9, 0.99]:
+    #     plot_hist_combine_country_violin(country_key='deu', sample_frac=1.0, min_wet_frac=wf)
+    #===========================================================================
  
     
     #plot_hist_combine_mean_line(sample_frac=0.05)

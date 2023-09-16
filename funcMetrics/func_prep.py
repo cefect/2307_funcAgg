@@ -637,7 +637,7 @@ def get_funcLib(
         lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230915.pkl',
         out_dir=None,
         **kwargs):
-    """retrieve the function library serx
+    """retrieve the filtered function library serx
     
     
     Params

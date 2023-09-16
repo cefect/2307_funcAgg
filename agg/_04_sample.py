@@ -336,7 +336,7 @@ def run_agg_samples_on_country(
                 
  
          
-    log.info(f'finished w/ {len(res_d)}')
+    log.info(f'finished w/ {len(res_d)}... building meta')
     #===========================================================================
     # add to meta
     #===========================================================================
@@ -362,7 +362,7 @@ def run_agg_samples_on_country(
     #===========================================================================
     # wrap
     #===========================================================================
-    log.info(f'finished on {cnt}')
+    #log.info(f'finished on {cnt}')
     #write errors
     if len(err_d)>0:
         err_ofp = os.path.join(out_dir, f'errors_{today_str}_{country_key}_{hazard_key}.gpkg')
