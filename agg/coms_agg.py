@@ -3,8 +3,9 @@ Created on Sep. 9, 2023
 
 @author: cefect
 '''
-
+import pandas as pd
 import psycopg2
+from sqlalchemy import create_engine, URL
 from definitions import postgres_d, equal_area_epsg, postgres_dir
 
 #===============================================================================
@@ -34,12 +35,12 @@ def pg_vacuum(conn_d, tableName):
     return conn, cur
 
 
-def pg_spatialIndex(conn_d, schema, tableName, columnName='geom'):
+def pg_spatialIndex(schema, tableName, columnName='geom', **kwargs):
     return pg_exe(f"""
                 CREATE INDEX {tableName}_geom_idx
                     ON {schema}.{tableName}
                         USING GIST ({columnName});
-                """)
+                """, **kwargs)
  
             
 
@@ -68,5 +69,34 @@ def pg_getCRS(schema, tableName, geom_coln='geom', conn_d=None):
                         (schema, tableName, geom_coln)
                         )
             return int(cur.fetchone()[0])
+
+def pg_getcount(schema, tableName,  conn_d=None):
+    """get the crs from a table"""
     
- 
+    if conn_d is None:
+        conn_d =postgres_d
+        
+    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT COUNT(*) FROM {schema}.{tableName}""")
+            return int(cur.fetchone()[0])
+
+def pg_to_df(cmd_str, conn_d=postgres_d):
+    """load a filtered table to geopanbdas"""
+    
+    conn =  psycopg2.connect(get_conn_str(conn_d))
+    #set engine for geopandas
+    engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
+    try:
+        result = pd.read_sql_query(cmd_str, engine)
+        
+    except Exception as e:
+        raise IOError(f'failed query w/ \n    {e}')
+    finally:
+        # Dispose the engine to close all connections
+        engine.dispose()
+        # Close the connection
+        conn.close()
+        
+
+    return result

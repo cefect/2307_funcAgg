@@ -71,21 +71,7 @@ def _get_gdf(id, fp):
                              )
 
 
-def xxx_load_samps_set(gserx, max_workers):
-    """load geodataframe from each file in the gserx"""
-    if max_workers is None:
-        d = dict()
-        for id, fp in tqdm(gserx.droplevel([0, 1]).to_dict().items()):
-            _, d[id] = _get_gdf(id, fp)
-    
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            results = list(tqdm(executor.map(_get_gdf, *
-                        zip(*gserx.droplevel([0, 1]).to_dict().items())), total=len(gserx.droplevel([0, 1]).to_dict().items())))
-        d = dict(results)
-    return pd.concat(d, names=['gid', 'fid']).sort_index()
-
-
+ 
 
 def _load_samps_set(gserx, max_workers,
                     coln_l=['010_fluvial', '050_fluvial', '100_fluvial', '500_fluvial', 'geometry'],
