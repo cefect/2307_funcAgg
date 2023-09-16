@@ -13,7 +13,7 @@ from itertools import product
 import psycopg2
 print('psycopg2.__version__=' + psycopg2.__version__)
 
-from sqlalchemy import create_engine, URL
+#from sqlalchemy import create_engine, URL
 
 from tqdm import tqdm
 

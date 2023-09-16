@@ -214,6 +214,8 @@ def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key, nodata, log):
     log.debug(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
     bldg_pts_sample_gser = gpd.read_file(bldg_pts_filter_fp)
     bldg_pts_sample_gser = bldg_pts_sample_gser.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
+    
+    raise IOError('fix nodata... see 04_sample')
     bldg_pts_sample_gser.loc[bldg_pts_sample_gser[hazard_key] == nodata, hazard_key] = np.nan
     bldg_pts_sample_gser.to_file(ofp)
     
