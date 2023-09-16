@@ -153,7 +153,7 @@ def get_intersect_grid_rlay_sample(row_raw, i, out_dir, haz_tile_gdf, haz_base_d
     # build
     #===========================================================================
     if not os.path.exists(ofp):
-        log.info(f'{country_key}.{hazard_key} on grid %i'%row_raw['id'])
+        log.debug(f'{country_key}.{hazard_key} on grid %i'%row_raw['id'])
         row_gdf = gpd.GeoDataFrame([row_raw], crs=crs) #reconstruct geopandas object
         #=======================================================================
         # #retrieve the corresponding hazard raster
@@ -175,10 +175,10 @@ def get_intersect_grid_rlay_sample(row_raw, i, out_dir, haz_tile_gdf, haz_base_d
         # write
         #=======================================================================
         agg_gridsC_samp_gdf.to_file(ofp)
-        log.info(f'    finished on {agg_gridsC_samp_gdf.shape} and wrote to\n    {ofp}')
+        log.debug(f'    finished on {agg_gridsC_samp_gdf.shape} and wrote to\n    {ofp}')
         
     else:
-        log.info(f'intersect exists... skipping')
+        log.debug(f'intersect exists... skipping')
         
     
         
