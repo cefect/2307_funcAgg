@@ -128,9 +128,9 @@ def ogr_clean_polys(fp, ofp, log=None):
 def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, 
                       pfx='', #{country_key}_{hazard_key}_{i}. NOTE: should remove hazard_key next time
                       use_cache=True, 
-                      pre_clean_polys=False,
+                      pre_clean_polys=True,
                       manual_l=[
-                          'DEU_500_fluvial_8'
+                          'DEU_008', 'DEU_019'
                           ],
                       ):
     """intelligent retrival of building centroids"""
@@ -142,7 +142,7 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None,
     if out_dir is None: out_dir=os.path.join(lib_dir,'bldg_cent', country_key)
     if not os.path.exists(out_dir): os.makedirs(out_dir)
     
-    log = log.getChild('get_osm')
+    log = log.getChild('bldg_cent')
     
     #===========================================================================
     # #get record
@@ -153,17 +153,19 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None,
     else:
         """spent a few hours on this... some pulls would not complete
         had to manually clean in QGIS"""
+        log.warning(f'using manual over-ride for {pfx}')
         ofp = get_filepaths(out_dir, pfx, ext='.geojson')
         assert os.path.exists(ofp)
+        assert use_cache
     
-    log.debug(f'for {country_key} w/ bounds: {bounds} and ofp: {ofp}')
+    log.debug(f'for {country_key} w/ bounds: {bounds}')
     #===========================================================================
     # build
     #===========================================================================
     if not os.path.exists(ofp) or (not use_cache):
         """this retrieves precompiled files if they are available"""
         log.debug(f'retriving OSM building footprints for {country_key} from bounds: {bounds}')
-        poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log, use_cache=True)
+        poly_fp = retrieve_osm_buildings(country_key, bounds, logger=log, use_cache=False)
         
         if os.path.getsize(poly_fp)<1e3:
             log.error(f'empty osm poly file... skipping')
@@ -175,8 +177,12 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None,
  
         #optional cleaning
         if pre_clean_polys:
-            """this didn't seem to help... could explore alternate cleaning methods"""            
-            poly_clean_fp = ogr_clean_polys(poly_fp, os.path.join(temp_dir, f'{pfx}_clean_{uuid}.geojson'), log=log)
+            """this didn't seem to help... could explore alternate cleaning methods"""     
+            poly_clean_fp =  os.path.join(temp_dir, f'{pfx}_clean_{uuid}.geojson')
+            if not os.path.exists(poly_clean_fp):
+                poly_clean_fp = ogr_clean_polys(poly_fp,poly_clean_fp, log=log)
+            else:
+                log.debug(f'cleaned polyfile exists... loading from cache\n    {poly_clean_fp}')
         else:
             poly_clean_fp=poly_fp
         
@@ -297,12 +303,12 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh,
     uuid = hashlib.shake_256(f'{fnstr}_{epsg_id}_{area_thresh}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
     ofp = os.path.join(out_dir,f'{fnstr}_{uuid}.geojson')
     
-    log.debug(f' w/ {ofp}')
+    log.debug(f' on {fnstr}')
     if not os.path.exists(ofp):
         #=======================================================================
         # #get OSM building footprints
         #=======================================================================
-        bldg_fp = get_osm_bldg_cent(country_key, row.geometry.bounds, pfx=fnstr, log=log)
+        bldg_fp = get_osm_bldg_cent(country_key, row.geometry.bounds, pfx=f'{country_key}_{i:03d}', log=log)
         if bldg_fp is None:
             return None
         
@@ -499,8 +505,8 @@ def run_samples_on_country(country_key, hazard_key,
  
  
 if __name__ == '__main__':
-    
-    run_samples_on_country('DEU', '500_fluvial', max_workers=None)
+    for haz in ['500_fluvial','100_fluvial', '050_fluvial', '010_fluvial']:
+        run_samples_on_country('DEU', haz, max_workers=None)
     
     
     
