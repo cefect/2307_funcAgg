@@ -2,6 +2,9 @@
 Created on Sep. 9, 2023
 
 @author: cefect
+
+merge inters and grids together into views
+    not using this anymore
 '''
 #===============================================================================
 # IMPORTS--------
@@ -54,7 +57,7 @@ def run_merge_agg_grids(
                 
         schema='grids', viewName='agg',
         ):
-    """merge the agg grids"""
+    """create a view of all the agg grids"""
     
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         
@@ -67,8 +70,7 @@ def run_merge_agg_grids(
         conn.commit()
         
         #create if it exists
-
-        
+ 
         #=======================================================================
         # build
         #=======================================================================
@@ -142,48 +144,49 @@ def run_merge_agg_grids(
     print(f'finished')
     
 
-def run_clean_inters(
-        conn_d=postgres_d,
-        country_l = ['aus', 'bra', 'can', 'deu', 'zaf'], 
-        schema='inters',  
-        ):
-    """merge the agg grids"""
-    
-    #===========================================================================
-    # defaults
-    #===========================================================================
-    #create if it exists
-    if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
-    
-    #===========================================================================
-    # clean and index
-    #===========================================================================
-    for tableName in tqdm(country_l):
-        print(f'pg_vacuum {tableName}')
-        pg_vacuum(conn_d, f'{schema}.{tableName}')
-        
-        print(f'pg_spatialIndex {tableName}')
-        pg_spatialIndex(conn_d, schema, tableName, columnName='geometry')
-        
-    print(f'finished')
-    return
+#===============================================================================
+# """moved this onto 01_grids"""
+# def run_clean_inters(
+#         conn_d=postgres_d,
+#         country_l = ['aus', 'bra', 'can', 'deu', 'zaf'], 
+#         schema='inters',  
+#         ):
+#     """clean the intersect grids"""
+#     
+#     
+#     #===========================================================================
+#     # defaults
+#     #===========================================================================
+#     #create if it exists
+#     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
+#     
+#     #===========================================================================
+#     # clean and index
+#     #===========================================================================
+#     for tableName in tqdm(country_l):
+#         print(f'pg_vacuum {tableName}')
+#         pg_vacuum(conn_d, f'{schema}.{tableName}')
+#         
+#         print(f'pg_spatialIndex {tableName}')
+#         pg_spatialIndex(conn_d, schema, tableName, columnName='geometry')
+#         
+#     print(f'finished')
+#     return
+#===============================================================================
     
 def run_merge_inters(
         conn_d=postgres_d,
         country_l = None, 
         schema='inters', viewName='pts_osm_fathom',
         ):
-    """merge the agg grids"""
+    """create a view of all the intersect points"""
     
     #===========================================================================
     # defaults
     #===========================================================================
     #create if it exists
     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
-    
  
-        
-    
     #===========================================================================
     # create view
     #===========================================================================
