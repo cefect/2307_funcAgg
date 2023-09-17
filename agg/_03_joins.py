@@ -28,7 +28,9 @@ from coms import (
 from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe
  
 
-from definitions import index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l
+from definitions import (
+    index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l
+    )
 
 
 
@@ -171,8 +173,8 @@ def _build_grid_inters_join(
             
     #clean up
     log.info(f'cleaning')
-    pg_spatialIndex(conn_d, out_schema, tableName)
-    pg_vacuum(conn_d, f'{out_schema}.{tableName}')
+    pg_spatialIndex(out_schema, tableName)
+    pg_vacuum(out_schema, tableName)
     
             
     #get stats

@@ -258,7 +258,7 @@ def run_grids_to_postgres(
     #===========================================================================
     start=datetime.now()
  
- 
+    raise IOError('add prefix to haz colns')
     
     log = init_log(name=f'toPostG')
     log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
