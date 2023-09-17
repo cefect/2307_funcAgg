@@ -19,14 +19,17 @@ def get_conn_str(d):
     return pg_str[:-1]
 
 
-def pg_vacuum(conn_d, tableName):
+def pg_vacuum(schema, tableName, conn_str=None):
     """perform vacuum and analyze on passed table
     
     does not work with context management"""
-    conn = psycopg2.connect(get_conn_str(conn_d))
+    
+    if conn_str is None:conn_d = get_conn_str(postgres_d)
+    
+    conn = psycopg2.connect(conn_str)
     conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
-    cur.execute(f"""VACUUM ANALYZE {tableName}""")
+    cur.execute(f"""VACUUM ANALYZE {schema}.{tableName}""")
     # Make the changes to the database persistent
     conn.commit()
     # Close communication with the database
@@ -44,13 +47,12 @@ def pg_spatialIndex(schema, tableName, columnName='geom', **kwargs):
  
             
 
-def pg_exe(cmd_str, conn_d=None, log=None, return_fetch=False):
+def pg_exe(cmd_str, conn_str=None, log=None, return_fetch=False):
     if not log is None:
         log.info(cmd_str)
-    if conn_d is None:
-        conn_d =postgres_d
+    if conn_str is None:conn_d = get_conn_str(postgres_d)
         
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+    with psycopg2.connect(conn_str) as conn:
         with conn.cursor() as cur:
             cur.execute(cmd_str)
             if return_fetch:
