@@ -47,8 +47,8 @@ wbt.set_verbose_mode(True)
 #===============================================================================
  
 from coms import (
-    init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
-    dstr
+    init_log, today_str, get_log_stream,   get_directory_size,
+    dstr, get_filepaths
     )
 
 
@@ -84,10 +84,13 @@ def ogr_export_geometry(fp, ofp, log=None):
  
     
     #geometry and centroid\
-    cmd_str = f"SELECT ST_Centroid(geometry) AS geometry, ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area FROM \'{layerName}\'"
+    cmd_str = f'''SELECT ST_Centroid(geometry) AS geometry, 
+    ST_Area(ST_Transform(geometry, {equal_area_epsg})) AS area 
+    FROM \'{layerName}\'
+    WHERE ST_IsValid(geometry)'''
     
-    args=['ogr2ogr', '-overwrite','-skipfailures', '-f', 'GPKG', '-dialect', 
-          'SQLite', '-sql',cmd_str, ofp, fp]
+    args=['ogr2ogr', '-overwrite','-skipfailures', '-f', 'GeoJSON', '-dialect', 
+          'SQLite', '-sql',cmd_str, '-select','area',ofp, fp]
     
     log.debug(f'subprocess on '+'\n    '.join(args))
     p = subprocess.run(args,stderr=sys.stderr, stdout=sys.stdout, check=True)   
@@ -105,7 +108,7 @@ def ogr_clean_polys(fp, ofp, log=None):
     log = log.getChild('ogr2ogr')
  
     log.info(f'    cleaning polygons')
-    args = ['ogr2ogr', '-f', 'GPKG', '-overwrite','-skipfailures','-simplify','0.00001',
+    args = ['ogr2ogr', '-f', 'GeoJSON', '-overwrite','-skipfailures','-simplify','0.00001',
                         '-nlt','POLYGON','-makevalid','-nln','osm_polys_clean',
                         '-select','geometry', ofp, fp]
     
@@ -122,8 +125,13 @@ def ogr_clean_polys(fp, ofp, log=None):
     
     return ofp
 
-def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
-                      use_cache=False, pre_clean_polys=True,
+def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, 
+                      pfx='', #{country_key}_{hazard_key}_{i}. NOTE: should remove hazard_key next time
+                      use_cache=True, 
+                      pre_clean_polys=False,
+                      manual_l=[
+                          'DEU_500_fluvial_8'
+                          ],
                       ):
     """intelligent retrival of building centroids"""
     #===========================================================================
@@ -135,9 +143,18 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
     if not os.path.exists(out_dir): os.makedirs(out_dir)
     
     log = log.getChild('get_osm')
-    #get record
-    uuid = hashlib.shake_256(f'{country_key}_{bounds}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
-    ofp = os.path.join(out_dir, f'{pfx}_{uuid}.gpkg')
+    
+    #===========================================================================
+    # #get record
+    #===========================================================================
+    if not pfx in manual_l:
+        uuid = hashlib.shake_256(f'{country_key}_{bounds}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
+        ofp = os.path.join(out_dir, f'{pfx}_{uuid}.geojson')
+    else:
+        """spent a few hours on this... some pulls would not complete
+        had to manually clean in QGIS"""
+        ofp = get_filepaths(out_dir, pfx, ext='.geojson')
+        assert os.path.exists(ofp)
     
     log.debug(f'for {country_key} w/ bounds: {bounds} and ofp: {ofp}')
     #===========================================================================
@@ -157,8 +174,9 @@ def get_osm_bldg_cent(country_key, bounds, log=None,out_dir=None, pfx='',
         log.debug(f'extracting centroid from osm building poly file w/ {os.path.getsize(poly_fp)/(1024**3): .2f} GB \n    {poly_fp}')
  
         #optional cleaning
-        if pre_clean_polys:            
-            poly_clean_fp = ogr_clean_polys(poly_fp, os.path.join(temp_dir, f'{pfx}_clean_{uuid}.gpkg'), log=log)
+        if pre_clean_polys:
+            """this didn't seem to help... could explore alternate cleaning methods"""            
+            poly_clean_fp = ogr_clean_polys(poly_fp, os.path.join(temp_dir, f'{pfx}_clean_{uuid}.geojson'), log=log)
         else:
             poly_clean_fp=poly_fp
         
@@ -193,19 +211,21 @@ def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key,log, nodata_l=None):
     #===========================================================================
     # defaults
     #===========================================================================
+    log = log.getChild('wbt_sample')
     if nodata_l is None: nodata_l = list(fathom_vals_d.keys())
     #write to file
     """WBT requires a shape file..."""    
-    bldg_pts_filter_fp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')    
+    bldg_pts_filter_fp = os.path.join(temp_dir, os.path.basename(ofp).split('.')[0]+'.shp')
+    log.debug(f'wirting shapefile to \n    {bldg_pts_filter_fp}')    
     bldg_pts_gser.to_file(bldg_pts_filter_fp)
-    
+     
     #===========================================================================
     # execute
     #===========================================================================
     def wbt_callback(value):
         if not "%" in value:
             log.debug(value)
-            
+             
     wbt.extract_raster_values_at_points(
         rlay_fp, 
         bldg_pts_filter_fp, 
@@ -217,18 +237,17 @@ def _wbt_sample(rlay_fp, bldg_pts_gser, ofp, hazard_key,log, nodata_l=None):
     #===============================================================================
     log.debug(f'loading and cleaning wbt result file: {bldg_pts_filter_fp}')
     gdf_raw = gpd.read_file(bldg_pts_filter_fp)
+    log.debug(f'loaded {gdf_raw.shape}')
     gdf1 = gdf_raw.rename(columns={'VALUE1':hazard_key}).drop('FID', axis=1)
     
     bx = gdf1[hazard_key].astype(float).isin(nodata_l)
     if bx.any():
         log.debug(f'    set {bx.sum()}/{len(bx)} nodata vals to nan')
-        bx.loc[bx, hazard_key]=np.nan
+        gdf1.loc[bx, hazard_key]=np.nan
  
+    log.debug(f'    writing {len(gdf1)} samples to: {ofp}')
     gdf1.to_file(ofp)
-    
-    #write
-    log.info(f'    writing {len(gdf1)} samples to: {ofp}')
-    
+ 
     return ofp
 
 
@@ -291,7 +310,7 @@ def _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh,
         bldg_pts_gdf = gpd.read_file(bldg_fp)
         
         #apply filter
-        log.debug(f'    applying filter on {len(bldg_pts_gdf)}')
+        log.debug(f'    applying filter on {len(bldg_pts_gdf)} w/ {area_thresh}')
         bx = bldg_pts_gdf['area'] > area_thresh
         
         if bx.sum()==0:
@@ -346,6 +365,7 @@ def run_samples_on_country(country_key, hazard_key,
                            epsg_id=4326,
                            area_thresh=50,
                            max_workers=None,
+                           
                            ):
     #===========================================================================
     # defaults

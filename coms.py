@@ -143,15 +143,32 @@ def get_directory_size(directory):
     return total_size / (1024**3)
 
 
-def _get_filepaths(search_dir):
+def _get_filepaths(search_dir, pattern='*.pkl'):
     # Use os.path.join to ensure the path is constructed correctly for the OS
-    search_pattern = os.path.join(search_dir, '**', '*.pkl')
+    search_pattern = os.path.join(search_dir, '**', pattern)
 
     # Use glob.glob with recursive set to True to find all .pkl files in the directory
-    pkl_files = glob.glob(search_pattern, recursive=True)
+ 
 
-    return pkl_files
+    return glob.glob(search_pattern, recursive=True)
 
+
+def get_filepaths(search_dir, pattern, single=True, ext=None,):
+    
+    l = [os.path.join(search_dir, e) for e in os.listdir(search_dir) if pattern in e]
+    
+    if not ext is None:
+        l = [e for e in l if e.endswith(ext)]
+    
+    assert len(l)>0
+    if single:
+        assert len(l)==1, l
+        return l[0]
+    
+    return l
+    
+    
+    
 #===============================================================================
 # PANDAS-----
 #===============================================================================
