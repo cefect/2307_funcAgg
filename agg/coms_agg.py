@@ -24,7 +24,7 @@ def pg_vacuum(schema, tableName, conn_str=None):
     
     does not work with context management"""
     
-    if conn_str is None:conn_d = get_conn_str(postgres_d)
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
     
     conn = psycopg2.connect(conn_str)
     conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
@@ -50,7 +50,7 @@ def pg_spatialIndex(schema, tableName, columnName='geom', **kwargs):
 def pg_exe(cmd_str, conn_str=None, log=None, return_fetch=False):
     if not log is None:
         log.info(cmd_str)
-    if conn_str is None:conn_d = get_conn_str(postgres_d)
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
         
     with psycopg2.connect(conn_str) as conn:
         with conn.cursor() as cur:

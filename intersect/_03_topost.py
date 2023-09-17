@@ -175,50 +175,51 @@ def run_to_postgres(
             guessing this is a nice balance between latency and committing
             """
             #get sqlalchemy engine
- 
+  
             engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
-            
+             
             #loop through each grid
             first = True
             for gid, fp in tqdm(fp_d.items()):
                 log.debug(f'at gid={gid} w/ {os.path.basename(fp)}')
-                
+                 
                 # load
                 dxcol = pd.read_pickle(fp)
-                
+                 
                 assert set(coln_l).difference(dxcol.columns) == set(), f'column mismatch on \n    {fp}'
-                
+                 
                 # use geopandas to write
                 log.debug(f'to_postgis on {dxcol.shape}') 
                 if first:
                     if_exists = 'replace'
                 else:
                     if_exists = 'append'
-                
+                 
                 dxcol.reset_index().to_postgis(tableName, engine, schema=schemaName,
                                                if_exists=if_exists,
                                                index=False,
                                                # index_label=dxcol.index.names,
                                                )
-                
+                 
                 #addd keys
                 if first: 
                     with conn.cursor() as cur:
                         cur.execute(f"""
                         ALTER TABLE {schemaName}.{tableName}
                             ADD PRIMARY KEY (gid, id);""")
-                    
- 
+                     
+  
                 first = False
-                
+                 
             #close connection. wrap
             engine.dispose()
             log.debug(f'finished {country_key}')
             tab_d[country_key] = tableName
             
         #clean table
+        print(f'pg_vacuum')
         pg_vacuum(schemaName, tableName)
-        pg_spatialIndex(schemaName, tableName, columnName='geometry')
+        pg_spatialIndex(schemaName, tableName, columnName='geometry', log=log)
             
     #===========================================================================
     # wrap
