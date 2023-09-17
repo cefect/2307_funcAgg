@@ -22,9 +22,11 @@ from sqlalchemy import create_engine, URL
 
 from tqdm import tqdm
 
+from agg.coms_agg import get_conn_str, pg_vacuum, pg_spatialIndex
+
 from coms import (
     init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
-    dstr, view, get_conn_str
+    dstr, view
     )
 
 from definitions import wrk_dir, lib_dir, postgres_d, index_country_fp_d
@@ -125,6 +127,7 @@ def run_to_postgres(
         out_dir = os.path.join(wrk_dir, 'outs', 'inters', '03_topost')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
  
     
     log = init_log(name=f'toPost', fp=os.path.join(out_dir, today_str+'.log'))
@@ -172,34 +175,30 @@ def run_to_postgres(
             guessing this is a nice balance between latency and committing
             """
             #get sqlalchemy engine
-            def get_conn():
-                return conn
-            engine = create_engine('postgresql+psycopg2://', creator=get_conn)
+ 
+            engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
             
             #loop through each grid
             first = True
             for gid, fp in tqdm(fp_d.items()):
                 log.debug(f'at gid={gid} w/ {os.path.basename(fp)}')
                 
-
-                
-                #load
+                # load
                 dxcol = pd.read_pickle(fp)
                 
-                assert set(coln_l).difference(dxcol.columns)==set(), f'column mismatch on \n    {fp}'
-            
+                assert set(coln_l).difference(dxcol.columns) == set(), f'column mismatch on \n    {fp}'
                 
-                #use geopandas to write
+                # use geopandas to write
                 log.debug(f'to_postgis on {dxcol.shape}') 
                 if first:
-                    if_exists='replace'
+                    if_exists = 'replace'
                 else:
-                    if_exists='append'
+                    if_exists = 'append'
                 
-                dxcol.reset_index().to_postgis(tableName, engine, schema=schemaName, 
-                                               if_exists=if_exists, 
-                                               index=False, 
-                                               #index_label=dxcol.index.names,
+                dxcol.reset_index().to_postgis(tableName, engine, schema=schemaName,
+                                               if_exists=if_exists,
+                                               index=False,
+                                               # index_label=dxcol.index.names,
                                                )
                 
                 #addd keys
@@ -209,14 +208,17 @@ def run_to_postgres(
                         ALTER TABLE {schemaName}.{tableName}
                             ADD PRIMARY KEY (gid, id);""")
                     
-
-                
-                
+ 
                 first = False
                 
             #close connection. wrap
+            engine.dispose()
             log.debug(f'finished {country_key}')
             tab_d[country_key] = tableName
+            
+        #clean table
+        pg_vacuum(schemaName, tableName)
+        pg_spatialIndex(schemaName, tableName, columnName='geometry')
             
     #===========================================================================
     # wrap
@@ -244,7 +246,7 @@ def init_schema(schemaName, conn, log):
 
 def run_grids_to_postgres(
         out_dir=None,
-        postgres_d=None,
+        conn_str=None,
         schemaName='grids',tableName='country_grids',
         index_d=index_country_fp_d,
         ):
@@ -260,6 +262,7 @@ def run_grids_to_postgres(
     log = init_log(name=f'toPostG')
     log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
     
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
     
  
         
@@ -268,15 +271,14 @@ def run_grids_to_postgres(
     # setup
     #===========================================================================
     #see if our schema exists
-    with psycopg2.connect(get_conn_str(postgres_d)) as conn:        
+    with psycopg2.connect(conn_str) as conn:        
         init_schema(schemaName, conn, log)  
         
         
     #===========================================================================
     # #loop and load each
     #===========================================================================
-    with psycopg2.connect(get_conn_str(postgres_d)) as conn:        
- 
+    with psycopg2.connect(get_conn_str(postgres_d)) as conn: 
         
         #set engine for geopandas
         engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
@@ -332,18 +334,10 @@ def run_grids_to_postgres(
     
 
 if __name__ == '__main__':
-    run_grids_to_postgres(postgres_d=postgres_d)
+    #run_grids_to_postgres()
     
     
-    #===========================================================================
-    # run_to_postgres(conn_str=conn_str,
-    #                 country_l = [
-    #                     #'AUS', 
-    #                     #'BGD', 
-    #                     'BRA', 'CAN', 'DEU', 'ZAF',
-    #                     ],
-    #                 )
-    #===========================================================================
+    run_to_postgres(country_l = ['DEU'])
     
     
     

@@ -4,6 +4,8 @@ Created on Aug. 26, 2023
 @author: cefect
 
 concat collected sims
+
+    still using?
 '''
 import os, hashlib, sys, subprocess
 import psutil
@@ -55,6 +57,7 @@ def run_concat_sims(
         srch_dir=None,
         out_dir=None,
         #temp_dir=None,
+        country_key='deu',
  
         ):
     """
@@ -65,6 +68,7 @@ def run_concat_sims(
     # defaults
     #===========================================================================
     start=datetime.now()
+    country_key=country_key.upper()
     
     if srch_dir is None:
         srch_dir = os.path.join(wrk_dir, 'outs', 'inters', '02_collect')
@@ -89,7 +93,8 @@ def run_concat_sims(
     log.info(f'on {len(country_dirs_d)}')
     
     ofp_d, err_d=dict(), dict()
-    for country_key, country_dir in country_dirs_d.items():
+    for ck_i, country_dir in country_dirs_d.items():
+        if not country_key==ck_i: continue
         log.info(f'concat {country_key}')        
         
         #get all the files (hazard keys)
