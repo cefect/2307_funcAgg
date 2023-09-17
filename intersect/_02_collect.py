@@ -97,7 +97,7 @@ def _load_samps_set(gserx, max_workers,
     #clean geo
     geo = df.pop('geometry')
     
-    assert np.all(df.isna().sum()==df.isna().sum()[0]), f'got inconsistent nulls\n{df.isna().sum()}'
+    assert np.all(df.isna().sum()==df.isna().sum().iloc[0]), f'got inconsistent nulls\n{df.isna().sum()}'
     
     df = df.set_geometry(geo)
     
@@ -119,6 +119,7 @@ def run_collect_sims(
         out_dir=None,
         #temp_dir=None,
         max_workers=None,
+        country_key='deu',
         ):
     """
     collect and concat samples (drop geoemtry)
@@ -128,6 +129,7 @@ def run_collect_sims(
     # defaults
     #===========================================================================
     start=datetime.now()
+    country_key=country_key.upper()
     
     if srch_dir is None:
         srch_dir = os.path.join(wrk_dir, 'outs', 'inters', '01_sample')
@@ -149,7 +151,7 @@ def run_collect_sims(
     #===========================================================================
     # collect files
     #===========================================================================
-    fpserx = get_fpserx(srch_dir, log)
+    fpserx = get_fpserx(srch_dir, log) 
     
     #===========================================================================
     # loop and load per sim (concat1)
@@ -165,7 +167,8 @@ def run_collect_sims(
     """
     
     ofp_d = {k:dict() for k in fpserx.index.unique('country_key')}
-    for i, ((country_key, gid), gserx) in enumerate(fpserx.groupby(['country_key', 'gid'])):
+    for i, ((ck_i, gid), gserx) in enumerate(fpserx.groupby(['country_key', 'gid'])):
+        if not country_key==ck_i: continue
         log.info(f'{i+1} on {country_key}.{gid} w/ {len(gserx)}')
         
         #get record
