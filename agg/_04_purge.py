@@ -61,32 +61,38 @@ from coms import (
  
 def run_purge_grids(
                         country_key, 
-                           hazard_key,
+                           #hazard_key,
                                grid_size,
                            out_dir=None,
  
  
                            ):
-    """build a new table of agg grids with just those intersecting buildings"""
+    """build a new table of agg grids with just those intersecting buildings
     
-    raise IOError('looks like 2 grids within DEU are missing')
+    NOTE: this function is discretized differently than the other ones...
+        would be better to have grid_size as a list/loop
+    """
+    
+
     #===========================================================================
     # defaults
     #===========================================================================
     start=datetime.now()
-    assert hazard_key in index_hazard_fp_d, hazard_key
+    #assert hazard_key in index_hazard_fp_d, hazard_key
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_purge', country_key, hazard_key, f'{grid_size:05d}')
+        out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_purge', country_key,  f'{grid_size:05d}')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
  
     
-    log = init_log(name=f'purge.{country_key}.{hazard_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
-    log.info(f'on {country_key} x {hazard_key} x {grid_size}')
+    log = init_log(name=f'purge.{country_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
     
-    keys_d = {'country_key':country_key, 'hazard_key':hazard_key, 'grid_size':grid_size}
- 
+    
+    keys_d = {'country_key':country_key, 
+              #'hazard_key':hazard_key, 
+              'grid_size':grid_size}
+    log.info(f'on {keys_d}')
     #===========================================================================
     # get table names
     #===========================================================================
@@ -97,24 +103,39 @@ def run_purge_grids(
     #===========================================================================
     # create a temp table of unique indexers
     #===========================================================================    
-    log.info(f'creating table {new_tableName} from unique i,j columns from {sample_tableName}')
+    log.info(f'creating \'temp.{new_tableName}\' from unique i,j columns from {sample_tableName}')
     
     pg_exe(f"DROP TABLE IF EXISTS temp.{new_tableName}")
-    
-    pg_exe(f"CREATE TABLE temp.{new_tableName} AS SELECT DISTINCT i, j FROM inters_agg.{sample_tableName}")
-    
+     
+    #pg_exe(f"CREATE TABLE temp.{new_tableName} AS SELECT DISTINCT i, j FROM inters_agg.{sample_tableName}")
+     
+    #get exposed indexers and their feature counts
+    pg_exe(f'''CREATE TABLE temp.{new_tableName} AS 
+                SELECT i, j, COUNT(*) as fcnt
+                    FROM inters_agg.{sample_tableName}
+                            GROUP BY i, j''')
+     
     #add the primary key
     pg_exe(f"ALTER TABLE temp.{new_tableName} ADD PRIMARY KEY (i, j)")
- 
-    #report
+    
+    ##report grid counts
     ij_expo_cnt = pg_getcount('temp', new_tableName)
     ij_cnt = pg_getcount('grids', grid_tableName)    
-    log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with buildings')
+    
+    
+    #report asset counts
+    grid_asset_cnt = int(pg_exe(f"SELECT SUM(fcnt) as total_fcnt FROM temp.{new_tableName}", return_fetch=True)[0][0])
+    asset_cnt = pg_getcount('inters_agg', sample_tableName)
+    
+    log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with {asset_cnt} assets')
+    
+    if not grid_asset_cnt==asset_cnt:
+        log.warning(f'asset count on grids ({grid_asset_cnt:,}) differs from \'inters_agg\' ({asset_cnt:,})')
     
     #===========================================================================
     # join the grids to this
     #===========================================================================
-    log.info(f'joing grids')
+    log.info(f'joing grids to exposed index')
     pg_exe(f"DROP TABLE IF EXISTS grids.{new_tableName}")
     pg_exe(f"""
     CREATE TABLE grids.{new_tableName} AS
@@ -123,9 +144,10 @@ def run_purge_grids(
             JOIN grids.{grid_tableName} as gtab ON bldgs.i = gtab.i AND bldgs.j = gtab.j
     """)
     
+    #drop the temp
     pg_exe(f"DROP TABLE IF EXISTS temp.{new_tableName}")
     
-    pg_spatialIndex('grids', new_tableName)
+    pg_spatialIndex('grids', new_tableName, log=log)
     
     #===========================================================================
     # wrap
@@ -137,13 +159,13 @@ def run_purge_grids(
                     #'output_MB':os.path.getsize(ofp)/(1024**2)
                     }
     
-    log.info(meta_d)
+    log.info(f'finished on \'{new_tableName}\' w/ \n    {meta_d}')
         
  
  
 if __name__ == '__main__':
     
-    run_purge_grids('DEU', '500_fluvial', 1020)
+    run_purge_grids('DEU', 240)
     
     
     
