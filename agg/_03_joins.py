@@ -247,6 +247,7 @@ def run_drop_haz_inters_agg(
         #===================================================================
         # create a view----
         #===================================================================
+        """view is too slow to be helpful"""
         for grid_size in grid_size_l:
             tableName = get_tbl(grid_size)
             
