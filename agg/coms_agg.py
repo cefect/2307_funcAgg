@@ -29,6 +29,7 @@ def pg_vacuum(schema, tableName, conn_str=None):
     conn = psycopg2.connect(conn_str)
     conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
+    print(f"""VACUUM ANALYZE {schema}.{tableName}""")
     cur.execute(f"""VACUUM ANALYZE {schema}.{tableName}""")
     # Make the changes to the database persistent
     conn.commit()
@@ -101,3 +102,41 @@ def pg_to_df(cmd_str, conn_d=postgres_d):
         
 
     return result
+
+
+def pg_get_column_names(schema, tableName, conn_str=None):
+    """get the column names""" 
+    
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
+        
+    with psycopg2.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT column_name
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME = %s AND TABLE_SCHEMA = %s
+                        ORDER BY ordinal_position
+                        """,(tableName, schema))
+ 
+            l = cur.fetchall()
+    assert len(l)>0, f'table {schema}.{tableName} does not exist'
+            
+    return [e[0] for e in l]
+
+def pg_register(schema, tableName, conn_str=None):
+    """register the geometry of the table"""
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
+        
+    with psycopg2.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT Populate_Geometry_Columns(%s::regclass)""", (f'{schema}.{tableName}', ))
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
