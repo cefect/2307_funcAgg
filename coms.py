@@ -13,7 +13,10 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+
 import rasterio as rio
+
+import shapely
 import geopandas as gpd
 
 
@@ -78,11 +81,12 @@ def get_new_file_logger(
     if fp is None:
         return logger
         
-    logger.setLevel(level)
+    #logger.setLevel(level)
     
     #===========================================================================
     # configure the handler
     #===========================================================================
+    
     assert fp.endswith('.log')
     
     formatter = logging.Formatter(log_format_str)        
@@ -92,7 +96,8 @@ def get_new_file_logger(
     
     logger.addHandler(handler) #attach teh handler to the logger
     
-    logger.info('built new file logger  here \n    %s'%(fp))
+    if not os.path.exists(fp):
+        logger.info('built new file logger  here \n    %s'%(fp))
     
     return logger
  
@@ -107,20 +112,59 @@ def init_log(
     #set up the file logger
     return get_new_file_logger(**kwargs)
 
+def init_log_worker(name=None,
+                    stream_level=logging.INFO,
+                    file_level=logging.DEBUG,
+                    fp=None,):
+    """setup logging for a new processing worker... for concurrent.futures"""
+    
+    if name is None: 
+        name=str(os.getpid())
+        
+    if fp is None:
+        fp = os.path.join(temp_dir, 'log',f'{today_str}_{name}.log')
+        
+    if not os.path.exists(os.path.dirname(fp)):
+        os.makedirs(os.path.dirname(fp))
+    
+    #setup the logger
+    
+    logger = logging.getLogger(name)
+    
+    #add the stream handler
+    logger = get_log_stream(name=name, logger=logger, level=stream_level)
+    
+    #add teh file handler
+ 
+ 
+    
+        
+    return get_new_file_logger(name=name, logger=logger, level=file_level, fp=fp)
+    
 
-def get_log_stream(name=None, level=logging.INFO):
-    """get a logger with stream handler"""
-    if name is None: name=str(os.getpid())
+
+def get_log_stream(name=None, 
+                   level=logging.INFO, 
+                   logger=None,
+                   ):
+    """get a logger with stream handler
+    seems to be disconnecting from the root log..."""
+    if name is None: 
+        name=str(os.getpid())
+        
     if level is None:
         if __debug__:
             level=logging.DEBUG
         else:
             level=logging.INFO
     
-    logger = logging.getLogger(name)
+    if logger is None:
+        logger = logging.getLogger(name)
+        
+
     
     #see if it has been configured
-    if not logger.handlers:
+    if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
         logger.setLevel(level)
         handler = logging.StreamHandler(
             stream=sys.stdout, #send to stdout (supports colors)
@@ -185,7 +229,8 @@ def pd_mdex_append_level(
         
     return pd.MultiIndex.from_frame(mdf)
     
-
+def pd_ser_meta(ser):
+    return {'len':len(ser), 'null_cnt':ser.isna().sum(), 'zero_cnt':(ser==0).sum(), 'max':ser.max(), 'min':ser.min(), 'std':ser.std()}
 #===============================================================================
 # GEOPANDAS-------
 #===============================================================================
@@ -216,8 +261,24 @@ def get_raster_point_samples(gser, rlay_fp, colName=None, nodata=None,
         
     return gpd.GeoDataFrame(data={colName:samp_ar}, index=gser.index, geometry=gser)
  
-
-
+def clean_geodataframe(gdf_raw, gcoln='geometry', **kwargs):
+    
+    # Ensure 'geometry' column is recognized as a geometry column
+    #===========================================================================
+    # df[gcoln] = df[gcoln].apply(shapely.wkt.loads)
+    # gdf = gpd.GeoDataFrame(df, geometry=gcoln)
+    #===========================================================================
+    if not isinstance(gdf_raw, gpd.GeoDataFrame):
+        gser = gdf_raw.pop(gcoln)
+        gdf = gpd.GeoDataFrame(gdf_raw, geometry=gser.values, **kwargs)
+    else:
+        gdf = gdf_raw.drop(gcoln, axis=1).set_geometry(gdf_raw[gcoln])
+    
+    # Move gcoln column to the end
+    cols = list(gdf.columns.values)
+    cols.pop(cols.index(gcoln))
+ 
+    return gdf[cols+[gcoln]]
 #===============================================================================
 # MISC-----------
 #===============================================================================

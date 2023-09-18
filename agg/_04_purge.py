@@ -104,31 +104,31 @@ def run_purge_grids(
     # create a temp table of unique indexers
     #===========================================================================    
     log.info(f'creating \'temp.{new_tableName}\' from unique i,j columns from {sample_tableName}')
-    
+     
     pg_exe(f"DROP TABLE IF EXISTS temp.{new_tableName}")
-     
+      
     #pg_exe(f"CREATE TABLE temp.{new_tableName} AS SELECT DISTINCT i, j FROM inters_agg.{sample_tableName}")
-     
+      
     #get exposed indexers and their feature counts
     pg_exe(f'''CREATE TABLE temp.{new_tableName} AS 
                 SELECT i, j, COUNT(*) as fcnt
                     FROM inters_agg.{sample_tableName}
                             GROUP BY i, j''')
-     
+      
     #add the primary key
     pg_exe(f"ALTER TABLE temp.{new_tableName} ADD PRIMARY KEY (i, j)")
-    
+     
     ##report grid counts
     ij_expo_cnt = pg_getcount('temp', new_tableName)
     ij_cnt = pg_getcount('grids', grid_tableName)    
-    
-    
+     
+     
     #report asset counts
     grid_asset_cnt = int(pg_exe(f"SELECT SUM(fcnt) as total_fcnt FROM temp.{new_tableName}", return_fetch=True)[0][0])
     asset_cnt = pg_getcount('inters_agg', sample_tableName)
-    
+     
     log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with {asset_cnt} assets')
-    
+     
     if not grid_asset_cnt==asset_cnt:
         log.warning(f'asset count on grids ({grid_asset_cnt:,}) differs from \'inters_agg\' ({asset_cnt:,})')
     
@@ -136,10 +136,11 @@ def run_purge_grids(
     # join the grids to this
     #===========================================================================
     log.info(f'joing grids to exposed index')
+    
     pg_exe(f"DROP TABLE IF EXISTS grids.{new_tableName}")
     pg_exe(f"""
     CREATE TABLE grids.{new_tableName} AS
-        SELECT gtab.country_key, gtab.grid_size, bldgs.i,bldgs.j, gtab.geom
+        SELECT gtab.country_key, gtab.grid_size, bldgs.i,bldgs.j, bldgs.fcnt, gtab.geom
             FROM temp.{new_tableName} as bldgs
             JOIN grids.{grid_tableName} as gtab ON bldgs.i = gtab.i AND bldgs.j = gtab.j
     """)

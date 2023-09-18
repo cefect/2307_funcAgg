@@ -4,7 +4,7 @@ Created on Aug. 24, 2023
 @author: cefect
 '''
 import argparse
-from agg._04_sample import run_agg_samples_on_country
+from agg._05_sample import run_agg_samples_on_country
 
  
 
@@ -26,4 +26,5 @@ if __name__ == '__main__':
     
     run_agg_samples_on_country(args.country_key.upper(), args.hazard_key, 
                                grid_size=args.grid_size, 
-                               max_workers=args.max_workers)
+                               max_workers=args.max_workers,
+                               )
