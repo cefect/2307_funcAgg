@@ -291,6 +291,8 @@ def loss_calc_country_assetType(
         log.info(f'finished {haz_coln} w/ {len(res_d)}\n\n')
         res_lib[haz_coln] = {k:os.path.basename(v) for k,v in res_d.items()}
         
+        engine.dispose()
+        conn.close()
  
     #===========================================================================
     # write meta
