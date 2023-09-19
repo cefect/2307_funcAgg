@@ -23,7 +23,7 @@ from coms import (
     init_log, today_str, _get_filepaths, view
     )
 
-from funcMetrics.coms_fm import slice_serx
+from funcMetrics.coms_fm import slice_serx, force_max_depth
 from funcMetrics.func_prep import get_funcLib
 from expo_stats.coms_exp import load_pdist_concat
  
@@ -31,53 +31,6 @@ from expo_stats.coms_exp import load_pdist_concat
 from definitions import wrk_dir, dfunc_pkl_fp, temp_dir
 
 import matplotlib.pyplot as plt
-
-def force_max_depth(
-        serx_raw,
-        max_depth, log
-        ):
-    """add a maximum depth to each function"""
-    log = log.getChild('maxDepth')
-    log.info(f'on {serx_raw.shape} w/ max_depth={max_depth}')
-    
-    #===========================================================================
-    # #add a flag to the index
-    #===========================================================================
-    dx = serx_raw.to_frame()
-    dx['max_depth_forcing']=False
-    serx = dx.set_index('max_depth_forcing', append=True).swaplevel().iloc[:,0]
- 
-    #===========================================================================
-    # #add the max depth to each function group
-    #===========================================================================
-    d = dict()
-    cnt=0
-    for df_id, gserx in serx.groupby('df_id'):
-        
-        wd_vals = gserx.index.get_level_values('wd')
-        
-        d[df_id] =gserx.copy()
-        
-        #expand
-        if max(wd_vals)<max_depth:
-            new_index_vals = list(gserx.index[0])
-            new_index_vals[-2]  =True #flag this one as forced
-            new_index_vals[-1] = max_depth
-            
-            d[df_id].loc[tuple(new_index_vals)] = gserx.max()
-            
-            cnt+=1
-            
-    #===========================================================================
-    # wrap
-    #===========================================================================
-    res_serx = pd.concat(d.values())
-    
-    assert len(res_serx) == len(serx) + cnt
-    log.info(f'forced {cnt} max depths')
-    
-    return res_serx
- 
 
 
 def get_depth_weights(search_dir, log=None, min_wet_frac=0.05):

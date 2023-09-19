@@ -20,8 +20,11 @@ from coms import (
     init_log, today_str, get_directory_size,dstr, view, pd_mdex_append_level
     ) 
 
+from funcMetrics.coms_fm import slice_serx
 
-from definitions import wrk_dir, haz_label_d, temp_dir, dfunc_pkl_fp, temp_dir
+from definitions import (
+    wrk_dir, haz_label_d, temp_dir, dfunc_base_dir, temp_dir
+    )
 
 
 #===============================================================================
@@ -266,7 +269,7 @@ def load_dfunc_serx(
     
  
  
-def write_dfunc_serx(out_dir=None, **kwargs):
+def _01write_dfunc_serx(out_dir=None, **kwargs):
     
     #===========================================================================
     # defaults
@@ -292,7 +295,7 @@ def write_dfunc_serx(out_dir=None, **kwargs):
     return ofp
     
 
-def prep_wagenaar2018(
+def _02prep_wagenaar2018(
         csv_fp = r'l:\10_IO\2307_funcAgg\ins\funcs\BN_lookup.csv',
         out_dir=None,
         
@@ -423,7 +426,7 @@ def prep_wagenaar2018(
     
 
 
-def join_to_funcLib(func_fp,
+def _03join_to_funcLib(func_fp,
         out_dir=None,   
         lib_fp=None,
         model_id=1001,
@@ -446,7 +449,9 @@ def join_to_funcLib(func_fp,
     func_raw = pd.read_pickle(func_fp)
     
     #load library
-    if lib_fp is None: lib_fp = dfunc_pkl_fp
+    if lib_fp is None: 
+        lib_fp = os.path.join(dfunc_base_dir, 'dfunc_lib_figu2018_20230906.pkl')
+        
     lib_serx = pd.read_pickle(lib_fp)
     mdex =lib_serx.index
     
@@ -510,6 +515,9 @@ def join_to_funcLib(func_fp,
     print(f'wrote to \n    {ofp}')
     
     return ofp
+
+
+
 
 
 def _print_lib(mdex): 
@@ -633,9 +641,13 @@ def slice_lib(
     
     return lib_serx_new
 
+
+
+
 def get_funcLib(
         lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230915.pkl',
         out_dir=None,
+        use_cache=True,
         **kwargs):
     """retrieve the filtered function library serx
     
@@ -664,7 +676,7 @@ def get_funcLib(
     #===========================================================================
     # build
     #===========================================================================
-    if not os.path.exists(ofp):
+    if (not os.path.exists(ofp)) or (not use_cache):
         serx = slice_lib(lib_fp, **kwargs)
         serx.to_pickle(ofp)
         print(f'wrote to\n    {ofp}')
@@ -693,10 +705,11 @@ if __name__ == '__main__':
     #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl') 
     #===========================================================================
     
+    _04add_zero_zero()
      
     #slice_lib()
     
-    get_funcLib()
+    #get_funcLib()
 
 
 
