@@ -216,8 +216,9 @@ def rl_to_post(
         
         log.info(f'finished {haz_key}\n\n')
         
+ 
     row_cnt = pg_getcount(schema, tableName)
-
+    pg_exe(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
     #===========================================================================
     # clean
     #===========================================================================

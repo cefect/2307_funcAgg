@@ -106,7 +106,7 @@ def run_bldg_rl_means(
     # """
     #===========================================================================
     
-    coln_l = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, ' + ', '.join([f'AVG({e}) AS {e}_mean' for e in func_coln_l])
+    coln_l = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, ' + ', '.join([f'AVG(tleft.{e}) AS {e}_mean' for e in func_coln_l])
     
     
     """I dont think ALTER TABLE works (also probably a bad idea)"""
@@ -126,6 +126,9 @@ def run_bldg_rl_means(
     
     row_cnt = pg_getcount('temp', tableName)
     log.info(f'built table of averages w/ {row_cnt} entries in  %.2f secs'%(datetime.now() - start).total_seconds())
+    
+    #check the keys are unique
+    sql(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
     
     #===========================================================================
     # join grid losses to this
@@ -148,7 +151,7 @@ def run_bldg_rl_means(
             SELECT {coln_l}
                 FROM temp.{tableName} AS tleft
                     JOIN damage.rl_{country_key}_grid_{grid_size:04d} AS tright
-                        ON tleft.i=tright.i AND tleft.j=tright.j
+                        ON tleft.i=tright.i AND tleft.j=tright.j AND tleft.haz_key=tright.haz_key
         """
     
     #print(cmd_str)
@@ -156,12 +159,15 @@ def run_bldg_rl_means(
     row_cnt = pg_getcount('temp', tableName)
     log.info(f'joined grid centroid losses w/ {row_cnt} entries in  %.2f secs'%(datetime.now() - start_i).total_seconds())
     
+    sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
+    #sql(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (i,j)')
     #===========================================================================
     # clean
     #===========================================================================
     sql(f'DROP TABLE IF EXISTS temp.{tableName}')
     
     log.info(f'cleaning {tableName} w/ {row_cnt} rows')
+    
     try:
         pg_vacuum(schema, tableName)
         """table is a-spatial"""
@@ -189,7 +195,7 @@ def run_extract_haz(
         grid_size_l=None,
         log=None,
         conn_str=None,
-        dev=True,
+        dev=False,
         out_dir=None,
         chunksize=1e6,
         ):
@@ -275,7 +281,7 @@ def run_extract_haz(
     #===========================================================================
     log.info(cmd_str)
     df = pd.read_sql(cmd_str, engine, 
-                     index_col=['country_key', 'haz_key', 'i', 'j'],
+                     index_col=['country_key', 'grid_size','haz_key', 'i', 'j'],
                      )
     """
     view(df)
@@ -330,9 +336,9 @@ def run_extract_haz(
         
         
 if __name__ == '__main__':
-    run_bldg_rl_means('deu', 60, dev=True)
+    run_bldg_rl_means('deu', 1020, dev=True)
     
-    #run_extract_haz('deu', 'f500_fluvial')
+    #run_extract_haz('deu', 'f500_fluvial', dev=True)
     
         
     
