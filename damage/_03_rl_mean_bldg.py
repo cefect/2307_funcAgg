@@ -53,6 +53,7 @@ def run_bldg_rl_means(
         ):
     """join mean building losses (grouped by grids) to the grid losses"""
     
+    
     #===========================================================================
     # defaults
     #===========================================================================
@@ -113,6 +114,10 @@ def run_bldg_rl_means(
     cols = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, COUNT(tleft.id) AS wet_cnt, ' 
     cols+= ', '.join([f'AVG(tleft.{e}) AS {e}_mean' for e in func_coln_l])
     
+    """not too worried about nulls as we filter for those with high wetted fraction"""
+    
+    raise IOError(f'i think we need to pre-compute a dedicated talbe of bldg and wet counts')
+    
     
     """I dont think ALTER TABLE works (also probably a bad idea)"""
     """this query can be slow"""
@@ -141,11 +146,15 @@ def run_bldg_rl_means(
     #===========================================================================
     sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
     
+    table_right = f'inters_agg.pts_osm_fathom_{country_key}_{grid_size:07d}'
+    if dev:        
+        table_right = f'(SELECT * FROM {table_right} LIMIT 1000)'
+    
     cmd_str=f"""
         CREATE TABLE temp.{tableName}2 AS
             SELECT tleft.*, COUNT(tright.id) AS bldg_cnt
                 FROM temp.{tableName} AS tleft
-                    LEFT JOIN inters_agg.pts_osm_fathom_{country_key}_{grid_size:07d} AS tright
+                    LEFT JOIN {table_right} AS tright
                         ON tleft.i=tright.i AND tleft.j=tright.j AND tleft.country_key=LOWER(tright.country_key)
                             GROUP BY tleft.country_key, tleft.grid_size,  tleft.haz_key, tleft.i, tleft.j
                         
@@ -201,11 +210,12 @@ def run_bldg_rl_means(
     
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
  
+    """wet counts are bad"""
     #===========================================================================
     # clean
     #===========================================================================
-    sql(f'DROP TABLE IF EXISTS temp.{tableName}')
-    sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
+    #sql(f'DROP TABLE IF EXISTS temp.{tableName}')
+    #sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
     
     log.info(f'cleaning {tableName} w/ {row_cnt} rows')
     
@@ -265,26 +275,25 @@ def run_extract_haz(
         out_dir = os.path.join(wrk_dir, 'outs', 'damage','03_mean', country_key, haz_key)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
         
-        
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     #===========================================================================
-    # build zuery
+    # concat
     #===========================================================================
-    #===========================================================================
-    # no... dont want a new table... just download
-    # tableName = f'rl_mean_{country_key}_{haz_key}'
-    # sql(f'DROP TABLE IF EXISTS damage.{tableName}')
-    #===========================================================================
+ 
+    tableName = f'rl_mean_{country_key}_{haz_key}'
+    sql(f'DROP TABLE IF EXISTS temp.{tableName}')
     
-    cmd_str = ''
+    cmd_str = f'CREATE TABLE temp.{tableName} AS\n'
  
     log.info(f'on {grid_size_l}')
     
+    #union and slice
     first = True
     for grid_size in grid_size_l:
         
         tableName_i = f'rl_mean_{country_key}_{grid_size:04d}'
         
-        log.info(f'on {grid_size} w/ \'{tableName_i}\'')
+        log.debug(f'on {grid_size} w/ \'{tableName_i}\'')
         
         if not first:
             cmd_str += 'UNION\n'
@@ -297,13 +306,34 @@ def run_extract_haz(
         #those with at least 2 wet houses
         cmd_str +=f'AND {tableName_i}.wet_cnt>1 '
         #at least some grid damage
-        cmd_str +=f'AND {tableName_i}.dfid_0026>0 '
+        cmd_str +=f'AND {tableName_i}.dfid_0026>0 \n'
         
         
         first = False
+        
+    #join depths
+    #cmd_str +=f'LEFT JOIN inters_grid.grid_wd_{country_key}_{haz_key} ON '
     
     if dev:
         cmd_str += f'        LIMIT 100\n'
+        
+        
+    sql(cmd_str)
+    
+    """bad counts"""
+    
+    #===========================================================================
+    # join water depths
+    #===========================================================================
+    cmd_str = f"""
+        SELECT tleft.*, tright.{haz_key} AS grid_wd
+            FROM temp.{tableName} AS tleft
+                LEFT JOIN inters_grid.grids_wd_{country_key}_{haz_key} AS tright
+                    ON tleft.i=tright.i 
+                        AND tleft.j=tright.j 
+                        AND tleft.country_key=LOWER(tright.country_key)
+                        AND tleft.grid_size=tright.grid_size
+            """
         
     #===========================================================================
     # download
@@ -320,11 +350,11 @@ def run_extract_haz(
     #     row_cnt+=len(gdf)
     #===========================================================================
     log.info(cmd_str)
-    df = pd.read_sql(cmd_str, engine, 
+    df_raw = pd.read_sql(cmd_str, engine, 
                      index_col=['country_key', 'grid_size','haz_key', 'i', 'j'],
                      )
     """
-    view(df.head(100))
+    view(df_raw.head(100))
  
     
     """    
@@ -332,26 +362,38 @@ def run_extract_haz(
     engine.dispose()
     conn.close()
     
-    log.info(f'finished w/ {len(df)} total rows')
+    log.info(f'finished w/ {len(df_raw)} total rows')
     
     #===========================================================================
     # clean up
     #===========================================================================
     #exposure meta
-    expo_colns = ['wet_cnt', 'bldg_cnt']
-    df.loc[:, expo_colns] = df.loc[:, expo_colns].fillna(0.0)
+    expo_colns = ['wet_cnt', 'bldg_cnt', 'grid_wd']
+    df1 = df_raw.copy()
+    df1.loc[:, expo_colns] = df1.loc[:, expo_colns].fillna(0.0)
     
-    df=df.set_index(expo_colns, append=True)
+    df1=df1.set_index(expo_colns, append=True)
     
     #split bldg and grid losses
-    col_bx = df.columns.str.contains('_mean') 
+    col_bx = df1.columns.str.contains('_mean') 
     
-    grid_dx = df.loc[:, ~col_bx]
+    grid_dx = df1.loc[:, ~col_bx]
+    rnm_d = {k:int(k.split('_')[1]) for k in grid_dx.columns.values}
+    grid_dx = grid_dx.rename(columns=rnm_d)
+    grid_dx.columns = grid_dx.columns.astype(int)
+    
+    
+    bldg_dx = df1.loc[:, col_bx]
+    rnm_d = {k:int(k.split('_')[1]) for k in bldg_dx.columns.values}
+    bldg_dx = bldg_dx.rename(columns=rnm_d)
+    bldg_dx.columns = bldg_dx.columns.astype(int)
+    
+    assert np.array_equal(grid_dx.columns, bldg_dx.columns)
  
     
     dx = pd.concat({
-        'bldg_mean':df.loc[:, col_bx].rename(columns={k:int(k.split('_')[1]) for k in df.columns[col_bx].values}), 
-        'grid_cent':grid_dx.rename(columns={k:int(k.split('_')[1]) for k in grid_dx.columns.values}), 
+        'bldg_mean':bldg_dx, 
+        'grid_cent':grid_dx, 
         #'expo':df.loc[:, expo_colns].fillna(0.0)
         }, 
         names = ['rl_type', 'df_id'], axis=1).dropna(how='all').fillna(0.0)
@@ -360,7 +402,7 @@ def run_extract_haz(
     # write
     #===========================================================================
     
-    ofp = os.path.join(out_dir, f'rl_mean_{country_key}_{haz_key}_{len(df)}_{today_str}.pkl')
+    ofp = os.path.join(out_dir, f'rl_mean_{country_key}_{haz_key}_{len(dx)}_{today_str}.pkl')
     log.info(f'writing {dx.shape} to \n    {ofp}')
     dx.sort_index(sort_remaining=True).to_pickle(ofp)
     
@@ -389,9 +431,9 @@ def run_extract_haz(
         
         
 if __name__ == '__main__':
-    run_bldg_rl_means('deu', 60, dev=True)
+    #run_bldg_rl_means('deu', 60, dev=True)
     
-    #run_extract_haz('deu', 'f500_fluvial', dev=False)
+    run_extract_haz('deu', 'f500_fluvial', dev=False)
     
         
     
