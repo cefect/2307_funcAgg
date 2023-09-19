@@ -197,9 +197,18 @@ def _get_filepaths(search_dir, pattern='*.pkl'):
     return glob.glob(search_pattern, recursive=True)
 
 
-def get_filepaths(search_dir, pattern, single=True, ext=None,):
+def get_filepaths(search_dir, pattern, single=True, ext=None, recursive=False):
     
-    l = [os.path.join(search_dir, e) for e in os.listdir(search_dir) if pattern in e]
+    if not recursive:
+        l = [os.path.join(search_dir, e) for e in os.listdir(search_dir) if pattern in e]
+    else:
+        
+        l = list()
+        for dirpath, _, fns in os.walk(search_dir):
+            l = l+[os.path.join(dirpath, e) for e in fns if pattern in e]
+                
+ 
+
     
     if not ext is None:
         l = [e for e in l if e.endswith(ext)]

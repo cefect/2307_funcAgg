@@ -72,13 +72,12 @@ def pg_getCRS(schema, tableName, geom_coln='geom', conn_str=None):
                         )
             return int(cur.fetchone()[0])
 
-def pg_getcount(schema, tableName,  conn_d=None):
+def pg_getcount(schema, tableName,  conn_str=None):
     """get the crs from a table"""
     
-    if conn_d is None:
-        conn_d =postgres_d
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
         
-    with psycopg2.connect(get_conn_str(conn_d)) as conn:
+    with psycopg2.connect(conn_str) as conn:
         with conn.cursor() as cur:
             cur.execute(f"""SELECT COUNT(*) FROM {schema}.{tableName}""")
             return int(cur.fetchone()[0])
