@@ -19,6 +19,7 @@ from sqlalchemy import create_engine, URL
 from tqdm import tqdm
 
 import pandas as pd
+import numpy as np
 
 from coms import (
     init_log, today_str, get_directory_size,dstr, view,  
@@ -109,7 +110,7 @@ def run_bldg_rl_means(
     #===========================================================================
     """because join the grid-id table to the rl table (w/ a left join) we can only query wet buildings?"""
     
-    cols = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, COUNT(tright.id) AS wet_cnt,   ' 
+    cols = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, COUNT(tleft.id) AS wet_cnt, ' 
     cols+= ', '.join([f'AVG(tleft.{e}) AS {e}_mean' for e in func_coln_l])
     
     
@@ -275,35 +276,34 @@ def run_extract_haz(
     #===========================================================================
     
     cmd_str = ''
-    
-    
  
     log.info(f'on {grid_size_l}')
     
     first = True
     for grid_size in grid_size_l:
         
-        
-        tableName_i=f'rl_mean_{country_key}_{grid_size:04d}'
- 
+        tableName_i = f'rl_mean_{country_key}_{grid_size:04d}'
         
         log.info(f'on {grid_size} w/ \'{tableName_i}\'')
         
         if not first:
-            cmd_str+='UNION\n'
-        
-
+            cmd_str += 'UNION\n'
  
-        cmd_str +=f'SELECT * FROM {schema}.{tableName_i}\n'
+        cmd_str += f'SELECT * FROM {schema}.{tableName_i}\n'
             
-        cmd_str +=f'    WHERE {tableName_i}.haz_key=\'{haz_key}\'\n'
         
-
+        #filters
+        cmd_str += f'    WHERE {tableName_i}.haz_key=\'{haz_key}\' '
+        #those with at least 2 wet houses
+        cmd_str +=f'AND {tableName_i}.wet_cnt>1 '
+        #at least some grid damage
+        cmd_str +=f'AND {tableName_i}.dfid_0026>0 '
         
-        first=False
+        
+        first = False
     
     if dev:
-        cmd_str+=f'        LIMIT 100\n'
+        cmd_str += f'        LIMIT 100\n'
         
     #===========================================================================
     # download
@@ -324,7 +324,9 @@ def run_extract_haz(
                      index_col=['country_key', 'grid_size','haz_key', 'i', 'j'],
                      )
     """
-    view(df)
+    view(df.head(100))
+ 
+    
     """    
     
     engine.dispose()
@@ -335,23 +337,34 @@ def run_extract_haz(
     #===========================================================================
     # clean up
     #===========================================================================
- 
+    #exposure meta
+    expo_colns = ['wet_cnt', 'bldg_cnt']
+    df.loc[:, expo_colns] = df.loc[:, expo_colns].fillna(0.0)
     
-    col_bx = df.columns.str.contains('_mean')
+    df=df.set_index(expo_colns, append=True)
+    
+    #split bldg and grid losses
+    col_bx = df.columns.str.contains('_mean') 
+    
+    grid_dx = df.loc[:, ~col_bx]
+ 
     
     dx = pd.concat({
         'bldg_mean':df.loc[:, col_bx].rename(columns={k:int(k.split('_')[1]) for k in df.columns[col_bx].values}), 
-        'grid_cent':df.loc[:, ~col_bx].rename(columns={k:int(k.split('_')[1]) for k in df.columns[~col_bx].values}), 
+        'grid_cent':grid_dx.rename(columns={k:int(k.split('_')[1]) for k in grid_dx.columns.values}), 
+        #'expo':df.loc[:, expo_colns].fillna(0.0)
         }, 
-        names = ['rl_type', 'df_id'], axis=1)
+        names = ['rl_type', 'df_id'], axis=1).dropna(how='all').fillna(0.0)
     
     #===========================================================================
     # write
     #===========================================================================
+    
     ofp = os.path.join(out_dir, f'rl_mean_{country_key}_{haz_key}_{len(df)}_{today_str}.pkl')
+    log.info(f'writing {dx.shape} to \n    {ofp}')
     dx.sort_index(sort_remaining=True).to_pickle(ofp)
     
-    log.info(f'wrote {df.shape} to \n    {ofp}')
+ 
  
  
     
@@ -376,7 +389,7 @@ def run_extract_haz(
         
         
 if __name__ == '__main__':
-    run_bldg_rl_means('deu', 1020, dev=True)
+    run_bldg_rl_means('deu', 60, dev=True)
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
     
