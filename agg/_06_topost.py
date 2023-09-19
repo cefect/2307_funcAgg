@@ -21,8 +21,7 @@ import geopandas as gpd
 import psycopg2
 print('psycopg2.__version__=' + psycopg2.__version__)
 
-import warnings
-warnings.filterwarnings("ignore", message="Cannot find header.dxf (GDAL_DATA is not defined)")
+ 
 
 from sqlalchemy import create_engine, URL
 
@@ -130,7 +129,7 @@ def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True):
         
         gdf1.to_file(ofp)
 
-        log.info(f'concated to get {str(gdf.shape)} and wrote to \n    {ofp}')
+        log.debug(f'concated to get {str(gdf.shape)} and wrote to \n    {ofp}')
         
     #===========================================================================
     # load
@@ -231,7 +230,7 @@ def run_agg_samps_to_post(
     log.info(f'cleaning')
     try:
         pg_vacuum(schema, tableName)
-        pg_spatialIndex(schema, tableName)
+        pg_spatialIndex(schema, tableName, columnName='geometry')
         pg_register(schema, tableName)
     except Exception as e:
         log.error(f'failed cleaning w/\n    {e}')

@@ -5,7 +5,7 @@
 set country=deu
  
  
-set gridsize=1020
+set gridsize=60
  
 
 :: Activate environment
