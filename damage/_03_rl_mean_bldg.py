@@ -72,6 +72,8 @@ def run_bldg_rl_means(
     # setup table
     #===========================================================================
     tableName=f'rl_mean_{country_key}_{grid_size:04d}'
+    if dev:
+        tableName+='_dev'
     
  
     
@@ -81,7 +83,7 @@ def run_bldg_rl_means(
     
     func_coln_l = list(set(func_coln_l).difference(['haz_key', 'country_key', 'id']))
     
-    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
+    
     sql(f'DROP TABLE IF EXISTS temp.{tableName}')
     
     #===========================================================================
@@ -105,23 +107,26 @@ def run_bldg_rl_means(
     #                     ON tleft.id=tright.id
     # """
     #===========================================================================
+    """because join the grid-id table to the rl table (w/ a left join) we can only query wet buildings?"""
     
-    coln_l = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, ' + ', '.join([f'AVG(tleft.{e}) AS {e}_mean' for e in func_coln_l])
+    cols = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, COUNT(tright.id) AS wet_cnt,   ' 
+    cols+= ', '.join([f'AVG(tleft.{e}) AS {e}_mean' for e in func_coln_l])
     
     
     """I dont think ALTER TABLE works (also probably a bad idea)"""
-    """this query os slow"""
+    """this query can be slow"""
     
     #get grouper columns (i,j) from inters_agg, then use these to compute grouped means
     cmd_str=f"""
         CREATE TABLE temp.{tableName} AS
-            SELECT {coln_l}
+            SELECT {cols}
                 FROM {table_left} AS tleft
                     LEFT JOIN inters_agg.pts_osm_fathom_{country_key}_{grid_size:07d} AS tright
                         ON tleft.id=tright.id
                             GROUP BY tleft.country_key,grid_size, haz_key, i, j
     """
     
+    #print(cmd_str)
     sql(cmd_str)
     
     row_cnt = pg_getcount('temp', tableName)
@@ -131,27 +136,61 @@ def run_bldg_rl_means(
     sql(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
     
     #===========================================================================
+    # join bldg counts
+    #===========================================================================
+    sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
+    
+    cmd_str=f"""
+        CREATE TABLE temp.{tableName}2 AS
+            SELECT tleft.*, COUNT(tright.id) AS bldg_cnt
+                FROM temp.{tableName} AS tleft
+                    LEFT JOIN inters_agg.pts_osm_fathom_{country_key}_{grid_size:07d} AS tright
+                        ON tleft.i=tright.i AND tleft.j=tright.j AND tleft.country_key=LOWER(tright.country_key)
+                            GROUP BY tleft.country_key, tleft.grid_size,  tleft.haz_key, tleft.i, tleft.j
+                        
+            """
+    sql(cmd_str)
+    
+    sql(f'ALTER TABLE temp.{tableName}2 ADD PRIMARY KEY (haz_key, i,j)')
+    #===========================================================================
     # join grid losses to this
     #===========================================================================
-    """this results in many nulls as grid centroids hit less often t han the buildings
-    
-    using a normal join so we capture nulls on either
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
     """
-    """ NO... use the above which is already sliced as the left
-    table_left = f'damage.rl_{country_key}_grid_{grid_size:04d}'
-    if dev:        
-        table_left = f'(SELECT * FROM {table_left} LIMIT 100)'"""
+    NOTES:
+        using FULL OUTER so we capture both wet/dry combinations of assets/grids
+        
+        during dev (because we do not limit the outer join), this gives many grid centroid nulls
+    
+    
+    """
+ 
     
     start_i = datetime.now()
- 
-    coln_l = f'tleft.*, tright.' + ', tright.'.join(func_coln_l)
+    
+    #get left columns
+    index_coln_l = ['haz_key', 'i', 'j', 'country_key', 'grid_size']
+    coln_l = [e for e in pg_get_column_names('temp', f'{tableName}2') if not e in index_coln_l]
+    
+    
+    
+    #cols = ', '.join([f'COALESECE(tleft.{e}, tright.{e}) as {e}' for e in index_coln_l])
+    cols="""COALESCE(CAST(tleft.i AS INTEGER), CAST(tright.i AS INTEGER)) as i,
+        COALESCE(CAST(tleft.j AS INTEGER), CAST(tright.j AS INTEGER)) as j,
+        COALESCE(tleft.haz_key, tright.haz_key) as haz_key,
+        COALESCE(tleft.country_key, tright.country_key) as country_key,
+        COALESCE(tleft.grid_size, tright.grid_size) as grid_size
+        """
+    cols+=', tleft.'+', tleft.'.join(coln_l)
+    cols +=', tright.' + ', tright.'.join(func_coln_l)
     
     cmd_str = f"""
         CREATE TABLE {schema}.{tableName} AS
-            SELECT {coln_l}
-                FROM temp.{tableName} AS tleft
-                    JOIN damage.rl_{country_key}_grid_{grid_size:04d} AS tright
+            SELECT {cols}
+                FROM temp.{tableName}2 AS tleft
+                    FULL OUTER JOIN damage.rl_{country_key}_grid_{grid_size:04d} AS tright
                         ON tleft.i=tright.i AND tleft.j=tright.j AND tleft.haz_key=tright.haz_key
+ 
         """
     
     #print(cmd_str)
@@ -160,11 +199,12 @@ def run_bldg_rl_means(
     log.info(f'joined grid centroid losses w/ {row_cnt} entries in  %.2f secs'%(datetime.now() - start_i).total_seconds())
     
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
-    #sql(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (i,j)')
+ 
     #===========================================================================
     # clean
     #===========================================================================
     sql(f'DROP TABLE IF EXISTS temp.{tableName}')
+    sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
     
     log.info(f'cleaning {tableName} w/ {row_cnt} rows')
     
@@ -338,7 +378,7 @@ def run_extract_haz(
 if __name__ == '__main__':
     run_bldg_rl_means('deu', 1020, dev=True)
     
-    #run_extract_haz('deu', 'f500_fluvial', dev=True)
+    #run_extract_haz('deu', 'f500_fluvial', dev=False)
     
         
     
