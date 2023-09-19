@@ -125,6 +125,10 @@ def rl_to_post(
     
     keys_d=dict(country_key=country_key, asset_type=asset_type)
     log.info(f'on {keys_d}')
+    
+    if asset_type=='grid':
+        grid_size=int(asset_tableName.split('_')[-1])
+        keys_d['grid_size'] = grid_size
 
     #===========================================================================
     # load indexer
@@ -145,12 +149,16 @@ def rl_to_post(
     base_dir = os.path.dirname(meta_fp)
  
     chunk_l = serx.index.unique('chunk').tolist()
-    log.info(f'loaded index w/ {serx.shape} and {len(chunk_l)} grids')
+    log.info(f'loaded index w/ {serx.shape} and {len(chunk_l)} grids for \n    {keys_d}')
     
     #===========================================================================
     # setup table
     #===========================================================================
     tableName=f'rl_{country_key}_{asset_type}'
+    
+    if asset_type =='grid':
+        tableName+=f'_{grid_size:04d}'
+    
     """writing all hazard keys to one table"""
     
     pg_exe(f'DROP TABLE IF EXISTS {schema}.{tableName}')
@@ -170,9 +178,9 @@ def rl_to_post(
         # loop and upload each
         #=======================================================================
         
-        for keys, fileName in gserx.items():
+        for keys, fileName in tqdm(gserx.items()):
             data_fp = os.path.join(base_dir, fileName)
-            log.info(f' for {keys} loading from \n    {data_fp} ')
+            log.debug(f' for {keys} loading from \n    {data_fp} ')
             
             #===================================================================
             # #load
@@ -186,12 +194,15 @@ def rl_to_post(
             df1.columns = {f'dfid_{e:04d}' for e in df1.columns}
             df1.columns.name=None
             
-            df2 = df1.reset_index().sort_values('id')
+            df2 = df1.reset_index()
+            
+            if 'id' in df2.columns:
+                df2 = df2.sort_values('id')
             
             df2.loc[:, 'country_key'] = df2['country_key'].str.lower()
             
             """
-            view(df2.head())
+            view(df2.head(100))
             """
             
 
@@ -257,5 +268,5 @@ def run_bldg_rl_topost(country_key, **kwargs):
 if __name__ == '__main__':
     #run_grids_to_postgres()
     
-    run_bldg_rl_topost('DEU')
-    #run_agg_rl_to_post('DEU', grid_size_l=[60])
+    #run_bldg_rl_topost('DEU')
+    run_agg_rl_to_post('DEU', grid_size_l=[240, 1020])
