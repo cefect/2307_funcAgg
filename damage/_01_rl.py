@@ -3,7 +3,7 @@ Created on Sep. 18, 2023
 
 @author: cefect
 
-compute building losses
+compute losses from depths using depth-damage functions
 '''
 
 
@@ -19,16 +19,20 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from osgeo import ogr
-import fiona
-import shapely.geometry
-import geopandas as gpd
+#===============================================================================
+# from osgeo import ogr
+# import fiona
+# import shapely.geometry
+# import geopandas as gpd
+#===============================================================================
 
 #import rasterstats
 #from rasterstats import zonal_stats
 
-import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
+#===============================================================================
+# import concurrent.futures
+# from concurrent.futures import ProcessPoolExecutor
+#===============================================================================
 
 import psycopg2
 from sqlalchemy import create_engine, URL
@@ -43,7 +47,7 @@ from coms import (
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, postgres_d, 
-    equal_area_epsg, fathom_vals_d
+    equal_area_epsg, fathom_vals_d, gridsize_default_l
     )
 
 
@@ -57,27 +61,27 @@ from agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
 
 
 
-def write_loss_haz_chunk(gdf, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=True):
+def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=True):
     """compute loss for this hazard chunk on all functions"""
     #===========================================================================
     # defaults
     #===========================================================================
     
-    log.debug(f'w/ {gdf.shape} and  {len(func_d)} funcs')
+    log.debug(f'w/ {ser.shape} and  {len(func_d)} funcs')
     
-    
+    assert isinstance(ser, pd.Series)
     #===========================================================================
     # get ofp
     #===========================================================================
-    uuid = hashlib.shake_256(f'{func_d}_{gdf.columns}_{gdf.index}_{wd_scale}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
+    uuid = hashlib.shake_256(f'{func_d}_{ser.name}_{ser.index}_{wd_scale}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
     
     #===========================================================================
     # build
     #===========================================================================
     if not os.path.exists(ofp) or (not use_cache):
-        log.debug(f'building on {len(gdf)}')
-        wd_ar = gdf.T.values[0] * wd_scale
+        log.debug(f'building on {len(ser)}')
+        wd_ar = ser.values * wd_scale
         #=======================================================================
         # loop on each function
         #=======================================================================
@@ -88,15 +92,20 @@ def write_loss_haz_chunk(gdf, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
             loss_ar = get_rloss(dd_ar, wd_ar, 
                 prec=None) #depths in table are rounded enough
             #append index and collect
-            d[df_id] = pd.Series(loss_ar, index=gdf.index, name=df_id)
+            d[df_id] = pd.Series(loss_ar, index=ser.index, name=df_id)
     
         #===================================================================
         # #collect and wirte
         #===================================================================
         loss_df = pd.concat(d, axis=1)
         
-        loss_df.to_pickle(ofp)
+        #add indexer
+        loss_df['haz_key'] = ser.name
+        loss_df=loss_df.set_index('haz_key', append=True).swaplevel(-1, -2).swaplevel(-2, -3)
+        loss_df.columns.name='df_id'
         
+        #write
+        loss_df.to_pickle(ofp)        
         log.debug(f'wrote {loss_df.shape} to \n    {ofp}')
         
     #===========================================================================
@@ -108,10 +117,11 @@ def write_loss_haz_chunk(gdf, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
         
     return ofp
 
-def run_bldg_loss(
+def loss_calc_country_assetType(
         
-        country_key, 
-        
+        country_key,
+        asset_schema='inters',
+        tableName=None,        
         max_depth=None,
         fserx=None,
        haz_coln_l=None,
@@ -122,11 +132,12 @@ def run_bldg_loss(
                                
         out_dir=None,
         conn_str=None,
-        schema='damage', 
+        #schema='damage', 
         chunksize=1e5,
+        log=None,
  
         ):
-    """join grid and osm intersections
+    """use asset wd to compute losses for each function
     
     goes pretty fast acutally with the zero filter
     
@@ -135,6 +146,12 @@ def run_bldg_loss(
     
     Params
     ------
+    asset_schema: str
+        name of schema containing asset depth samples
+        
+    tableName: str
+        name of table with asset depth samples 
+        
     fsers: pd.Series
         relative loss functions cleaned and prepped
         
@@ -153,12 +170,20 @@ def run_bldg_loss(
     #===========================================================================
     start=datetime.now()   
     
-    country_key=country_key.lower() 
+    country_key=country_key.lower()
+    
+    #asset data
+    if tableName is None:
+        #only the buildings have simple table names
+        if  asset_schema=='inters':
+            tableName=country_key
+            
+    assert isinstance(tableName, str)
     
  
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'damage','01_bldg', country_key)
+        out_dir = os.path.join(wrk_dir, 'outs', 'damage','01_rl', asset_schema, tableName)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
@@ -173,7 +198,7 @@ def run_bldg_loss(
     if max_depth is None:
         from funcMetrics.coms_fm import max_depth
         
-    log = init_log(name=f'rlBldg', fp=os.path.join(out_dir, today_str+'.log'))
+    
     
     log.info(f'on {country_key}') 
     
@@ -208,10 +233,10 @@ def run_bldg_loss(
     """looping on haz columns gives more control and allows more filtering (e.g., faster)"""
     cnt=0
     res_lib=dict()
-    log.info(f'computing on {len(haz_coln_l)} hazards for {country_key}')
+    log.info(f'computing on {len(haz_coln_l)} hazards for {country_key} from {tableName}')
     for haz_coln in haz_coln_l:
         
-        log.info(f'on {haz_coln} w/ {len(func_d)} funcs')
+        log.info(f'on {haz_coln} w/ {len(func_d)} funcs and chunksize={chunksize}')
         #===========================================================================
         # loop and load from postgis
         #===========    ================================================================
@@ -219,11 +244,22 @@ def run_bldg_loss(
         conn =  psycopg2.connect(conn_str)
         engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
         
+        #=======================================================================
+        # build query
+        #=======================================================================
+        if asset_schema=='inters':
+            
+            index_col=['country_key','id']
+        elif asset_schema=='inters_grid':
+ 
+            index_col=['country_key','grid_size', 'i', 'j']
+        else:
+            raise IOError(asset_schema)
         
-        cmd_str = f'SELECT id, {haz_coln} \nFROM inters.{country_key}'
-        
-        #exclude empties
-        cmd_str += f'\nWHERE {haz_coln} >0 AND {haz_coln} IS NOT NULL'
+        cmd_str = f'SELECT ' + ', '.join(index_col) +f', {haz_coln}'        
+        cmd_str +=f'\nFROM {asset_schema}.{tableName}'         
+        cmd_str += f'\nWHERE {haz_coln} >0 AND {haz_coln} IS NOT NULL' #exclude empties
+        cmd_str +=f'\nORDER BY '+ ', '.join(index_col) #needed to get consistent pulls?
         #=======================================================================
         # #loop through chunks of the table
         # cmd_str = f'SELECT id, ' + ', '.join(haz_coln_l) + f' \nFROM inters.{country_key}'
@@ -233,24 +269,40 @@ def run_bldg_loss(
         #=======================================================================
         
         #dev limter (see i break below also)
-        #cmd_str+= f'\nLIMIT {chunksize*10}'
+        #cmd_str+= f'\nLIMIT {chunksize*4}'
         #log.info(cmd_str)
         res_d=dict()
         
  
-        for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=['id'], chunksize=int(chunksize))):
+        for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
             log.info(f'{i} on {gdf.shape}')
-            res_d[i] = write_loss_haz_chunk(gdf, func_d, wd_scale, out_dir, f'bldg_{country_key}_{haz_coln}_{i:07d}',log=log)
+            assert len(gdf.columns)==1
+            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, f'bldg_{country_key}_{haz_coln}_{i:03d}',log=log)
             
             #wrap chunk
-            #if i>4:break
+ 
             cnt+=1
             
         #wrap haz_coln loop
         log.info(f'finished {haz_coln} w/ {len(res_d)}\n\n')
-        res_lib[haz_coln] = res_d
+        res_lib[haz_coln] = {k:os.path.basename(v) for k,v in res_d.items()}
         
  
+    #===========================================================================
+    # write meta
+    #===========================================================================
+    log.debug('meta')
+    meta_df = pd.DataFrame.from_dict(res_lib)
+    
+    meta_d = dict(country_key=country_key, asset_schema=asset_schema, tableName=tableName, out_dir=out_dir)
+    for k,v in meta_d.items():
+        meta_df[k]=v
+        
+    meta_df = meta_df.set_index(list(meta_d.keys()), append=True)
+    
+    ofp = os.path.join(out_dir, f'_meta_rl_{country_key}_{asset_schema}_{tableName}_{len(meta_df):03d}_{today_str}.pkl')
+    meta_df.to_pickle(ofp)
+    log.info(f'wrote meta {meta_df.shape} to \n    {ofp}')
  
     #===========================================================================
     # wrap
@@ -268,15 +320,36 @@ def run_bldg_loss(
     return 
 
 
+def run_agg_loss(country_key, grid_size_l=None,  **kwargs):
+    """compute losses from agg grid centroid samples"""
+    if grid_size_l is None: grid_size_l=gridsize_default_l
+    log = init_log(name=f'rlAgg')
+    
+    d=dict()
+    log.info(f'on {len(grid_size_l)} grids')
+    for grid_size in grid_size_l:
+        d[grid_size] = loss_calc_country_assetType(country_key, 
+                                                   asset_schema='inters_grid', 
+                                                   tableName=f'pts_fathom_{country_key.lower()}_grid_{grid_size:04d}', 
+                                                   log=log.getChild(str(grid_size)),
+                                                   **kwargs)
+        
+    log.info(f'finished on {len(d)}')
+    
+    return d
 
+def run_bldg_loss(*args, **kwargs):
+    return loss_calc_country_assetType(*args, log = init_log(name=f'rlBldg'), **kwargs)
 
 
 if __name__ == '__main__':
-    #run_grids_to_postgres()
+ 
     
     
     run_bldg_loss('DEU')
     
+ 
+    #run_agg_loss('DEU')
  
 
         
