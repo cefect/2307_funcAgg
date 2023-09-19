@@ -106,7 +106,7 @@ def run_bldg_rl_means(
     # """
     #===========================================================================
     
-    coln_l = 'tleft.country_key, tleft.haz_key, tright.i, tright.j, ' + ', '.join([f'AVG({e}) AS {e}_mean' for e in func_coln_l])
+    coln_l = 'tleft.country_key, tright.grid_size, tleft.haz_key, tright.i, tright.j, ' + ', '.join([f'AVG({e}) AS {e}_mean' for e in func_coln_l])
     
     
     """I dont think ALTER TABLE works (also probably a bad idea)"""
@@ -119,7 +119,7 @@ def run_bldg_rl_means(
                 FROM {table_left} AS tleft
                     LEFT JOIN inters_agg.pts_osm_fathom_{country_key}_{grid_size:07d} AS tright
                         ON tleft.id=tright.id
-                            GROUP BY tleft.country_key, haz_key, i, j
+                            GROUP BY tleft.country_key,grid_size, haz_key, i, j
     """
     
     sql(cmd_str)
@@ -189,7 +189,7 @@ def run_extract_haz(
         grid_size_l=None,
         log=None,
         conn_str=None,
-        dev=False,
+        dev=True,
         out_dir=None,
         chunksize=1e6,
         ):
@@ -274,7 +274,9 @@ def run_extract_haz(
     #     row_cnt+=len(gdf)
     #===========================================================================
     log.info(cmd_str)
-    df = pd.read_sql(cmd_str, engine, index_col=['country_key', 'haz_key', 'i', 'j'])
+    df = pd.read_sql(cmd_str, engine, 
+                     index_col=['country_key', 'haz_key', 'i', 'j'],
+                     )
     """
     view(df)
     """    
@@ -285,10 +287,23 @@ def run_extract_haz(
     log.info(f'finished w/ {len(df)} total rows')
     
     #===========================================================================
+    # clean up
+    #===========================================================================
+ 
+    
+    col_bx = df.columns.str.contains('_mean')
+    
+    dx = pd.concat({
+        'bldg_mean':df.loc[:, col_bx].rename(columns={k:int(k.split('_')[1]) for k in df.columns[col_bx].values}), 
+        'grid_cent':df.loc[:, ~col_bx].rename(columns={k:int(k.split('_')[1]) for k in df.columns[~col_bx].values}), 
+        }, 
+        names = ['rl_type', 'df_id'], axis=1)
+    
+    #===========================================================================
     # write
     #===========================================================================
     ofp = os.path.join(out_dir, f'rl_mean_{country_key}_{haz_key}_{len(df)}_{today_str}.pkl')
-    df.sort_index(sort_remaining=True).to_pickle(ofp)
+    dx.sort_index(sort_remaining=True).to_pickle(ofp)
     
     log.info(f'wrote {df.shape} to \n    {ofp}')
  
@@ -315,9 +330,9 @@ def run_extract_haz(
         
         
 if __name__ == '__main__':
-    #run_bldg_rl_means('deu', 60)
+    run_bldg_rl_means('deu', 60, dev=True)
     
-    run_extract_haz('deu', 'f500_fluvial')
+    #run_extract_haz('deu', 'f500_fluvial')
     
         
     
