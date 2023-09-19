@@ -87,6 +87,7 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
         #=======================================================================
         d = dict()
         for df_id, dd_ar in func_d.items():
+ 
             log.debug(df_id)
             #get loss
             loss_ar = get_rloss(dd_ar, wd_ar, 
@@ -98,6 +99,9 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
         # #collect and wirte
         #===================================================================
         loss_df = pd.concat(d, axis=1)
+        """
+        view(loss_df)
+        """
         
         #add indexer
         loss_df['haz_key'] = ser.name
@@ -277,7 +281,7 @@ def loss_calc_country_assetType(
         for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
             log.info(f'{i} on {gdf.shape}')
             assert len(gdf.columns)==1
-            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, f'bldg_{country_key}_{haz_coln}_{i:03d}',log=log)
+            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, f'rl_{country_key}_{haz_coln}_{i:03d}',log=log)
             
             #wrap chunk
  
@@ -299,6 +303,8 @@ def loss_calc_country_assetType(
         meta_df[k]=v
         
     meta_df = meta_df.set_index(list(meta_d.keys()), append=True)
+    meta_df.index.set_names('chunk', level=0, inplace=True)
+    meta_df.columns.name='haz_key'
     
     ofp = os.path.join(out_dir, f'_meta_rl_{country_key}_{asset_schema}_{tableName}_{len(meta_df):03d}_{today_str}.pkl')
     meta_df.to_pickle(ofp)
@@ -331,7 +337,7 @@ def run_agg_loss(country_key, grid_size_l=None,  **kwargs):
         d[grid_size] = loss_calc_country_assetType(country_key, 
                                                    asset_schema='inters_grid', 
                                                    tableName=f'pts_fathom_{country_key.lower()}_grid_{grid_size:04d}', 
-                                                   log=log.getChild(str(grid_size)),
+                                                   log=log,
                                                    **kwargs)
         
     log.info(f'finished on {len(d)}')
@@ -346,10 +352,10 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('DEU')
+    #run_bldg_loss('DEU')
     
  
-    #run_agg_loss('DEU')
+    run_agg_loss('DEU')
  
 
         
