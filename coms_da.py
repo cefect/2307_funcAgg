@@ -179,3 +179,15 @@ def _set_violinparts_style(violin_parts, color, alpha=0.5):
     for k, line in violin_parts.items():
         line.set_color(color)
 
+
+def _hide_ax(ax):
+    """turn off most axis components"""
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+    
+    
+    
+    
