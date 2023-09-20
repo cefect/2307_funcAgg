@@ -1,6 +1,7 @@
 """
 
-slice and concat grid depths
+create a view that includes all of the grid depths for one hazard
+pivot and slice agg grid samples to get all grid levels for a single hazard
 """
 
 
@@ -35,16 +36,19 @@ from definitions import (
     )
 
  
-def run_pg_slice_concat_grid_samples(
+def run_grid_samp_pivot(
         country_key, haz_key,
         grid_size_l=None,
         log=None,
         conn_str=None,
         dev=False,
-        out_dir=None,
-        chunksize=1e6,
+        with_geom=True,
         ):
-    """cut a single hazard and merge across grid_sizes"""
+    """create a view that includes all of the grid depths for one hazard
+    
+    Returns
+    -----------
+    postgres view: inters_grid.agg_samps_{country_key}_{haz_key}"""
         
 
     if grid_size_l is None: grid_size_l = gridsize_default_l
@@ -52,8 +56,12 @@ def run_pg_slice_concat_grid_samples(
     #===========================================================================
     # defaults
     #===========================================================================
-    schema='inters_grid'
-    tableName=f'grids_wd_{country_key}_{haz_key}'
+    if dev:
+        schema = 'dev'
+    else:
+        schema='inters_grid'
+        
+    tableName=f'agg_samps_{country_key}_{haz_key}'
     start=datetime.now()   
     
     country_key=country_key.lower() 
@@ -90,34 +98,35 @@ def run_pg_slice_concat_grid_samples(
     first = True
     for grid_size in grid_size_l:
         
-        tableName_i = f'pts_fathom_{country_key}_grid_{grid_size:04d}'
-        
-        #log.info(f'on {grid_size} w/ \'{tableName_i}\'')
+        tableName_i = f'agg_samps_{country_key}_{grid_size:04d}'
         
         if not first:
             cmd_str += 'UNION\n'
  
         cmd_str += f'SELECT country_key, grid_size, i, j, {haz_key}\n'
-        cmd_str +=f'FROM {schema}.{tableName_i} \n'
-            
+        cmd_str += f'FROM {schema}.{tableName_i} \n'
         
-        #filters
-        cmd_str += f'    WHERE {tableName_i}.{haz_key}>0'
-        
- 
- 
-        
+        # filters
+        cmd_str += f'    WHERE {tableName_i}.{haz_key}>0\n'
         
         first = False
     
-    if dev:
-        cmd_str += f'        LIMIT 100\n'
-        
-    #===========================================================================
-    # execute
-    #===========================================================================
-    print(cmd_str)
+ 
     sql(cmd_str)
+    
+    #===========================================================================
+    # add geometry
+    #===========================================================================
+    if with_geom:
+        raise NotImplementedError('probably need a view with all the grid geometry first... I suspect these views will be unusable')
+        
+        tableName1 = tableName+'_wgeo'
+        
+        cmd_str = f"""
+            CREATE VIEW {schema}.{tableName1} AS
+                SELECT *
+                    LEFT JOIN
+            """
  
     
  
@@ -143,7 +152,7 @@ def run_pg_slice_concat_grid_samples(
         
         
 if __name__ == '__main__':
-    run_pg_slice_concat_grid_samples('deu','f500_fluvial', dev=False)
+    run_grid_samp_pivot('deu','f500_fluvial', dev=True)
     
  
     
