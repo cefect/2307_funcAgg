@@ -26,7 +26,8 @@ from coms import (
     ) 
 
 from agg.coms_agg import (
-    get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register
+    get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register,
+    pg_comment
     )
  
 
@@ -38,7 +39,7 @@ from definitions import (
 
 
 
-out_schema = 'inters_agg'
+
             
 #===============================================================================
 # FUNCS---------
@@ -52,12 +53,20 @@ def run_join_agg_grids(
             ],
         
         conn_d=postgres_d,
-        out_dir=None,
-        tableBaseName = 'pts_osm_fathom'
+        #out_dir=None,
+        #tableBaseName = 'bldgs_',
+        dev=False,
         
  
         ):
-    """join intersect points to agg grids
+    """join grid ids to building points
+    
+
+    Returns
+    ----------
+    Postgres table [inters_agg.bldgs_grid_link_{country_key}_{grid_size:04d}]
+        bulding to grid links (only buidlings with some depths on f010_fluvial)
+
     
  
     """
@@ -68,13 +77,15 @@ def run_join_agg_grids(
     start=datetime.now()    
  
  
-    if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'agg', '01_join')
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    #===========================================================================
+    # if out_dir is None:
+    #     out_dir = os.path.join(wrk_dir, 'outs', 'agg', '01_join')
+    # if not os.path.exists(out_dir):os.makedirs(out_dir)
+    #===========================================================================
     
  
     
-    log = init_log(name=f'jgrid', fp=os.path.join(out_dir, today_str+'.log'))
+    log = init_log(name=f'jgrid')
     
     if grid_size_l is None: grid_size_l=gridsize_default_l
     if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
@@ -86,10 +97,10 @@ def run_join_agg_grids(
     # loop and join
     #===========================================================================    
     for i, (grid_size, country_key) in enumerate(product([int(e) for e in grid_size_l], country_l)):
-        tableName=f'{tableBaseName}_{country_key}_{grid_size:07d}'
+        tableName=f'bldgs_grid_link_{country_key}_{grid_size:04d}'
         log.info(f'on {i}: {tableName}') 
         
-        _build_grid_inters_join(grid_size, country_key, tableName, conn_d, log) 
+        _build_grid_inters_join(grid_size, country_key, tableName, conn_d, log, dev=dev) 
         
     #===========================================================================
     # wrap
@@ -107,15 +118,19 @@ def run_join_agg_grids(
 
 def _build_grid_inters_join(
         grid_size, country_key, tableName, conn_d, log,
-        epsg_id=equal_area_epsg
+        epsg_id=equal_area_epsg,
+        out_schema = 'inters_agg',
+        dev=False,
+        haz_key='f010_fluvial',
         ):
     """build a table with the spatial join results"""
     
-    raise IOError(f'do not join the hazard columns (these should remain on inters)')
+ 
     #===========================================================================
     # defautls
     #===========================================================================
     start=datetime.now() 
+    if dev: out_schema='dev'
     
     #==================================================================
     # using views is too slow (400secs)
@@ -127,6 +142,14 @@ def _build_grid_inters_join(
     tableName_grid = f'agg_{country_key}_{grid_size:07d}'
     tableName_inters=f'{country_key.lower()}'
  
+    if not dev:
+        pts_schema='inters'
+        grid_schema='grids'
+    else:
+        pts_schema='dev'
+        grid_schema='dev'
+        out_schema='dev'
+        tableName_grid+='_wbldg'
     #===========================================================================
     # setup
     #===========================================================================
@@ -134,41 +157,46 @@ def _build_grid_inters_join(
     
     pg_exe(f"""DROP TABLE IF EXISTS {out_schema}.{tableName}""")
     
+    #===========================================================================
+    # build query
+    #===========================================================================
     #get the column names
     coln_l = pg_get_column_names('inters', tableName_inters)            
     print(f'columns\n    {coln_l}')
  
+    cols = 'pts.country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
     
     
-            
+    cmd_str=f"""
+    CREATE TABLE {out_schema}.{tableName} AS
+        SELECT {cols}
+            FROM {pts_schema}.{tableName_inters} AS pts
+                LEFT JOIN {grid_schema}.{tableName_grid} AS polys 
+                    ON ST_Intersects(polys.geom, ST_Transform(pts.geometry, {epsg_id}))
+                        WHERE pts.country_key=%s AND polys.grid_size=%s AND polys.country_key=%s
+                            AND pts.{haz_key} > 0"""
+    print(cmd_str)
+    
+    #===========================================================================
+    # execute   
+    #===========================================================================
             
     #perform the join
     with psycopg2.connect(get_conn_str(conn_d)) as conn:
         with conn.cursor() as cur:
-            #build the query
-            cmd_str=f"""CREATE TABLE {out_schema}.{tableName} AS
-                            SELECT """
-            
-            #get all the columns  
-            for e in [e for e in coln_l if not e=='geometry']:
-                cmd_str+=f'pts.{e}, '
-                            
- 
-
-            cmd_str+=f"""polys.grid_size, polys.I, polys.J, ST_Transform(pts.geometry, {epsg_id}) as geom 
-                        FROM inters.{tableName_inters} AS pts
-                        JOIN grids.{tableName_grid} AS polys
-                    ON ST_Contains(polys.geom, ST_Transform(pts.geometry, {epsg_id}))
-                        WHERE pts.country_key=%s AND polys.grid_size=%s AND polys.country_key=%s
- 
-                    
-                    """
-            print(cmd_str)
             cur.execute(cmd_str, (country_key.upper(), grid_size, country_key))
             
     #clean up
     log.info(f'cleaning')
-    pg_spatialIndex(out_schema, tableName)
+    
+    cmt_str = f'join grid ({tableName_grid}) i,j to points ({tableName_inters}) pts.{haz_key} > 0 \n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    pg_comment(out_schema, tableName, cmt_str)
+    
+    #set keys
+    pg_exe(f'ALTER TABLE {out_schema}.{tableName} ADD PRIMARY KEY (country_key, gid, id)')
+    
+    #pg_spatialIndex(out_schema, tableName)
     pg_vacuum(out_schema, tableName)
     
             
@@ -186,7 +214,7 @@ def _build_grid_inters_join(
     log.info(f'finishedw/ \n{meta_d}')
  
 
-def run_drop_haz_inters_agg(
+def xxxrun_drop_haz_inters_agg(
         conn_d=postgres_d,
         country_l = ['deu'], 
         grid_size_l=[1020, 240, 60],
@@ -290,8 +318,8 @@ def run_drop_haz_inters_agg(
  
 
 if __name__ == '__main__':
-    #run_join_agg_grids()
-    run_drop_haz_inters_agg()
+    run_join_agg_grids(grid_size_l=None, dev=True)
+    #run_drop_haz_inters_agg()
     
     
     

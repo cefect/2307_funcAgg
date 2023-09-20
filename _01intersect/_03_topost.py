@@ -119,7 +119,7 @@ def run_to_postgres(
     postgres table (schema=inters) per country with building samples"""
     
     
-    raise IOError('add prefix to haz colns. combine w/ 02_collect')
+    raise IOError('add prefix to haz colns. combine w/ 02_collect, add country_key to primary keys')
     #===========================================================================
     # defaults
     #===========================================================================

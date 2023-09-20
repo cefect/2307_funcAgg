@@ -131,7 +131,12 @@ def pg_register(schema, tableName, conn_str=None):
             cur.execute(f"""SELECT Populate_Geometry_Columns(%s::regclass)""", (f'{schema}.{tableName}', ))
             
 def pg_comment(schema, tableName, cmt_str, conn_str=None):
-    """alter the comment on a table"""
+    """alter the comment on a table
+    
+    cmt_str = f'port of {cnt} .gpkg sample files on grid centroids\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    
+    """
     if conn_str is None:conn_str = get_conn_str(postgres_d)
         
     with psycopg2.connect(conn_str) as conn:

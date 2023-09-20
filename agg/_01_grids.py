@@ -201,6 +201,7 @@ def _build_agg_grid_country_size(grid_size, country_key, tableName, conn_d, sche
             assert len(res) > 0
             log.info(f'built grid={grid_size} w/\n%s' % res)
  
+    raise IOError('add comment')
     #meta
     meta_d = {
         'tdelta':(datetime.now() - start_i).total_seconds(), 
@@ -258,6 +259,13 @@ def run_build_agg_grids(
         
         country_l = ['deu'],
         ):
+    """create polygon grids with ST_SquareGrid
+    
+    Returns
+    --------------
+    postgres table (schema=grids) per country and grid_size
+    
+    """
     #===========================================================================
     # defaults
     #===========================================================================
