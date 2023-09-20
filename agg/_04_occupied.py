@@ -202,7 +202,10 @@ def run_grids_occupied_stats(
     
     cols+=', '.join([f'COUNT(CASE WHEN bldg.{e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
     
-    if dev: cols+=f', gtab.geometry as geom'
+    #if dev: cols+=f', gtab.geometry as geom'
+    #add geometry
+    """decided to include the centroid here as we'll need it in sample"""
+    cols+=f', ST_Centroid(gtab.geometry) as geom'
     
     sql(f"""
     CREATE TABLE {out_schema}.{new_tableName} AS
