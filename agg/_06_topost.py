@@ -36,7 +36,7 @@ from coms import (
     dstr, view, get_filepaths, clean_geodataframe
     )
 
-from definitions import wrk_dir, lib_dir, postgres_d, index_country_fp_d, temp_dir
+from definitions import wrk_dir, lib_dir, postgres_d, gridsize_default_l, temp_dir
 
 #===============================================================================
 # funcs
@@ -154,10 +154,18 @@ def run_agg_samps_to_post(
  
         conn_str=None,
         schema='inters_grid', 
-        dev=False
+        dev=False,
+        log=None,
  
         ):
-    """merge hazard columns then add grids to postgis"""
+    """merge hazard columns then add grids to postgis
+    
+    
+    Returns
+    -------
+    
+    postgres table inters_grid.agg_samps_{country_key}_{grid_size:04d}
+    """
      
     #===========================================================================
     # defaults
@@ -169,7 +177,7 @@ def run_agg_samps_to_post(
     if dev:
         schema='dev' 
     
-    log = init_log(name=f'toPostG')
+    if log is None: log = init_log(name=f'toPostG')
     #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
     
     if conn_str is None: conn_str=get_conn_str(postgres_d)
@@ -184,7 +192,7 @@ def run_agg_samps_to_post(
     #===========================================================================
     # setup table
     #===========================================================================
-    tableName=f'grid_samps_{country_key}_{grid_size:04d}'
+    tableName=f'agg_samps_{country_key}_{grid_size:04d}'
     
     sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
     #===========================================================================
@@ -195,10 +203,11 @@ def run_agg_samps_to_post(
     if dev: root_fldr+='_dev'
     
     d=dict()
+    base_dir = os.path.join(r'l:\10_IO\2307_funcAgg\outs\agg', root_fldr,  country_key.upper() )
     for haz_coln in haz_coln_l:
 
  
-        search_dir = os.path.join(r'l:\10_IO\2307_funcAgg\outs\agg',root_fldr, country_key.upper(), haz_coln, f'{grid_size:04d}')
+        search_dir = os.path.join(base_dir, haz_coln, f'{grid_size:04d}')
         index_fp = get_filepaths(search_dir, '_meta', ext='.gpkg')
         
         d[haz_coln] = gpd.read_file(index_fp, ignore_geometry=True)
@@ -206,7 +215,7 @@ def run_agg_samps_to_post(
     index_dx = pd.concat(d, names=['haz_key', 'grid_id'])
     """
     view(pd.concat(d))
-    view(index_gdf)
+    view(index_dx)
     """
     gid_l = index_dx.index.unique('grid_id').tolist()
     log.info(f'loaded index w/ {index_dx.shape} and {len(gid_l)} grids')
@@ -241,7 +250,7 @@ def run_agg_samps_to_post(
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (country_key, grid_size, i,j)')
     
     #add comment
-    cmt_str = f'port of {cnt} .gpkg sample files on grid centroids\n'
+    cmt_str = f'port of {cnt} .gpkg sample files on grid centroids from {base_dir}\n'
     cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
     pg_comment(schema, tableName, cmt_str)
  
@@ -276,14 +285,21 @@ def run_agg_samps_to_post(
 
         
  
-        
+def run_all(ck, **kwargs):
+    log = init_log(name='occu')
     
-    
+    for grid_size in gridsize_default_l:
+        run_agg_samps_to_post(ck, grid_size, log=log, **kwargs)
     
     
 
 if __name__ == '__main__':
-    #run_grids_to_postgres()
+    run_all('deu', dev=True)
     
     
-    run_agg_samps_to_post('DEU', 1020, dev=True)
+    #run_agg_samps_to_post('deu', 1020, dev=True)
+    
+    
+    
+    
+    

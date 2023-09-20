@@ -540,9 +540,9 @@ def run_all(ck, **kwargs):
         
 if __name__ == '__main__':
     
-    run_agg_samples_on_country('deu', '050_fluvial',60, max_workers=2, dev=True)
+    #run_agg_samples_on_country('deu', '050_fluvial',60, max_workers=2, dev=True)
     
-    #run_all('deu', dev=True)
+    run_all('deu', dev=True)
     
     
     
