@@ -61,7 +61,7 @@ from agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
 
 
 
-def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=True):
+def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=True, dev=False):
     """compute loss for this hazard chunk on all functions"""
     #===========================================================================
     # defaults
@@ -90,8 +90,11 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
  
             log.debug(df_id)
             #get loss
-            loss_ar = get_rloss(dd_ar, wd_ar, 
-                prec=None) #depths in table are rounded enough
+            if not dev:
+                loss_ar = get_rloss(dd_ar, wd_ar, prec=None) #depths in table are rounded enough
+            else:
+                loss_ar = np.full(len(wd_ar), float(df_id))
+            
             #append index and collect
             d[df_id] = pd.Series(loss_ar, index=ser.index, name=df_id)
     
@@ -139,6 +142,7 @@ def loss_calc_country_assetType(
         #schema='damage', 
         chunksize=1e5,
         log=None,
+        dev=False,
  
         ):
     """use asset wd to compute losses for each function
@@ -183,6 +187,11 @@ def loss_calc_country_assetType(
             tableName=country_key
             
     assert isinstance(tableName, str)
+    
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid'}[asset_schema]
+    
+    if dev:
+        asset_schema='dev'
     
  
     
@@ -251,10 +260,10 @@ def loss_calc_country_assetType(
         #=======================================================================
         # build query
         #=======================================================================
-        if asset_schema=='inters':
+        if asset_type=='bldgs':
             
             index_col=['country_key','id']
-        elif asset_schema=='inters_grid':
+        elif asset_type=='grid':
  
             index_col=['country_key','grid_size', 'i', 'j']
         else:
@@ -281,8 +290,13 @@ def loss_calc_country_assetType(
         for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
             log.info(f'{i} on {gdf.shape}')
             assert len(gdf.columns)==1
-            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, f'rl_{country_key}_{haz_coln}_{i:03d}',log=log)
+            fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
+            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, fnstr,log=log, dev=dev)
+            
+            """
+            view(gdf.head())
+            """
             #wrap chunk
  
             cnt+=1
@@ -357,7 +371,7 @@ if __name__ == '__main__':
     #run_bldg_loss('DEU')
     
  
-    run_agg_loss('DEU')
+    run_agg_loss('DEU', dev=True)
  
 
         
