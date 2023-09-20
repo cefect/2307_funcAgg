@@ -144,7 +144,24 @@ def pg_comment(schema, tableName, cmt_str, conn_str=None):
             cur.execute(f"""COMMENT ON TABLE {schema}.{tableName} IS %s""", (cmt_str, ))
             
             
-            
+def pg_table_exists(schema_name, table_name, conn_str=None):
+    """Checks if a table exists in a PostgreSQL database.
+    
+    """
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
+    with psycopg2.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_catalog = %s
+                    AND table_schema = %s
+                    AND table_name = %s
+                )""",
+                (conn.get_dsn_parameters()['dbname'], schema_name, table_name))
+            result = cur.fetchone()[0]
+ 
+    return result
             
             
             

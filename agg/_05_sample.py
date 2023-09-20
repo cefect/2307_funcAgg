@@ -10,7 +10,7 @@ intersecting agg grids with hazard rasters
 #===============================================================================
 # IMPORTS--------
 #===============================================================================
-import os, hashlib, sys, subprocess
+import os, hashlib, sys, subprocess, itertools
 
  
  
@@ -38,11 +38,11 @@ from sqlalchemy import create_engine, URL
 from tqdm import tqdm
 
 from coms import view, clean_geodataframe, pd_ser_meta, init_log_worker
-from agg.coms_agg import get_conn_str, pg_getCRS
+from agg.coms_agg import get_conn_str, pg_getCRS, pg_table_exists
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, postgres_d, 
-    equal_area_epsg, fathom_vals_d, aoi_wkt_str
+    equal_area_epsg, fathom_vals_d, aoi_wkt_str, gridsize_default_l, haz_coln_l
     )
 from definitions import temp_dir as temp_dirM
 
@@ -78,13 +78,14 @@ from coms import (
 #===============================================================================
 # EXECUTORS--------
 #===============================================================================
-def _sql_to_gdf_from_spatial_intersect(schema, tableName, row_gdf, conn_str=None):
+def _sql_to_gdf_from_spatial_intersect(schema, tableName,  row_gdf, conn_str=None):
     """load a filtered table to geopanbdas"""
     if conn_str is None: conn_str=get_conn_str(postgres_d)
     #===========================================================================
     # get search geometry
     #===========================================================================
     epsg_id = pg_getCRS(schema, tableName, conn_str=conn_str)
+    assert epsg_id==equal_area_epsg
     wkt_str = row_gdf.to_crs(epsg_id).geometry.iloc[0].wkt #reproject and get
     
     
@@ -96,9 +97,9 @@ def _sql_to_gdf_from_spatial_intersect(schema, tableName, row_gdf, conn_str=None
     engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
     try:
         cmd_str = f"""
-                SELECT ST_Centroid(geom) AS geom, country_key, grid_size, i, j
+                SELECT country_key, grid_size, i, j, geom
                     FROM {schema}.{tableName}
-                    WHERE ST_Intersects(ST_Centroid(geom), ST_GeomFromText('{wkt_str}', {epsg_id}))"""
+                        WHERE ST_Intersects(geom, ST_GeomFromText('{wkt_str}', {epsg_id}))"""
                     
         #print(cmd_str)
         result = gpd.read_postgis(cmd_str, engine, geom_col='geom') 
@@ -235,9 +236,11 @@ def sample_rlay_from_gdf_wbt(rlay_fp, gdf, hazard_key, pfx, log=None, nodata_l=N
  
 
 
-def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir, 
+def agg_samples_on_rlay(kdi, row_gdf, gridTable, grid_schema, 
+
+                        haz_base_dir, out_dir, temp_dir, 
                         log=None, use_cache=False, dev=False,
-                        grid_schema='grids'):
+                        ):
     """get samples for grids on a single raster tile"""
     
     #===========================================================================
@@ -249,7 +252,7 @@ def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir
     
     if dev: 
         use_cache=False
-        grid_schema='dev'
+
     #=======================================================================
     # get hazard filepath
     #=======================================================================
@@ -343,11 +346,12 @@ def run_agg_samples_on_country(
                            max_workers=None,
                            crs=equal_area_epsg,
                            dev=False,
+                           log=None,
                            ):
     """sample fathom rasters with aggregation grids
     
     uses these postgres tables:
-        grids: f'agg_{country_key.lower()}_{grid_size:07d}_wbldg
+        grids: agg_occupied_{country_key}_{grid_size:04d}
         
     
     Returns
@@ -358,6 +362,7 @@ def run_agg_samples_on_country(
     #===========================================================================
     # defaults
     #===========================================================================
+    country_key=country_key.lower()
     start=datetime.now()
     assert hazard_key in index_hazard_fp_d, hazard_key
     
@@ -374,13 +379,28 @@ def run_agg_samples_on_country(
     if haz_index_fp is None:
         haz_index_fp=index_hazard_fp_d[hazard_key]
     
-    log = init_log(name=f'aggSamp.{country_key}.{hazard_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
+    if log is None: log = init_log(name=f'aggSamp.{country_key}.{hazard_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
     
     
     keys_d = {'country_key':country_key, 'hazard_key':hazard_key, 'grid_size':grid_size}
     pfx = '_'.join([str(e) for e in keys_d.values()])
     
     log.info(keys_d)
+    
+    #===========================================================================
+    # postgres data
+    #===========================================================================
+    tableName = f'agg_occupied_{country_key}_{grid_size:04d}'
+    #geomTable = f'agg_{country_key}_{grid_size:07d}'
+    
+    if dev:
+        #geomSchema='dev'
+        schema='dev'
+    else:
+        schema='agg_bldg'
+        #geomSchema='grids'
+        
+    assert pg_table_exists(schema, tableName), f'table does not exist {schema}.{tableName}'
     #===========================================================================
     # #load hazard tiles
     #=========================================================================== 
@@ -395,7 +415,9 @@ def run_agg_samples_on_country(
     if not dev:
         aoi_bbox = shapely.geometry.box(*gpd.read_file(index_country_fp_d[country_key]).to_crs(crs).geometry.total_bounds)
     else:
-        aoi_bbox = shapely.wkt.loads(aoi_wkt_str)
+        aoi_bbox = shapely.geometry.box(*gpd.GeoSeries([shapely.wkt.loads(aoi_wkt_str)], crs=4326).to_crs(crs).geometry.total_bounds)
+        
+ 
     bx = haz_tile_gdf_raw.geometry.intersects(aoi_bbox)
     if not bx.any():
         raise AssertionError(f'failed to find any hazard tiles that intersect with {country_key}')
@@ -414,9 +436,14 @@ def run_agg_samples_on_country(
  
     cnt=0
     meta_lib, res_d, err_d=dict(), dict(), dict()
-    args = (f'agg_{country_key.lower()}_{grid_size:07d}_wbldg', haz_base_dir, out_dir, temp_dir)
+
+    
+    
+    
+    
+    args = (tableName, schema,   haz_base_dir, out_dir, temp_dir)
     #===========================================================================
-    # single 
+    # single -------
     #===========================================================================
     log.info(f'intersecting buildings and hazard per tile \n\n')
    
@@ -425,15 +452,19 @@ def run_agg_samples_on_country(
      
             
             log.info(f'{country_key}.{hazard_key} on grid {i}')
-     
-            try:
-     
-                res_d[i], meta_lib[i] = agg_samples_on_rlay({**keys_d, **{'tile_id':i}}, 
+            
+            res_d[i], meta_lib[i] = agg_samples_on_rlay({**keys_d, **{'tile_id':i}}, 
                                                    gpd.GeoDataFrame([row_raw], crs=crs), 
                                                    *args, log=log, dev=dev)
-            except Exception as e:
-                log.error(f'for {i} got error\n    {e}')
-                err_d[i] = {**{'error': str(e), 'now':datetime.now()}, **row_raw.to_dict()}
+     
+#===============================================================================
+#             try:
+#      
+# 
+#             except Exception as e:
+#                 log.error(f'for {i} got error\n    {e}')
+#                 err_d[i] = {**{'error': str(e), 'now':datetime.now()}, **row_raw.to_dict()}
+#===============================================================================
                             
             
             cnt+=1
@@ -497,11 +528,21 @@ def run_agg_samples_on_country(
     
     log.info(f'finished w/ \n{meta_d}')
         
+
+def run_all(ck, **kwargs):
+    log = init_log(name='occu')
+    
+    l = [e[1:] for e in haz_coln_l]
+    for grid_size, haz_key in itertools.product(gridsize_default_l, l):
+        print(grid_size, haz_key)
  
- 
+        run_agg_samples_on_country(ck, haz_key, grid_size, log=log, **kwargs)
+        
 if __name__ == '__main__':
     
-    run_agg_samples_on_country('DEU', '050_fluvial',60, max_workers=2, dev=False)
+    run_agg_samples_on_country('deu', '050_fluvial',60, max_workers=2, dev=True)
+    
+    #run_all('deu', dev=True)
     
     
     
