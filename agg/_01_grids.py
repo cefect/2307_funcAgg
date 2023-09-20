@@ -265,6 +265,16 @@ def run_build_agg_grids(
     --------------
     postgres table (grids.agg_{country_key}_{grid_size:07d}) per country and grid_size
     
+    
+    making slices:
+    
+    CREATE TABLE dev.agg_deu_0000060 AS
+SELECT *
+FROM grids.agg_deu_0000060
+WHERE ST_Intersects(geom,
+    ST_Transform(ST_GeomFromText('POLYGON((6.9771576204097201 50.49423957543140062, 7.03179743063648033 50.49423957543140062, 7.03179743063648033 50.533268011317098, 6.9771576204097201 50.533268011317098, 6.9771576204097201 50.49423957543140062))', 4326), 6933));
+
+    
     """
     #===========================================================================
     # defaults

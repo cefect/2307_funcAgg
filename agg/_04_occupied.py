@@ -35,7 +35,7 @@ from tqdm import tqdm
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, postgres_d, 
-    equal_area_epsg, fathom_vals_d
+    equal_area_epsg, fathom_vals_d, gridsize_default_l
     )
 from definitions import temp_dir as temp_dirM
  
@@ -68,6 +68,7 @@ def run_grids_occupied_stats(
                            dev=False,
                            conn_str=None,
                            epsg_id=equal_area_epsg,
+                           log=None,
  
                            ):
     """grids with building exposure (and some building stats)
@@ -91,12 +92,12 @@ def run_grids_occupied_stats(
     #assert hazard_key in index_hazard_fp_d, hazard_key
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_purge', country_key,  f'{grid_size:05d}')
+        out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_occu', country_key,  f'{grid_size:05d}')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
  
-    
-    log = init_log(name=f'purge.{country_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
+    if log is None:
+        log = init_log(name=f'occu.{country_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
     
     
     keys_d = {'country_key':country_key, 
@@ -134,27 +135,29 @@ def run_grids_occupied_stats(
         not a bad thing
     """  
     schema1 = 'temp'  
-    log.info(f'creating \'{schema1}.{new_tableName}\' from unique i,j columns from {link_tableName}')     
-    sql(f"DROP TABLE IF EXISTS {schema1}.{new_tableName}")
+    tableName1= new_tableName+'_exposed'
+    if dev: tableName1+='_dev'
+    log.info(f'creating \'{schema1}.{tableName1}\' from unique i,j columns from {link_tableName}')     
+    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName1}")
       
  
       
     #get exposed indexers and their feature counts
-    sql(f'''CREATE TABLE {schema1}.{new_tableName} AS 
+    sql(f'''CREATE TABLE {schema1}.{tableName1} AS 
                 SELECT LOWER(ltab.country_key) AS country_key, ltab.grid_size, ltab.i, ltab.j, COUNT(*) as bldg_expo_cnt
                     FROM {link_schema}.{link_tableName} AS ltab
                             GROUP BY ltab.country_key, ltab.grid_size, ltab.i, ltab.j''')
       
     #add the primary key
-    sql(f"ALTER TABLE {schema1}.{new_tableName} ADD PRIMARY KEY (country_key, i, j)")
+    sql(f"ALTER TABLE {schema1}.{tableName1} ADD PRIMARY KEY (country_key, i, j)")
      
     ##report grid counts
-    ij_expo_cnt = pg_getcount(schema1, new_tableName)
+    ij_expo_cnt = pg_getcount(schema1, tableName1)
     ij_cnt = pg_getcount('grids', grid_tableName)    
      
      
     #report asset counts
-    grid_asset_cnt = int(pg_exe(f"SELECT SUM(bldg_expo_cnt) as total_fcnt FROM {schema1}.{new_tableName}", return_fetch=True)[0][0])
+    grid_asset_cnt = int(pg_exe(f"SELECT SUM(bldg_expo_cnt) as total_fcnt FROM {schema1}.{tableName1}", return_fetch=True)[0][0])
     asset_cnt = pg_getcount(link_schema, link_tableName)
      
     log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with {asset_cnt} assets')
@@ -166,27 +169,27 @@ def run_grids_occupied_stats(
     #===========================================================================
     # join grid geometryu
     #===========================================================================
-    log.info(f'joining grid geometry')
-    tableName1 = new_tableName+'_wgeo'    
+    log.info(f'\n\njoining grid geometry')
     
-    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName1}") 
+    tableName2 = tableName1+'_wgeo'
+    if dev: tableName2+='_dev'    
+    
+    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName2}") 
       
     #get exposed indexers and their feature counts
-    sql(f'''CREATE TABLE {schema1}.{tableName1} AS 
+    sql(f'''CREATE TABLE {schema1}.{tableName2} AS 
                 SELECT ltab.*, rtab.geom as geometry
-                    FROM {schema1}.{new_tableName} AS ltab
+                    FROM {schema1}.{tableName1} AS ltab
                         LEFT JOIN {grid_schema}.{grid_tableName} as rtab
                             ON ltab.i=rtab.i AND ltab.j=rtab.j AND ltab.grid_size=rtab.grid_size AND ltab.country_key=rtab.country_key''')
     
     #post
-    pg_exe(f'ALTER TABLE {schema1}.{tableName1} ADD PRIMARY KEY (country_key, grid_size, i, j)')
-    pg_spatialIndex(schema1, tableName1, log=log, columnName='geometry')
+    pg_exe(f'ALTER TABLE {schema1}.{tableName2} ADD PRIMARY KEY (country_key, grid_size, i, j)')
+    pg_spatialIndex(schema1, tableName2, log=log, columnName='geometry')
     #===========================================================================
     # compute building datats on exposed grid
     #===========================================================================
-    log.info(f'joing grids to exposed index')
-    
- 
+    log.info(f'\n\ncomputing buidling stast') 
      
     sql(f"DROP TABLE IF EXISTS {out_schema}.{new_tableName}")
     
@@ -204,7 +207,7 @@ def run_grids_occupied_stats(
     sql(f"""
     CREATE TABLE {out_schema}.{new_tableName} AS
         SELECT {cols}
-            FROM {schema1}.{tableName1} as gtab
+            FROM {schema1}.{tableName2} as gtab
                 LEFT JOIN {bldg_expo_sch}.{bldg_expo_tn} as bldg
                     ON ST_Intersects(gtab.geometry, ST_Transform(bldg.geometry, {epsg_id}))
                         GROUP BY gtab.country_key, gtab.grid_size, gtab.i, gtab.j
@@ -216,7 +219,7 @@ def run_grids_occupied_stats(
     #===========================================================================
     # wrap
     #===========================================================================
-    
+    log.info(f'\n\nwrap')
 
     
     pg_exe(f'ALTER TABLE {out_schema}.{new_tableName} ADD PRIMARY KEY (country_key, grid_size, i, j)')
@@ -231,7 +234,7 @@ def run_grids_occupied_stats(
     
     #drop the temps
     sql(f"DROP TABLE IF EXISTS temp.{new_tableName}")
-    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName1}")
+    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName2}")
     
     
     meta_d = {
@@ -245,11 +248,18 @@ def run_grids_occupied_stats(
     
     return
         
- 
+def run_all(ck, **kwargs):
+    log = init_log(name='occu')
+    
+    for grid_size in gridsize_default_l:
+        run_grids_occupied_stats(ck, grid_size, log=log, **kwargs)
+    
  
 if __name__ == '__main__':
     
-    run_grids_occupied_stats('DEU', 240, dev=True)
+    #run_grids_occupied_stats('DEU', 60, dev=True)
+    
+    run_all('deu', dev=True)
     
     
     

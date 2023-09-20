@@ -121,7 +121,7 @@ def _build_grid_inters_join(
         epsg_id=equal_area_epsg,
         out_schema = 'agg_bldg',
         dev=False,
-        haz_key='f010_fluvial',
+        haz_key='f500_fluvial',
         ):
     """build a table with the spatial join results"""
     
@@ -149,7 +149,7 @@ def _build_grid_inters_join(
         pts_schema='dev'
         grid_schema='dev'
         out_schema='dev'
-        tableName_grid+='_wbldg'
+        #tableName_grid+='_wbldg'
     #===========================================================================
     # setup
     #===========================================================================
