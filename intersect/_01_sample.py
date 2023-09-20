@@ -373,6 +373,12 @@ def run_samples_on_country(country_key, hazard_key,
                            max_workers=None,
                            
                            ):
+    """sample osm w/ fathom rasters
+    
+    Returns
+    ----------
+    geojson for each country, hazard, and hazard tile
+    """
     #===========================================================================
     # defaults
     #===========================================================================
@@ -423,15 +429,7 @@ def run_samples_on_country(country_key, hazard_key,
             log.info(f'{i+1}/{len(gdf)} {country_key}.{hazard_key} on grid %i'%row['id'])
             
             res_d[i] = _sample_igrid(country_key, hazard_key, haz_tile_gdf, row, area_thresh, epsg_id, out_dir, log, haz_base_dir)
-     #==========================================================================
-     #        try:
-     #            
-     # 
-     #        except Exception as e:
-     #            err_d[i] = row.copy()
-     #            err_d[i]['error'] = str(e)            
-     #            log.error(f'failed on {country_key}.{hazard_key}.{i} w/\n    {e}')
-     #==========================================================================
+ 
             #print(f'computing stats on {len(gdf)} feats')
             """
             print(rasterstats.utils.VALID_STATS)

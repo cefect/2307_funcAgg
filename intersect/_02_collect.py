@@ -84,7 +84,8 @@ def _load_samps_set(gserx, max_workers,
         d[id] = gpd.read_file(fp, ignore_geometry=np.invert(first))
         
         first=False
- 
+        
+    raise IOError('dont include geometry here')
     
  
     #merge into frame
@@ -122,7 +123,11 @@ def run_collect_sims(
         country_key='deu',
         ):
     """
-    collect and concat samples (drop geoemtry)
+    concat haz_key (drop redundant geoemtry)
+    
+    Returns
+    ----------
+    writes a GeoDataFrame .pkl for each country and harzard tile
     """
     
     #===========================================================================
@@ -183,6 +188,8 @@ def run_collect_sims(
             dxind = _load_samps_set(gserx, max_workers)
             
             log.info(f'writing {str(dxind.shape)} to \n    {ofp_i}')
+            
+            raise IOError('load this into postgres instead')
             dxind.to_pickle(ofp_i)
             
         else:

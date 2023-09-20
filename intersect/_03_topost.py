@@ -111,9 +111,15 @@ def run_to_postgres(
         country_l = ['AUS', 'BGD', 'BRA', 'CAN', 'DEU', 'ZAF'],
         coln_l=['010_fluvial', '050_fluvial', '100_fluvial', '500_fluvial', 'geometry'],
         ):
-    """extract .pkl and load into postgress"""
+    """extract .pkl (from 02_collect) into a postgres table 
     
     
+    Returns
+    --------
+    postgres table (schema=inters) per country with building samples"""
+    
+    
+    raise IOError('add prefix to haz colns. combine w/ 02_collect')
     #===========================================================================
     # defaults
     #===========================================================================
@@ -220,7 +226,8 @@ def run_to_postgres(
         print(f'pg_vacuum')
         pg_vacuum(schemaName, tableName)
         pg_spatialIndex(schemaName, tableName, columnName='geometry', log=log)
-            
+        
+        raise IOError('add comment')
     #===========================================================================
     # wrap
     #===========================================================================
@@ -245,13 +252,14 @@ def init_schema(schemaName, conn, log):
         with conn.cursor() as cur:
             cur.execute(f"""CREATE SCHEMA {schemaName}""")
 
-def run_grids_to_postgres(
+def xxxrun_grids_to_postgres(
         out_dir=None,
         conn_str=None,
         schemaName='grids',tableName='country_grids',
         index_d=index_country_fp_d,
         ):
-    """add grids to postgis"""
+    """load hazard grids
+    """
     
     #===========================================================================
     # defaults
