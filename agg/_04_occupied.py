@@ -192,6 +192,8 @@ def run_grids_occupied_stats(
     pg_exe(f'ALTER TABLE {schema1}.{tableName2} ADD PRIMARY KEY (country_key, grid_size, i, j)')
     pg_register(schema1, tableName2)
     pg_spatialIndex(schema1, tableName2, log=log)
+    
+    
     #===========================================================================
     # compute building datats on exposed grid
     #===========================================================================
@@ -208,15 +210,19 @@ def run_grids_occupied_stats(
     
     #coln_l = pg_get_column_names(bldg_expo_sch, bldg_expo_tn) 
     
-    haz_coln_l = ['f010_fluvial', 'f050_fluvial', 'f100_fluvial', 'f500_fluvial']
+    #===========================================================================
+    # #add wet counts
+    # """too slow?"""
+    # haz_coln_l = ['f010_fluvial', 'f050_fluvial', 'f100_fluvial', 'f500_fluvial']
+    # 
+    # cols+=', \n'.join([f'COUNT(CASE WHEN bldg.{e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
+    #===========================================================================
     
-    cols+=', \n'.join([f'COUNT(CASE WHEN bldg.{e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
-    
-    #if dev: cols+=f', gtab.geometry as geom'
+ 
     #add geometry
     """decided to include the centroid here as we'll need it in sample"""
     #cols+=f', ST_Transform(ST_Centroid(gtab.geom), {epsg_id}) as geom'
-    cols+=f', ST_Centroid(gtab.geom) as geom'
+    cols+=f'ST_Centroid(gtab.geom) as geom'
     
     sql(f"""
     CREATE TABLE {out_schema}.{new_tableName} AS
