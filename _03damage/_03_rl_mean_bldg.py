@@ -431,9 +431,9 @@ def run_extract_haz(
         
         
 if __name__ == '__main__':
-    #run_bldg_rl_means('deu', 60, dev=True)
+    run_bldg_rl_means('deu', 60, dev=True)
     
-    run_extract_haz('deu', 'f500_fluvial', dev=False)
+    #run_extract_haz('deu', 'f500_fluvial', dev=False)
     
         
     

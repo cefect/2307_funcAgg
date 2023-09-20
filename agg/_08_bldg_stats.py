@@ -4,7 +4,7 @@ Created on Jul. 25, 2023
 @author: cefect
 
 
-grids with buildings and the counts
+compute the total buildng counts and wet counts for each grid
 '''
 #===============================================================================
 # IMPORTS--------
@@ -110,7 +110,7 @@ def run_grids_occupied_stats(
     #===========================================================================
     link_tableName=f'bldgs_grid_link_{country_key}_{grid_size:04d}'    
     grid_tableName=f'agg_{country_key}_{grid_size:07d}'    
-    new_tableName=f'agg_occupied_{country_key}_{grid_size:04d}'
+    new_tableName=f'agg_bldg_stats_{country_key}_{grid_size:04d}'
     bldg_expo_tn = country_key.lower()
     
     if dev:
@@ -128,27 +128,30 @@ def run_grids_occupied_stats(
     #===========================================================================
     # create a temp table of unique indexers
     #===========================================================================
-    """use the building-grid links to construct an index of i,j values with exposed buildings
-    
-    NOTE: this means we lose grids with centroid exposure (but dry or no buildigns)
-        not a bad thing
-    """  
-    schema1 = 'temp'  
-    tableName1= new_tableName+'_exposed'
-    if dev: tableName1+='_dev'
-    log.info(f'creating \'{schema1}.{tableName1}\' from unique i,j columns from {link_tableName}')     
-    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName1}")
-      
- 
-      
-    #get exposed indexers and their feature counts
-    sql(f'''CREATE TABLE {schema1}.{tableName1} AS 
-                SELECT LOWER(ltab.country_key) AS country_key, ltab.grid_size, ltab.i, ltab.j, COUNT(*) as bldg_expo_cnt
-                    FROM {link_schema}.{link_tableName} AS ltab
-                            GROUP BY ltab.country_key, ltab.grid_size, ltab.i, ltab.j''')
-      
-    #add the primary key
-    sql(f"ALTER TABLE {schema1}.{tableName1} ADD PRIMARY KEY (country_key, i, j)")
+    """see occupied"""
+ #==============================================================================
+ #    """use the building-grid links to construct an index of i,j values with exposed buildings
+ #    
+ #    NOTE: this means we lose grids with centroid exposure (but dry or no buildigns)
+ #        not a bad thing
+ #    """  
+ #    schema1 = 'temp'  
+ #    tableName1= new_tableName+'_exposed'
+ #    if dev: tableName1+='_dev'
+ #    log.info(f'creating \'{schema1}.{tableName1}\' from unique i,j columns from {link_tableName}')     
+ #    sql(f"DROP TABLE IF EXISTS {schema1}.{tableName1}")
+ #      
+ # 
+ #      
+ #    #get exposed indexers and their feature counts
+ #    sql(f'''CREATE TABLE {schema1}.{tableName1} AS 
+ #                SELECT LOWER(ltab.country_key) AS country_key, ltab.grid_size, ltab.i, ltab.j, COUNT(*) as bldg_expo_cnt
+ #                    FROM {link_schema}.{link_tableName} AS ltab
+ #                            GROUP BY ltab.country_key, ltab.grid_size, ltab.i, ltab.j''')
+ #      
+ #    #add the primary key
+ #    sql(f"ALTER TABLE {schema1}.{tableName1} ADD PRIMARY KEY (country_key, i, j)")
+ #==============================================================================
      
     ##report grid counts
     """something is wrong with the tables... vacuuming and rebuilding indexes now"""
@@ -169,7 +172,7 @@ def run_grids_occupied_stats(
     #     log.warning(f'asset count on grids ({grid_asset_cnt:,}) differs from \'inters_agg\' ({asset_cnt:,})')
     #===========================================================================
         
-        
+    raise IOError('stopped here')
     #===========================================================================
     # join grid geometryu
     #===========================================================================
@@ -287,9 +290,9 @@ def run_all(ck, **kwargs):
  
 if __name__ == '__main__':
     
-    #run_grids_occupied_stats('DEU', 60, dev=True)
+    run_grids_occupied_stats('deu', 60, dev=True)
     
-    run_all('deu', dev=True)
+    #run_all('deu', dev=True)
     
     
     
