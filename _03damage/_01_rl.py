@@ -51,7 +51,7 @@ from definitions import (
     )
 
 
-from damage.coms_dmg import get_rloss
+from _03damage.coms_dmg import get_rloss
 from funcMetrics.func_prep import get_funcLib
 from funcMetrics.coms_fm import slice_serx, force_max_depth, force_zero_zero, force_monotonic
 
@@ -145,12 +145,12 @@ def loss_calc_country_assetType(
         dev=False,
  
         ):
-    """use asset wd to compute losses for each function
+    """use asset wd to compute losses for each function and each hazard
+    one grid_size (or bldgs)
     
     goes pretty fast acutally with the zero filter
     
-    postgres:
-        inters.{country_key}: building depths with columns for hazard
+ 
     
     Params
     ------
@@ -168,7 +168,7 @@ def loss_calc_country_assetType(
         
     Writes
     ----------
-    pd.Series
+    pd.Series to pickle
         index: asset id
         columns: loss for each function on one hazard
     """
@@ -283,7 +283,7 @@ def loss_calc_country_assetType(
         
         #dev limter (see i break below also)
         #cmd_str+= f'\nLIMIT {chunksize*4}'
-        #log.info(cmd_str)
+        log.info(cmd_str)
         res_d=dict()
         
  
@@ -352,7 +352,7 @@ def run_agg_loss(country_key, grid_size_l=None,  **kwargs):
     for grid_size in grid_size_l:
         d[grid_size] = loss_calc_country_assetType(country_key, 
                                                    asset_schema='inters_grid', 
-                                                   tableName=f'pts_fathom_{country_key.lower()}_grid_{grid_size:04d}', 
+                                                   tableName=f'agg_samps_{country_key}_{grid_size:04d}', 
                                                    log=log,
                                                    **kwargs)
         
@@ -371,7 +371,7 @@ if __name__ == '__main__':
     #run_bldg_loss('DEU')
     
  
-    run_agg_loss('DEU', dev=True)
+    run_agg_loss('deu', dev=True)
  
 
         
