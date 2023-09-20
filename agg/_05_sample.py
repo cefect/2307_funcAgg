@@ -22,6 +22,8 @@ import numpy as np
 from osgeo import ogr
 import fiona
 import shapely.geometry
+import shapely.wkt
+
 import geopandas as gpd
 
 #import rasterstats
@@ -40,7 +42,7 @@ from agg.coms_agg import get_conn_str, pg_getCRS
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, postgres_d, 
-    equal_area_epsg, fathom_vals_d
+    equal_area_epsg, fathom_vals_d, aoi_wkt_str
     )
 from definitions import temp_dir as temp_dirM
 
@@ -96,8 +98,9 @@ def _sql_to_gdf_from_spatial_intersect(schema, tableName, row_gdf, conn_str=None
         cmd_str = f"""
                 SELECT ST_Centroid(geom) AS geom, country_key, grid_size, i, j
                     FROM {schema}.{tableName}
-                    WHERE ST_Intersects(geom, ST_GeomFromText('{wkt_str}', {epsg_id}))"""
+                    WHERE ST_Intersects(ST_Centroid(geom), ST_GeomFromText('{wkt_str}', {epsg_id}))"""
                     
+        #print(cmd_str)
         result = gpd.read_postgis(cmd_str, engine, geom_col='geom') 
         
     except Exception as e:
@@ -232,7 +235,9 @@ def sample_rlay_from_gdf_wbt(rlay_fp, gdf, hazard_key, pfx, log=None, nodata_l=N
  
 
 
-def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir, log=None, use_cache=True):
+def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir, 
+                        log=None, use_cache=False, dev=False,
+                        grid_schema='grids'):
     """get samples for grids on a single raster tile"""
     
     #===========================================================================
@@ -242,6 +247,9 @@ def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir
     pfx_i = '_'.join([str(e) for e in kdi.values()]) + f'_{i:05d}'
     log = log.getChild(str(i))
     
+    if dev: 
+        use_cache=False
+        grid_schema='dev'
     #=======================================================================
     # get hazard filepath
     #=======================================================================
@@ -267,7 +275,7 @@ def agg_samples_on_rlay(kdi, row_gdf, gridTable, haz_base_dir, out_dir, temp_dir
         #===================================================================
         
         
-        agg_gridsC_gdf = _sql_to_gdf_from_spatial_intersect('grids', gridTable, row_gdf)
+        agg_gridsC_gdf = _sql_to_gdf_from_spatial_intersect(grid_schema, gridTable, row_gdf)
         log.debug(f'    got {len(agg_gridsC_gdf)} agg grids intersecting haz tile')
         #=======================================================================
         # sample
@@ -324,7 +332,7 @@ def process_row(i, row_raw, keys_d, crs, *args):
 def run_agg_samples_on_country(
                         country_key, 
                                hazard_key,
-                               grid_size=1020,
+                               grid_size,
                                
                                haz_index_fp=None,
                                
@@ -334,6 +342,7 @@ def run_agg_samples_on_country(
                            #area_thresh=50,
                            max_workers=None,
                            crs=equal_area_epsg,
+                           dev=False,
                            ):
     """sample fathom rasters with aggregation grids
     
@@ -341,7 +350,9 @@ def run_agg_samples_on_country(
         grids: f'agg_{country_key.lower()}_{grid_size:07d}_wbldg
         
     
-    
+    Returns
+    --------
+    writes a gpkg file for each country, haz, grid_size, and haz_grid with sampled values
     
     """
     #===========================================================================
@@ -351,7 +362,9 @@ def run_agg_samples_on_country(
     assert hazard_key in index_hazard_fp_d, hazard_key
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'agg','05_sample', country_key, hazard_key, f'{grid_size:04d}')
+        root_fldr = '05_sample'
+        if dev: root_fldr+='_dev'
+        out_dir = os.path.join(wrk_dir, 'outs', 'agg',root_fldr, country_key, hazard_key, f'{grid_size:04d}')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     if temp_dir is None:
@@ -372,8 +385,6 @@ def run_agg_samples_on_country(
     # #load hazard tiles
     #=========================================================================== 
  
-        
-    
     #hazard
     log.info(f'loading hazard tiles and reprojectiong ({crs})\n    {haz_index_fp}')
     haz_tile_gdf_raw = gpd.read_file(haz_index_fp).to_crs(crs)    
@@ -381,8 +392,11 @@ def run_agg_samples_on_country(
     
     #get country slice
     """the hazard tiles are global... could also add a country_key column upstream"""
-    country_bbox = shapely.geometry.box(*gpd.read_file(index_country_fp_d[country_key]).to_crs(crs).geometry.total_bounds)
-    bx = haz_tile_gdf_raw.geometry.intersects(country_bbox)
+    if not dev:
+        aoi_bbox = shapely.geometry.box(*gpd.read_file(index_country_fp_d[country_key]).to_crs(crs).geometry.total_bounds)
+    else:
+        aoi_bbox = shapely.wkt.loads(aoi_wkt_str)
+    bx = haz_tile_gdf_raw.geometry.intersects(aoi_bbox)
     if not bx.any():
         raise AssertionError(f'failed to find any hazard tiles that intersect with {country_key}')
     
@@ -416,7 +430,7 @@ def run_agg_samples_on_country(
      
                 res_d[i], meta_lib[i] = agg_samples_on_rlay({**keys_d, **{'tile_id':i}}, 
                                                    gpd.GeoDataFrame([row_raw], crs=crs), 
-                                                   *args, log=log)
+                                                   *args, log=log, dev=dev)
             except Exception as e:
                 log.error(f'for {i} got error\n    {e}')
                 err_d[i] = {**{'error': str(e), 'now':datetime.now()}, **row_raw.to_dict()}
@@ -487,7 +501,7 @@ def run_agg_samples_on_country(
  
 if __name__ == '__main__':
     
-    run_agg_samples_on_country('DEU', '500_fluvial', max_workers=2)
+    run_agg_samples_on_country('DEU', '050_fluvial',60, max_workers=2, dev=False)
     
     
     

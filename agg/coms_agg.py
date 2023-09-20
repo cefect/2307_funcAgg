@@ -130,7 +130,13 @@ def pg_register(schema, tableName, conn_str=None):
         with conn.cursor() as cur:
             cur.execute(f"""SELECT Populate_Geometry_Columns(%s::regclass)""", (f'{schema}.{tableName}', ))
             
-            
+def pg_comment(schema, tableName, cmt_str, conn_str=None):
+    """alter the comment on a table"""
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
+        
+    with psycopg2.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""COMMENT ON TABLE {schema}.{tableName} IS %s""", (cmt_str, ))
             
             
             
