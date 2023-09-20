@@ -50,7 +50,7 @@ from coms import (
 
 def pg_spatialIndex_vacuum(
         schema_tables=[
-            ('grids','agg_deu_0000060'),
+            #('grids','agg_deu_0000060'),
             ('grids','agg_deu_0000240'),
             ('grids','agg_deu_0001020'),
             ('inters','deu'),
@@ -138,7 +138,7 @@ def pg_spatialIndex_vacuum(
         
 if __name__ == '__main__':
     
-    pg_spatialIndex_vacuum(dev=True)
+    pg_spatialIndex_vacuum(dev=False)
     
     
     
