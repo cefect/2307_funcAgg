@@ -4,7 +4,7 @@ Created on Aug. 24, 2023
 @author: cefect
 '''
 import argparse
-from agg._04_purge import run_purge_grids as func
+from agg._04_occupied import run_grids_occupied_stats as func
 
  
 

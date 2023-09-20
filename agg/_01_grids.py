@@ -263,7 +263,7 @@ def run_build_agg_grids(
     
     Returns
     --------------
-    postgres table (schema=grids) per country and grid_size
+    postgres table (grids.agg_{country_key}_{grid_size:07d}) per country and grid_size
     
     """
     #===========================================================================

@@ -64,7 +64,7 @@ def run_join_agg_grids(
 
     Returns
     ----------
-    Postgres table [inters_agg.bldgs_grid_link_{country_key}_{grid_size:04d}]
+    Postgres table [agg_bldg.bldgs_grid_link_{country_key}_{grid_size:04d}]
         bulding to grid links (only buidlings with some depths on f010_fluvial)
 
     
@@ -119,7 +119,7 @@ def run_join_agg_grids(
 def _build_grid_inters_join(
         grid_size, country_key, tableName, conn_d, log,
         epsg_id=equal_area_epsg,
-        out_schema = 'inters_agg',
+        out_schema = 'agg_bldg',
         dev=False,
         haz_key='f010_fluvial',
         ):
