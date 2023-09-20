@@ -70,6 +70,8 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
     log.debug(f'w/ {ser.shape} and  {len(func_d)} funcs')
     
     assert isinstance(ser, pd.Series)
+    
+    if dev: use_cache=False
     #===========================================================================
     # get ofp
     #===========================================================================
@@ -368,10 +370,10 @@ if __name__ == '__main__':
  
     
     
-    #run_bldg_loss('DEU')
+    run_bldg_loss('deu', dev=True)
     
  
-    run_agg_loss('deu', dev=True)
+    #run_agg_loss('deu', dev=True)
  
 
         
