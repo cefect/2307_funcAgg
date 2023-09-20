@@ -28,7 +28,7 @@ from sqlalchemy import create_engine, URL
 from tqdm import tqdm
 
 from agg.coms_agg import (
-    get_conn_str, pg_vacuum, pg_spatialIndex, pg_getCRS, pg_exe, pg_register
+    get_conn_str, pg_vacuum, pg_spatialIndex, pg_getCRS, pg_exe, pg_register, pg_comment
     )
 
 from coms import (
@@ -43,7 +43,7 @@ from definitions import wrk_dir, lib_dir, postgres_d, index_country_fp_d, temp_d
 #===============================================================================
 
 
-def to_post(schema, tableName, gdf, first, conn_str=None, log=None):
+def to_post(schema, tableName, df, first, conn_str=None, log=None):
     """load a table to geopanbdas"""
     if conn_str is None: conn_str=get_conn_str(postgres_d)
  
@@ -61,10 +61,10 @@ def to_post(schema, tableName, gdf, first, conn_str=None, log=None):
     try: 
         
          
-        log.debug(f'porting {gdf.shape} to {tableName}')
+        log.debug(f'porting {df.shape} to {tableName}')
         if_exists = 'replace' if first else 'append'
          
-        gdf.to_postgis(tableName, engine, schema=schema, 
+        df.to_sql(tableName, engine, schema=schema, 
                                            if_exists=if_exists, 
                                            index=False, 
                                            #index_label=dxcol.index.names,
@@ -84,7 +84,7 @@ def to_post(schema, tableName, gdf, first, conn_str=None, log=None):
     return 
 
 
-def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True):
+def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True, dev=False):
     """concat a set agg samples on hazard key using the index frame for a single index grid"""
     
     """
@@ -98,11 +98,12 @@ def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True):
     if out_dir is None: out_dir=os.path.join(temp_dir, 'agg','topost', 'concat_haz_key')
     if not os.path.exists(out_dir): os.makedirs(out_dir)
     
+    if dev: use_cache=False
     #===========================================================================
     # get ofp
     #===========================================================================
     uuid = hashlib.shake_256(f'{index_df}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)    
-    ofp = os.path.join(out_dir, f'concat_haz_{uuid}.gpkg')
+    ofp = os.path.join(out_dir, f'concat_haz_{uuid}.pkl')
     log.debug(f'on {ofp}')
     #===========================================================================
     # build
@@ -115,21 +116,21 @@ def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True):
             log.debug(haz_key)
             #take all the data from the first
             if first:
-                gdf = gpd.read_file(row['ofp'], ignore_fields=['hazard_key'])
+                df = gpd.read_file(row['ofp'], ignore_fields=['hazard_key'], ignore_geometry=True)
             else:
-                gdf = gpd.read_file(row['ofp'], include_fields=[haz_key], ignore_geometry=True).join(gdf) #just the sample data
+                df = gpd.read_file(row['ofp'], include_fields=[haz_key], ignore_geometry=True).join(df) #just the sample data
             first = False
         
         #clean columns for postgis
  
  
-        gdf1 = clean_geodataframe(gdf).rename(columns={k:'f'+k for k in index_df.index.unique('haz_key').tolist()})
+        df1 = df.rename(columns={k:'f'+k for k in index_df.index.unique('haz_key').tolist()})
         
-        gdf1.loc[:, 'country_key'] = gdf['country_key'].str.lower()
+        df1.loc[:, 'country_key'] = df['country_key'].str.lower()
         
-        gdf1.to_file(ofp)
+        df1.to_pickle(ofp)
 
-        log.debug(f'concated to get {str(gdf.shape)} and wrote to \n    {ofp}')
+        log.debug(f'concated to get {str(df1.shape)} and wrote to \n    {ofp}')
         
     #===========================================================================
     # load
@@ -137,10 +138,10 @@ def concat_on_hazard( index_df, log=None, out_dir=None, use_cache=True):
     else:
         
         log.debug(f'using cache')
-        gdf1 = gpd.read_file(ofp)
+        df1 = pd.read_pickle(ofp)
         
         
-    return gdf1
+    return df1
 
 def run_agg_samps_to_post(
         
@@ -150,19 +151,23 @@ def run_agg_samps_to_post(
        
        #index_fp=None,
                                
-        out_dir=None,
+ 
         conn_str=None,
         schema='inters_grid', 
+        dev=False
  
         ):
     """merge hazard columns then add grids to postgis"""
-    
+     
     #===========================================================================
     # defaults
     #===========================================================================
     start=datetime.now()   
     
-    country_key=country_key.lower() 
+    country_key=country_key.lower()
+    
+    if dev:
+        schema='dev' 
     
     log = init_log(name=f'toPostG')
     #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
@@ -174,22 +179,26 @@ def run_agg_samps_to_post(
     assert isinstance(haz_coln_l, list)
     keys_d=dict(country_key=country_key, grid_size=grid_size)
     log.info(f'on {keys_d}')
+    
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     #===========================================================================
     # setup table
     #===========================================================================
-    tableName=f'pts_fathom_{country_key}_grid_{grid_size:04d}'
+    tableName=f'grid_samps_{country_key}_{grid_size:04d}'
     
-    pg_exe(f'DROP TABLE IF EXISTS {schema}.{tableName}')
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
     #===========================================================================
     # build indexer
     #===========================================================================
     """because we have 1 index per hazard column"""
+    root_fldr = '05_sample'
+    if dev: root_fldr+='_dev'
     
     d=dict()
     for haz_coln in haz_coln_l:
-        
+
  
-        search_dir = os.path.join(r'l:\10_IO\2307_funcAgg\outs\agg\05_sample', country_key.upper(), haz_coln, f'{grid_size:04d}')
+        search_dir = os.path.join(r'l:\10_IO\2307_funcAgg\outs\agg',root_fldr, country_key.upper(), haz_coln, f'{grid_size:04d}')
         index_fp = get_filepaths(search_dir, '_meta', ext='.gpkg')
         
         d[haz_coln] = gpd.read_file(index_fp, ignore_geometry=True)
@@ -206,6 +215,7 @@ def run_agg_samps_to_post(
     # upload each grid
     #===========================================================================
     first = True
+    cnt=0
     for i, index_df in tqdm(index_dx.groupby('grid_id')):
         log.debug(f'on {i} w/ {index_df.shape}')
         
@@ -213,25 +223,37 @@ def run_agg_samps_to_post(
         # concat on hazar dkeys
         #=======================================================================
         """drop all the redundant columns"""
-        agg_samp_gdf = concat_on_hazard(index_df, log=log)
+        agg_samp_df = concat_on_hazard(index_df, log=log, dev=dev)
  
         
         #=======================================================================
         # load this into post
         #=======================================================================
         """using geopandas... could also use ogr2ogr"""
-        to_post(schema, tableName, agg_samp_gdf, first, conn_str=conn_str, log=log)
+        to_post(schema, tableName, agg_samp_df, first, conn_str=conn_str, log=log)
         
         first=False
+        cnt+=1
         
+    #===========================================================================
+    # post
+    #===========================================================================
+    sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (country_key, grid_size, i,j)')
+    
+    #add comment
+    cmt_str = f'port of {cnt} .gpkg sample files on grid centroids\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    pg_comment(schema, tableName, cmt_str)
+ 
+    
     #===========================================================================
     # clean
     #===========================================================================
     log.info(f'cleaning')
     try:
         pg_vacuum(schema, tableName)
-        pg_spatialIndex(schema, tableName, columnName='geometry')
-        pg_register(schema, tableName)
+        #pg_spatialIndex(schema, tableName, columnName='geometry')
+        #pg_register(schema, tableName)
     except Exception as e:
         log.error(f'failed cleaning w/\n    {e}')
             
@@ -264,4 +286,4 @@ if __name__ == '__main__':
     #run_grids_to_postgres()
     
     
-    run_agg_samps_to_post('DEU', 1020)
+    run_agg_samps_to_post('DEU', 1020, dev=True)
