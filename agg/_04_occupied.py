@@ -43,7 +43,7 @@ from definitions import temp_dir as temp_dirM
 
 from agg.coms_agg import (
     get_conn_str, pg_getCRS, pg_to_df, pg_exe, pg_getcount, pg_spatialIndex, pg_get_column_names,
-    pg_vacuum, pg_comment
+    pg_vacuum, pg_comment, pg_register
     )
 
 from coms import (
@@ -178,14 +178,15 @@ def run_grids_occupied_stats(
       
     #get exposed indexers and their feature counts
     sql(f'''CREATE TABLE {schema1}.{tableName2} AS 
-                SELECT ltab.*, rtab.geom as geometry
+                SELECT ltab.*, rtab.geom as geom
                     FROM {schema1}.{tableName1} AS ltab
                         LEFT JOIN {grid_schema}.{grid_tableName} as rtab
                             ON ltab.i=rtab.i AND ltab.j=rtab.j AND ltab.grid_size=rtab.grid_size AND ltab.country_key=rtab.country_key''')
     
     #post
+    assert pg_getCRS(schema1, tableName2)==epsg_id
     pg_exe(f'ALTER TABLE {schema1}.{tableName2} ADD PRIMARY KEY (country_key, grid_size, i, j)')
-    pg_spatialIndex(schema1, tableName2, log=log, columnName='geometry')
+    pg_spatialIndex(schema1, tableName2, log=log)
     #===========================================================================
     # compute building datats on exposed grid
     #===========================================================================
@@ -196,23 +197,24 @@ def run_grids_occupied_stats(
     #build columns
     cols = f'gtab.country_key, gtab.grid_size,gtab.i, gtab.j, COUNT(bldg.id) as bldg_cnt, '
     
-    coln_l = pg_get_column_names(bldg_expo_sch, bldg_expo_tn) 
+    #coln_l = pg_get_column_names(bldg_expo_sch, bldg_expo_tn) 
     
     haz_coln_l = ['f010_fluvial', 'f050_fluvial', 'f100_fluvial', 'f500_fluvial']
     
-    cols+=', '.join([f'COUNT(CASE WHEN bldg.{e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
+    cols+=', \n'.join([f'COUNT(CASE WHEN bldg.{e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
     
     #if dev: cols+=f', gtab.geometry as geom'
     #add geometry
     """decided to include the centroid here as we'll need it in sample"""
-    cols+=f', ST_Centroid(gtab.geometry) as geom'
+    #cols+=f', ST_Transform(ST_Centroid(gtab.geom), {epsg_id}) as geom'
+    cols+=f', ST_Centroid(gtab.geom) as geom'
     
     sql(f"""
     CREATE TABLE {out_schema}.{new_tableName} AS
         SELECT {cols}
             FROM {schema1}.{tableName2} as gtab
                 LEFT JOIN {bldg_expo_sch}.{bldg_expo_tn} as bldg
-                    ON ST_Intersects(gtab.geometry, ST_Transform(bldg.geometry, {epsg_id}))
+                    ON ST_Intersects(gtab.geom, ST_Transform(bldg.geometry, {epsg_id}))
                         GROUP BY gtab.country_key, gtab.grid_size, gtab.i, gtab.j
     """)
      
@@ -223,8 +225,9 @@ def run_grids_occupied_stats(
     # wrap
     #===========================================================================
     log.info(f'\n\nwrap')
-
     
+
+    #key
     pg_exe(f'ALTER TABLE {out_schema}.{new_tableName} ADD PRIMARY KEY (country_key, grid_size, i, j)')
     
     #comment
@@ -232,7 +235,12 @@ def run_grids_occupied_stats(
     cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
     pg_comment(out_schema, new_tableName, cmt_str)
     
+    #spatisl
+    pg_register(out_schema, new_tableName)
+    assert pg_getCRS(out_schema, new_tableName)==epsg_id
+    pg_spatialIndex(out_schema, new_tableName)
     
+    #clean up
     pg_vacuum(out_schema, new_tableName)
     
     #drop the temps
