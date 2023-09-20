@@ -19,9 +19,8 @@ import pandas as pd
 import numpy as np
 import fiona
 import geopandas as gpd
-from osgeo import ogr
-import rasterstats
-from rasterstats import zonal_stats
+ 
+ 
 
 
 from concurrent.futures import ProcessPoolExecutor
@@ -117,7 +116,7 @@ def run_grids_occupied_stats(
     if dev:
         out_schema='dev'
         link_schema='dev'
-        grid_schema='grids'
+        grid_schema='dev'
         bldg_expo_sch='dev'
         
     else:
@@ -152,18 +151,23 @@ def run_grids_occupied_stats(
     sql(f"ALTER TABLE {schema1}.{tableName1} ADD PRIMARY KEY (country_key, i, j)")
      
     ##report grid counts
-    ij_expo_cnt = pg_getcount(schema1, tableName1)
-    ij_cnt = pg_getcount('grids', grid_tableName)    
-     
-     
-    #report asset counts
-    grid_asset_cnt = int(pg_exe(f"SELECT SUM(bldg_expo_cnt) as total_fcnt FROM {schema1}.{tableName1}", return_fetch=True)[0][0])
-    asset_cnt = pg_getcount(link_schema, link_tableName)
-     
-    log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with {asset_cnt} assets')
-     
-    if not grid_asset_cnt==asset_cnt:
-        log.warning(f'asset count on grids ({grid_asset_cnt:,}) differs from \'inters_agg\' ({asset_cnt:,})')
+    """something is wrong with the tables... vacuuming and rebuilding indexes now"""
+    #===========================================================================
+    # this is very slow?
+    # log.info(f'finished indexers query')
+    # ij_expo_cnt = pg_getcount(schema1, tableName1)
+    # ij_cnt = pg_getcount('grids', grid_tableName)    
+    #  
+    #  
+    # #report asset counts
+    # grid_asset_cnt = int(pg_exe(f"SELECT SUM(bldg_expo_cnt) as total_fcnt FROM {schema1}.{tableName1}", return_fetch=True)[0][0])
+    # asset_cnt = pg_getcount(link_schema, link_tableName)
+    #  
+    # log.info(f'identified {ij_expo_cnt}/{ij_cnt} unique grids with {asset_cnt} assets')
+    #  
+    # if not grid_asset_cnt==asset_cnt:
+    #     log.warning(f'asset count on grids ({grid_asset_cnt:,}) differs from \'inters_agg\' ({asset_cnt:,})')
+    #===========================================================================
         
         
     #===========================================================================
@@ -186,11 +190,16 @@ def run_grids_occupied_stats(
     #post
     assert pg_getCRS(schema1, tableName2)==epsg_id
     pg_exe(f'ALTER TABLE {schema1}.{tableName2} ADD PRIMARY KEY (country_key, grid_size, i, j)')
+    pg_register(schema1, tableName2)
     pg_spatialIndex(schema1, tableName2, log=log)
     #===========================================================================
     # compute building datats on exposed grid
     #===========================================================================
-    log.info(f'\n\ncomputing buidling stast') 
+    """this is too slow"""
+    start_i = datetime.now()
+    fcnt = pg_getcount(schema1, tableName2)
+    
+    log.info(f'\n\ncomputing buidling stats on {fcnt} grids') 
      
     sql(f"DROP TABLE IF EXISTS {out_schema}.{new_tableName}")
     
@@ -220,7 +229,7 @@ def run_grids_occupied_stats(
      
     
 
-    
+    log.info(f'finished building stats in {(datetime.now()-start_i).total_seconds():.2f} secs')
     #===========================================================================
     # wrap
     #===========================================================================
