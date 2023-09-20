@@ -23,7 +23,7 @@ from rasterstats import zonal_stats
 
 from concurrent.futures import ProcessPoolExecutor
 
-from intersect.osm import retrieve_osm_buildings
+from _01intersect.osm import retrieve_osm_buildings
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, temp_dir, equal_area_epsg,
