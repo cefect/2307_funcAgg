@@ -262,7 +262,7 @@ def rl_to_post(
     #===========================================================================
     # wrap
     #===========================================================================
-    log.info(f'finished')
+    log.info(f'finished on \'{tableName}\'')
     
     meta_d = {
                     'tdelta':(datetime.now()-start).total_seconds(),
@@ -272,7 +272,7 @@ def rl_to_post(
                     }
     
     log.info(meta_d)
-    return 
+    return  tableName
     
 def run_agg_rl_topost(country_key, grid_size_l=None, **kwargs):
     
@@ -282,8 +282,10 @@ def run_agg_rl_topost(country_key, grid_size_l=None, **kwargs):
     d=dict()
     log.info(f'on {len(grid_size_l)} grids')
     for grid_size in grid_size_l:
-        rl_to_post(country_key, 'inters_grid', f'agg_samps_{country_key}_{grid_size:04d}', 
-                   log=log.getChild(str(grid_size)))
+        d[grid_size] = rl_to_post(country_key, 'inters_grid', f'agg_samps_{country_key}_{grid_size:04d}', 
+                   log=log.getChild(str(grid_size)), **kwargs)
+        
+    log.info(f'finished w/ \n    {d}')
 
         
 def run_bldg_rl_topost(country_key, **kwargs):
@@ -297,5 +299,5 @@ def run_bldg_rl_topost(country_key, **kwargs):
 if __name__ == '__main__':
  
     
-    #run_bldg_rl_topost('deu', dev=True)
-    run_agg_rl_topost('deu', dev=True)
+    #run_bldg_rl_topost('deu', dev=False)
+    run_agg_rl_topost('deu', dev=False)

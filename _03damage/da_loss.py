@@ -117,6 +117,8 @@ from datetime import datetime
 import psycopg2
 from sqlalchemy import create_engine, URL
 
+from scipy.stats import gaussian_kde
+
 from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d
 
 from coms import init_log, today_str, view
@@ -301,6 +303,8 @@ def plot_rl_agg_v_bldg(
     -------------
  
     """
+    raise IOError('looks pretty good. need to filter partials, add running-mean for buildings, add colorscale')
+    
     #===========================================================================
     # defaults
     #===========================================================================
@@ -324,7 +328,8 @@ def plot_rl_agg_v_bldg(
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
         dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
-    
+        
+        dx_raw=dx_raw.sample(int(len(dx_raw)*0.1))
  
  
     """
@@ -417,13 +422,31 @@ def plot_rl_agg_v_bldg(
             #prep data
             df= gdx1.droplevel(kl[2]).reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
             
-            #plot grid cent
-            ax.plot(df['grid_cent'], color='red', alpha=0.3, marker='o', linestyle='none', markersize=5, fillstyle='none',
-                    label='grid')
+
             
-            #plot bldg_mean
-            ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,
-                    label='building')
+            #===================================================================
+            # #plot bldg_mean
+            #===================================================================
+            #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
+            #as density
+            x,y = df.index.values, df['bldg_mean'].values
+            xy = np.vstack([x,y])
+            z = gaussian_kde(xy)(xy)
+            
+            # Sort the points by density, so that the densest points are plotted last
+            idx = z.argsort()
+            x, y, z = x[idx], y[idx], z[idx]
+            cax = ax.scatter(x, y, c=z, s=20, label='building')
+            
+            """
+            plt.show()
+            """
+            
+            #===================================================================
+            # #plot grid cent
+            #===================================================================
+            ax.plot(df['grid_cent'], color='black', alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
+                    label='grid')
             
     #===========================================================================
     # get some function meta
@@ -456,7 +479,7 @@ def plot_rl_agg_v_bldg(
              
         # first col
         if col_key == col_keys[0]: 
-            ax.set_ylabel(f'function \'{row_key}\')
+            ax.set_ylabel(f'function \'{row_key}\'')
              
         #=======================================================================
         # #last col
@@ -488,7 +511,7 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # write
     #===========================================================================
-    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.png')
     fig.savefig(ofp, dpi = 300,   transparent=True)
     
     plt.close('all')
@@ -516,7 +539,7 @@ if __name__=='__main__':
     
 
 
-    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=True)
+    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=False)
     
     #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
    # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')

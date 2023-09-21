@@ -243,7 +243,7 @@ def run_all(ck, grid_size_l=None, **kwargs):
         
         
 if __name__ == '__main__':
-    run_all('deu', dev=True)
+    run_all('deu', dev=False)
     #run_bldg_rl_means('deu', 1020, dev=True)
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)

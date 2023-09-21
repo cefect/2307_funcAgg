@@ -275,7 +275,7 @@ def run_view_grid_geom_union(country_key,
         
 if __name__ == '__main__':
     #run_view_grid_geom_union('deu', dev=True)
-    run_view_grid_samp_pivot('deu','f500_fluvial', dev=True, with_geom=True)
+    run_view_grid_samp_pivot('deu','f500_fluvial', dev=False, with_geom=False)
     
     
     

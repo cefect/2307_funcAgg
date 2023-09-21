@@ -230,7 +230,7 @@ def get_grid_rl_dx(
         log=None,
         conn_str=None,
         dev=False,
-        use_cache=False,
+        use_cache=True,
  
         out_dir=None,
         limit=None,
@@ -258,7 +258,7 @@ def get_grid_rl_dx(
     # cache
     #===========================================================================
     fnstr = f'grid_rl_{country_key}_{haz_key}'
-    uuid = hashlib.shake_256(f'{fnstr}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
+    uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
     
     if (not os.path.exists(ofp)) or (not use_cache):
@@ -341,7 +341,7 @@ def get_grid_rl_dx(
         #===========================================================================
  
         log.info(f'writing {dx.shape} to \n    {ofp}')
-        dx.sort_index(sort_remaining=True).to_pickle(ofp)
+        dx.sort_index(sort_remaining=True).sort_index(sort_remaining=True, axis=1).to_pickle(ofp)
     
     else:
         log.info(f'loading from cache:\n    {ofp}')
@@ -353,10 +353,10 @@ def get_grid_rl_dx(
 
 
 if __name__ == '__main__':
-    #run_view_merge_grid('deu', 'f500_fluvial',dev=True)
-    #run_view_join_depths('deu', 'f500_fluvial', dev=True, with_geom=True)
+    #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
+    #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
     
-    get_grid_rl_dx('deu', 'f500_fluvial', dev=True)
+    get_grid_rl_dx('deu', 'f500_fluvial', dev=False, limit=None)
         
         
         

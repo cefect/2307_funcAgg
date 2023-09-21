@@ -251,7 +251,7 @@ def run_agg_samps_to_post(
     
     #add comment
     cmt_str = f'port of {cnt} .gpkg sample files on grid centroids from {base_dir}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M")
     pg_comment(schema, tableName, cmt_str)
  
     
