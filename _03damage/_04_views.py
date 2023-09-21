@@ -81,7 +81,7 @@ def run_view_merge_grid(country_key, haz_key,
     #===========================================================================
     # buidl query
     #===========================================================================
-    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName}')
+    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName} CASCADE')
     
     cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
     
@@ -227,9 +227,9 @@ def run_view_join_depths(
 
 if __name__ == '__main__':
     #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
-    #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
+    run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
     
- )
+ 
         
         
         

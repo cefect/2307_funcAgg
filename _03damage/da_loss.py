@@ -291,7 +291,7 @@ def plot_rl_agg_v_bldg(
         haz_key='f500_fluvial',
         out_dir=None,
         figsize=None,
-        min_wet_frac=0.9,
+        min_wet_frac=0.95,
         dev=False,
         ):
     

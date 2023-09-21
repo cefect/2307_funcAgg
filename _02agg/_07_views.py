@@ -313,9 +313,11 @@ def create_view_grid_wd_wgeo(
         schema_right=schema
     else:
         schema='inters_grid'
-        schema_right='grid'
+        schema_right='grids'
         
     table_left = f'agg_samps_{country_key}_{grid_size:04d}'
+    
+    #raw grids w/ polygon geometry. see _02agg._01_grids.run_build_agg_grids()
     table_right=f'agg_{country_key}_{grid_size:07d}'
     tableName=f'agg_expo_{country_key}_{grid_size:04d}_poly'
         
@@ -343,6 +345,20 @@ def create_view_grid_wd_wgeo(
     sql(cmd_str)
     
     log.info(f'finished w/ {tableName}')
+    
+    #===========================================================================
+    # wrap
+    #===========================================================================
+    pg_spatialIndex(schema, tableName)
+    
+        #meta
+    meta_d = {
+        'tdelta':(datetime.now() - start).total_seconds(), 
+        'RAM_GB':psutil.virtual_memory()[3] / 1000000000, 
+        #'postgres_GB':get_directory_size(postgres_dir)}
+        #'output_MB':os.path.getsize(ofp)/(1024**2)
+        }
+    log.info(f'finished w/ {tableName} \n{meta_d}')
  
  
     
@@ -350,6 +366,7 @@ def create_view_grid_wd_wgeo(
 
 
 def run_view_grid_wd_wgeo(ck, grid_size_l=None, **kwargs):
+    """ takes a few mins"""
     log = init_log(name=f'grid')
     
     if grid_size_l is None: grid_size_l = gridsize_default_l
@@ -364,7 +381,7 @@ if __name__ == '__main__':
     #run_view_grid_geom_union('deu', dev=True)
     #run_view_grid_samp_pivot('deu','f500_fluvial', dev=False, with_geom=False)
     
-    run_view_grid_wd_wgeo('deu', dev=True)
+    run_view_grid_wd_wgeo('deu', dev=False)
     
     
     
