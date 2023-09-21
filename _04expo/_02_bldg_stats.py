@@ -211,7 +211,7 @@ def run_expo_stats_grouped(
     cols+=', COUNT(id) as bldg_cnt, '
     
  
-    cols+=', \n'.join([f'COUNT(CASE WHEN {e} > 0 THEN 1 ELSE NULL END) as {e}_wetCnt' for e in haz_coln_l])
+    cols+=', \n'.join([f'COUNT(CASE WHEN {e} > 0 THEN 1 ELSE NULL END) as {e}_wetcnt' for e in haz_coln_l])
     #cols+= ', '.join([f'CAST(AVG({e}) AS int) AS {e}_mean' for e in haz_coln_l])
     
     #groupers
@@ -279,13 +279,105 @@ def run_all(ck, **kwargs):
     
     for grid_size in gridsize_default_l:
         run_expo_stats_grouped(ck, grid_size, log=log, **kwargs)
+        
+def create_view_merge_stats(country_key, haz_key,
+                         grid_size_l=None,
+         dev=False, conn_str=None,
+         with_geom=False,
+        ):
+    
+    """create a view by unioning all the grid stats 
+    
+    useful for joins later"""
+    
+
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()  
+    
+    log = init_log(name=f'view')
+    
+    if grid_size_l is None: grid_size_l = gridsize_default_l
+    
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    #===========================================================================
+    # table params
+    #===========================================================================
+    keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
+    if dev:
+        schema = 'dev'
+    else:
+        schema='expo'
+ 
+    tableName=f'grid_bldg_stats_{country_key}_{haz_key}'
+    
+    #===========================================================================
+    # query
+    #===========================================================================
+    sql(f'DROP VIEW IF EXISTS {schema}.{tableName}')
+    
+    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
+    
+    first = True
+    for grid_size in grid_size_l:        
+        tableName_i = f'grid_bldg_stats_{country_key}_{grid_size:04d}'
+                
+        if not first:
+            cmd_str += 'UNION\n'
+        else:
+            #build column selection (only want 1 hazard)
+            full_coln_l = pg_get_column_names(schema, tableName_i)
+            haz_col = [e for e in full_coln_l  if haz_key in e][0] #column name of wet counts we want
+            keep_coln_l = [e for e in full_coln_l  if not e.endswith('wetcnt')] #other columns            
+            
+            #assemble
+            cols = ', '.join(keep_coln_l)
+            cols+=f', {haz_col} as wet_cnt'
+ 
+        
+        cmd_str += f'SELECT {cols}\n'
+        cmd_str += f'FROM {schema}.{tableName_i} \n'
+        
+        """no haz_key column. each row has wet stats for each haz key
+        cmd_str += f'WHERE {tableName_i}.haz_key=\'{haz_key}\' \n'"""
+        
+        
+        # filters        
+        first = False
+    
+    cmd_str+=f'ORDER BY grid_size, i, j\n'
+    sql(cmd_str)
+    
+    #===========================================================================
+    # join geometry
+    #===========================================================================
+    if with_geom:
+        create_view_join_grid_geom(schema, tableName, country_key, log=log, dev=dev, conn_str=conn_str)
+    
+    #===========================================================================
+    # wrap
+    #===========================================================================
+        #meta
+    meta_d = {
+        'tdelta':(datetime.now() - start).total_seconds(), 
+        'RAM_GB':psutil.virtual_memory()[3] / 1000000000, 
+        #'postgres_GB':get_directory_size(postgres_dir)}
+        #'output_MB':os.path.getsize(ofp)/(1024**2)
+        }
+    log.info(f'finished on {tableName} w/ \n{meta_d}')
+    
+    return tableName
     
  
 if __name__ == '__main__':
     
-    run_expo_stats_grouped('deu', 1020, dev=True)
+    #run_expo_stats_grouped('deu', 1020, dev=True)
     
     #run_all('deu', dev=True)
+    
+    create_view_merge_stats('deu', 'f500_fluvial', dev=True)
     
     
     
