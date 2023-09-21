@@ -126,10 +126,11 @@ from coms_da import get_matrix_fig, _get_cmap, _hide_ax
 from funcMetrics.func_prep import get_funcLib
 
 from _02agg.coms_agg import (
-    get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount
+    get_conn_str,   
     )
 
-from _04expo._03_views import get_grid_rl_dx
+from _03damage._05_mean_bins import get_grid_rl_dx, compute_binned_mean, filter_rl_dx_minWetFrac
+ 
 
 
 
@@ -285,6 +286,9 @@ def plot_rl_raw(
  
 
  
+
+ 
+
 def plot_rl_agg_v_bldg(
         dx_raw=None,
         country_key='deu',
@@ -292,6 +296,7 @@ def plot_rl_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=0.95,
+        samp_frac=0.1,
         dev=False,
         ):
     
@@ -330,7 +335,7 @@ def plot_rl_agg_v_bldg(
         dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
     
     if not dev:
-        dx_raw=dx_raw.sample(int(len(dx_raw)*0.1))
+        dx_raw=dx_raw.sample(int(len(dx_raw)*samp_frac))
  
  
     """
@@ -347,27 +352,19 @@ def plot_rl_agg_v_bldg(
     assert haz_key in mdex.unique('haz_key')
     
     #===========================================================================
-    # filter data
+    # filter data---------
     #===========================================================================
     """want to exclude partials
-    TODO: join wet_cnt and dry_cnt and use these (see  _04expo)    
-        for now, using a somewhat dummy filter based on the max exposed wet cnt
-            which comes from 500_fluvial
-    """
-    mdf = mdex.to_frame().reset_index(drop=True)
     
-    mdf['wet_frac'] = mdf['wet_cnt']/mdf['bldg_cnt']
-     
-  
-    assert np.all(mdf['wet_frac'].max()<=1.0)
-    bx = (mdf['wet_frac']>min_wet_frac).values
+    view(mdf.head(100))
  
+    """
+    dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
-    log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
-    
-    dx2 = dx1.loc[bx, :].droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])
-    
-    mdex = dx2.index
+ 
+    # get binned means 
+    mean_bin_dx = compute_binned_mean(dx2)
+    raise IOError('stopped here')
     #===========================================================================
     # setup indexers
     #===========================================================================        
@@ -497,6 +494,8 @@ def plot_rl_agg_v_bldg(
     macro_ax.set_ylabel(f'relative loss', labelpad=20)
     macro_ax.set_xlabel(f'WSH (m)')
     
+ 
+    
     #===========================================================================
     # macro_ax2 = macro_ax.twinx()
     # _hide_ax(macro_ax2)
@@ -538,7 +537,7 @@ if __name__=='__main__':
     
 
 
-    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=True)
+    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=False)
     
     #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
    # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
