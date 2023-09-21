@@ -10,7 +10,7 @@ compute losses from depths using depth-damage functions
 #===============================================================================
 # IMPORTS--------
 #===============================================================================
-import os, hashlib, sys, subprocess
+import os, hashlib, sys, subprocess, copy
 
  
  
@@ -92,13 +92,18 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
  
             log.debug(df_id)
             #get loss
-            if not dev:
-                loss_ar = get_rloss(dd_ar, wd_ar, prec=None) #depths in table are rounded enough
-            else:
-                loss_ar = np.full(len(wd_ar), float(df_id))
+ 
+            try:
+                loss_ar = get_rloss(dd_ar.copy(), wd_ar, prec=None) #depths in table are rounded enough
+            except Exception as e:
+                raise IOError(f'failed to compute losse w/ {df_id}\n    {e}')
+ 
+            #loss_ar = np.full(len(wd_ar), float(df_id))
             
             #append index and collect
             d[df_id] = pd.Series(loss_ar, index=ser.index, name=df_id)
+            
+            #print(d[df_id].to_dict())
     
         #===================================================================
         # #collect and wirte
@@ -239,7 +244,14 @@ def loss_calc_country_assetType(
     view(fserx_s)
     """
     #collapse to dictinoary of wd-rl
-    func_d = {df_id: gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values for df_id, gserx in fserx_s.groupby('df_id')}
+    #func_d = {df_id: gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values for df_id, gserx in fserx_s.groupby('df_id')}
+    
+    func_d = dict()    
+    for df_id, gserx in fserx_s.groupby('df_id'):
+        func_d[df_id] = gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values.copy()
+     
+    
+ 
         
  
     #===========================================================================
@@ -264,7 +276,7 @@ def loss_calc_country_assetType(
         #=======================================================================
         if asset_type=='bldgs':
             
-            index_col=['country_key','id']
+            index_col=['country_key','gid','id']
         elif asset_type=='grid':
  
             index_col=['country_key','grid_size', 'i', 'j']
@@ -291,10 +303,13 @@ def loss_calc_country_assetType(
  
         for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
             log.info(f'{i} on {gdf.shape}')
+            if len(gdf)==0:
+                log.warning(f'for chunk {i} got no rows... skipping') #not sure why this would happen
+                continue
             assert len(gdf.columns)==1
             fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
-            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], func_d, wd_scale, out_dir, fnstr,log=log, dev=dev)
+            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
             
             """
             view(gdf.head())
@@ -370,10 +385,10 @@ if __name__ == '__main__':
  
     
     
-    #run_bldg_loss('deu', dev=True)
+    run_bldg_loss('deu', dev=True)
     
  
-    run_agg_loss('deu', dev=True)
+    #run_agg_loss('deu', dev=True)
  
 
         

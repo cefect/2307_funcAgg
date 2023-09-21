@@ -104,6 +104,8 @@ def rl_to_post(
         ):
     """concat loss chunk .pkls and port to post
     
+    NOTE: see da_loss.plot_rl_raw for some diagnostic plots
+    
     
     Returns
     ---------
@@ -211,7 +213,7 @@ def rl_to_post(
             # #clean up
             #===================================================================
             df1 = df_raw.copy().round(1).astype(np.float32)
-            df1.columns = {f'dfid_{e:04d}' for e in df1.columns}
+            df1.columns = [f'dfid_{e:04d}' for e in df1.columns]
             df1.columns.name=None
             
             df2 = df1.reset_index()
@@ -295,5 +297,5 @@ def run_bldg_rl_topost(country_key, **kwargs):
 if __name__ == '__main__':
  
     
-    #run_bldg_rl_topost('DEU')
+    #run_bldg_rl_topost('deu', dev=True)
     run_agg_rl_topost('deu', dev=True)
