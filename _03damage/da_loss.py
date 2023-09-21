@@ -117,6 +117,8 @@ from datetime import datetime
 import psycopg2
 from sqlalchemy import create_engine, URL
 
+from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d
+
 from coms import init_log, today_str, view
 from coms_da import get_matrix_fig, _get_cmap, _hide_ax
 from funcMetrics.func_prep import get_funcLib
@@ -125,7 +127,9 @@ from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount
     )
 
-from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d
+from _03damage._04_views import get_grid_rl_dx
+
+
 
 #===============================================================================
 # data
@@ -280,12 +284,13 @@ def plot_rl_raw(
 
  
 def plot_rl_agg_v_bldg(
-        pick_fp=r'l:\10_IO\2307_funcAgg\outs\damage\03_mean\deu\f500_fluvial\rl_mean_deu_f500_fluvial_345824_20230919.pkl',
+        dx_raw=None,
         country_key='deu',
-        haz_key=f'f500_fluvial',
+        haz_key='f500_fluvial',
         out_dir=None,
         figsize=None,
         min_wet_frac=0.9,
+        dev=False,
         ):
     
     """plot relative loss from grid centroids and building means    
@@ -294,15 +299,12 @@ def plot_rl_agg_v_bldg(
     
     Params
     -------------
-    pick_fp: str
-        filepath to pd.DataFrame. 
-        pre-filtered so we only have grids with some centroid and building loss
-        see _03_rl_mean_bldg.run_extract_haz (only 1 haz_key)
+ 
     """
     #===========================================================================
     # defaults
     #===========================================================================
-    raise IOError('something is wrong with the data. wet_cnt/dry_cnt is bad. grid_cent loss labels seem to be mixed')
+ 
   
     if out_dir is None:
         out_dir=os.path.join(wrk_dir, 'outs', 'funcMetrics', 'da', today_str)
@@ -319,18 +321,20 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # load data
     #===========================================================================
-    dx_raw = pd.read_pickle(pick_fp).xs(country_key, level='country_key')
-    dx_raw=dx_raw.sample(int(1e4))
+    if dx_raw is None:
+        #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
+        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
+    
+ 
+ 
     """
     view(dx_raw.head(100))
-    view(dx_raw.head(100).stack())
-    view(dx.head(100))
-    dx['grid_size']=999
-    dx.set_index('grid_size', append=True, inplace=True)
+    view(dx1.head(100))
+ 
     
     """
     
-    dx1 = dx_raw.stack()
+    dx1 = dx_raw.stack().droplevel('country_key')
     mdex = dx1.index
     
     assert len(mdex.unique('haz_key'))==1
@@ -339,17 +343,25 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # filter data
     #===========================================================================
-    """want to exclude partials"""
+    """want to exclude partials
+    TODO: join wet_cnt and dry_cnt and use these (see  _04expo)    
+        for now, using a somewhat dummy filter based on the max exposed wet cnt
+            which comes from 500_fluvial
+    """
     mdf = mdex.to_frame().reset_index(drop=True)
-    mdf['wet_frac'] = mdf['wet_cnt']/mdf['bldg_cnt']
     
-    """waiting for this column to be fixed"""
-    #assert mdf['wet_frac'].max()<=1.0
-    bx = mdf['wet_frac']>(min_wet_frac+1)
+ #==============================================================================
+ #    mdf['wet_frac'] = mdf['wet_cnt']/mdf['bldg_cnt']
+ #    
+ # 
+ #    #assert mdf['wet_frac'].max()<=1.0
+ #    bx = mdf['wet_frac']>(min_wet_frac+1)
+ #==============================================================================
+    bx = (mdf['bldg_expo_cnt']>1).values
     
     log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
     
-    dx2 = dx1.loc[bx.values, :].droplevel(['wet_cnt', 'bldg_cnt'])
+    dx2 = dx1.loc[bx, :].droplevel(['bldg_expo_cnt'])
     
     mdex = dx2.index
     #===========================================================================
@@ -371,20 +383,7 @@ def plot_rl_agg_v_bldg(
     
     color_d = _get_cmap(color_keys, name='viridis')
     
-    #add tinws
-    #===========================================================================
-    # twin_ax_d=dict()
-    # for row_key, col_key, ax in rc_ax_iter:
-    #     ax.set_xlim((0, 6.0))
-    #     
-    #     if not row_key in twin_ax_d:
-    #         twin_ax_d[row_key] = dict()
-    #         
-    #     if not col_key in twin_ax_d[row_key]:
-    #         ax2 = ax.twinx()
-    #         ax2.set_ylim(0, 0.12)
-    #         twin_ax_d[row_key][col_key] = ax2
-    #===========================================================================
+ 
         
     
     #===========================================================================
@@ -457,7 +456,7 @@ def plot_rl_agg_v_bldg(
              
         # first col
         if col_key == col_keys[0]: 
-            ax.set_ylabel(f'function {row_key}')
+            ax.set_ylabel(f'function \'{row_key}\')
              
         #=======================================================================
         # #last col
@@ -517,14 +516,10 @@ if __name__=='__main__':
     
 
 
-    #plot_dfunc_matrix()
-    
-    #plot_gradient_matrix(fp=r'l:\10_IO\2307_funcAgg\outs\funcs\01_deriv\derivs_3266_20230907.pkl')
-    
-    #plot_rl_agg_v_bldg()
+    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=True)
     
     #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
-    plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
+   # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
 
     
  

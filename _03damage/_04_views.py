@@ -348,7 +348,7 @@ def get_grid_rl_dx(
         dx = pd.read_pickle(ofp)
  
  
-    
+    log.info(f'got {dx.shape}')
     return dx
 
 
