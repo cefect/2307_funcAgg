@@ -280,6 +280,11 @@ def agg_samples_on_rlay(kdi, row_gdf, gridTable, grid_schema,
         
         agg_gridsC_gdf = _sql_to_gdf_from_spatial_intersect(grid_schema, gridTable, row_gdf)
         log.debug(f'    got {len(agg_gridsC_gdf)} agg grids intersecting haz tile')
+        
+        if not len(agg_gridsC_gdf)>0:
+ 
+            raise IOError(f'no agg intersect haz grid')
+ 
         #=======================================================================
         # sample
         #=======================================================================
@@ -287,10 +292,12 @@ def agg_samples_on_rlay(kdi, row_gdf, gridTable, grid_schema,
         agg_gridsC_samp_gdf = sample_rlay_from_gdf_wbt(rlay_fp, agg_gridsC_gdf, kdi['hazard_key'], pfx_i, 
             log=log, out_dir=os.path.join(temp_dir, 'wbt_samp'))
     
-        if not len(agg_gridsC_samp_gdf)>0:
-            """just deal with this during collection"""
-            log.warning(f'got no features')
-            return 'empty', {}
+        #=======================================================================
+        # if not len(agg_gridsC_samp_gdf)>0:
+        #     """just deal with this during collection"""
+        #     log.warning(f'got no features')
+        #     return 'empty', {}
+        #=======================================================================
         #=======================================================================
         # add some indexers
         #=======================================================================
@@ -413,7 +420,7 @@ def run_agg_samples_on_country(
     #get country slice
     """the hazard tiles are global... could also add a country_key column upstream"""
     if not dev:
-        aoi_bbox = shapely.geometry.box(*gpd.read_file(index_country_fp_d[country_key]).to_crs(crs).geometry.total_bounds)
+        aoi_bbox = shapely.geometry.box(*gpd.read_file(index_country_fp_d[country_key.upper()]).to_crs(crs).geometry.total_bounds)
     else:
         aoi_bbox = shapely.geometry.box(*gpd.GeoSeries([shapely.wkt.loads(aoi_wkt_str)], crs=4326).to_crs(crs).geometry.total_bounds)
         
@@ -437,10 +444,7 @@ def run_agg_samples_on_country(
     cnt=0
     meta_lib, res_d, err_d=dict(), dict(), dict()
 
-    
-    
-    
-    
+ 
     args = (tableName, schema,   haz_base_dir, out_dir, temp_dir)
     #===========================================================================
     # single -------
@@ -449,22 +453,19 @@ def run_agg_samples_on_country(
    
     if max_workers is None:
         for i, row_raw in haz_tile_gdf.iterrows():
-     
             
-            log.info(f'{country_key}.{hazard_key} on grid {i}')
-            
-            res_d[i], meta_lib[i] = agg_samples_on_rlay({**keys_d, **{'tile_id':i}}, 
-                                                   gpd.GeoDataFrame([row_raw], crs=crs), 
-                                                   *args, log=log, dev=dev)
-     
-#===============================================================================
-#             try:
-#      
-# 
-#             except Exception as e:
-#                 log.error(f'for {i} got error\n    {e}')
-#                 err_d[i] = {**{'error': str(e), 'now':datetime.now()}, **row_raw.to_dict()}
-#===============================================================================
+   
+ 
+            try:
+                log.info(f'{country_key}.{hazard_key} on grid {i}')
+             
+                res_d[i], meta_lib[i] = agg_samples_on_rlay({**keys_d, **{'tile_id':i}}, 
+                                                       gpd.GeoDataFrame([row_raw], crs=crs), 
+                                                       *args, log=log, dev=dev) 
+  
+            except Exception as e:
+                log.error(f'for {i} got error\n    {e}')
+                err_d[i] = {**{'error': str(e), 'now':datetime.now()}, **row_raw.to_dict()}
                             
             
             cnt+=1
@@ -540,9 +541,9 @@ def run_all(ck, **kwargs):
         
 if __name__ == '__main__':
     
-    #run_agg_samples_on_country('deu', '050_fluvial',60, max_workers=2, dev=True)
+    run_agg_samples_on_country('deu', '050_fluvial',1020, max_workers=4, dev=False)
     
-    run_all('deu', dev=True)
+    #run_all('deu', dev=True)
     
     
     

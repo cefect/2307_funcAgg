@@ -25,6 +25,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     run_agg_samples_on_country(args.country_key.upper(), args.hazard_key, args.grid_size,
-                               dev=False 
-                               #max_workers=args.max_workers,
+                               dev=False,
+                               max_workers=args.max_workers,
                                )
