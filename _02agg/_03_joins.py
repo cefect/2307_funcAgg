@@ -61,6 +61,7 @@ def run_join_agg_grids(
         ):
     """join grid ids to building points
     
+    uses inters.{country_key}
 
     Returns
     ----------

@@ -111,19 +111,19 @@ def run_grids_occupied_stats(
     link_tableName=f'bldgs_grid_link_{country_key}_{grid_size:04d}'    
     grid_tableName=f'agg_{country_key}_{grid_size:07d}'    
     new_tableName=f'agg_occupied_{country_key}_{grid_size:04d}'
-    bldg_expo_tn = country_key.lower()
+    #bldg_expo_tn = country_key.lower()
     
     if dev:
         out_schema='dev'
         link_schema='dev'
         grid_schema='dev'
-        bldg_expo_sch='dev'
+        #bldg_expo_sch='dev'
         
     else:
         link_schema='agg_bldg'
         out_schema='agg_bldg'
         grid_schema='grids'
-        bldg_expo_sch='inters'
+        #bldg_expo_sch='inters'
             
     #===========================================================================
     # create a temp table of unique indexers

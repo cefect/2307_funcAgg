@@ -27,8 +27,9 @@ from sqlalchemy import create_engine, URL
 
 from tqdm import tqdm
 
-from agg.coms_agg import (
-    get_conn_str, pg_vacuum, pg_spatialIndex, pg_getCRS, pg_exe, pg_register, pg_getcount
+from _02agg.coms_agg import (
+    get_conn_str, pg_vacuum, pg_spatialIndex, pg_getCRS, pg_exe, pg_register, pg_getcount,
+    pg_comment
     )
 
 from coms import (
@@ -98,9 +99,17 @@ def rl_to_post(
  
         schema='damage',
          log=None,
+         dev=True,
  
         ):
-    """concat losses and port to post"""
+    """concat loss chunk .pkls and port to post
+    
+    
+    Returns
+    ---------
+    table:
+        damage.rl_{country_key}_{asset_type}
+        """
     
     #===========================================================================
     # defaults
@@ -129,18 +138,28 @@ def rl_to_post(
     if asset_type=='grid':
         grid_size=int(asset_tableName.split('_')[-1])
         keys_d['grid_size'] = grid_size
+        keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
+    elif asset_type=='bldgs':
+        keys_l = ['country_key', 'gid', 'id', 'haz_key']
 
+    if dev:
+        schema='dev'
+        asset_schema='dev'
     #===========================================================================
-    # load indexer
+    # load indexers
     #===========================================================================
     """because we have 1 index per hazard column"""
     
-    d=dict()
+    #d=dict()
+ 
+    
     if search_dir is None: 
         search_dir = os.path.join(r'l:\10_IO\2307_funcAgg\outs\damage\01_rl', asset_schema, asset_tableName)
         
     #collect metas
     meta_fp = get_filepaths(search_dir, '_meta', ext='.pkl', recursive=True, single=True)    
+    
+    #['chunk', 'country_key', 'asset_schema', 'tableName', 'haz_key']
     serx = pd.read_pickle(meta_fp).stack().droplevel('out_dir').rename('fp')
  
  
@@ -167,6 +186,7 @@ def rl_to_post(
     #===========================================================================
     # createa a table for each hazard key
     #===========================================================================
+    cnt=0
     first=True
     for haz_key, gserx in serx.groupby('haz_key'):
         log.info(f'{tableName} on {haz_key} w/ {gserx.shape}')
@@ -200,12 +220,7 @@ def rl_to_post(
                 df2 = df2.sort_values('id')
             
             df2.loc[:, 'country_key'] = df2['country_key'].str.lower()
-            
-            """
-            view(df2.head(100))
-            """
-            
-
+ 
             #===================================================================
             # port
             #===================================================================
@@ -213,16 +228,27 @@ def rl_to_post(
  
         
             first=False
+            cnt+=1
         
         log.info(f'finished {haz_key}\n\n')
         
  
-    row_cnt = pg_getcount(schema, tableName)
-    pg_exe(f'ALTER TABLE temp.{tableName} ADD PRIMARY KEY (haz_key, i,j)')
+
     #===========================================================================
-    # clean
+    # clean-----
     #===========================================================================
-    log.info(f'cleaning {tableName} w/ {row_cnt} rows')
+    log.info(f'cleaning {schema}.{tableName}')
+    
+ 
+    
+    keys_str = ', '.join(keys_l)
+    pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+    cmt_str = f'port of {cnt} .pkl rl results for \'{asset_type}\' loaded from {base_dir}\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    pg_comment(schema, tableName, cmt_str)
+    
+    log.info(f'cleaning {tableName} w/ {pg_getcount(schema, tableName)} rows')
     try:
         pg_vacuum(schema, tableName)
         """table is a-spatial"""
@@ -246,7 +272,7 @@ def rl_to_post(
     log.info(meta_d)
     return 
     
-def run_agg_rl_to_post(country_key, grid_size_l=None, **kwargs):
+def run_agg_rl_topost(country_key, grid_size_l=None, **kwargs):
     
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
@@ -254,7 +280,7 @@ def run_agg_rl_to_post(country_key, grid_size_l=None, **kwargs):
     d=dict()
     log.info(f'on {len(grid_size_l)} grids')
     for grid_size in grid_size_l:
-        rl_to_post(country_key, 'inters_grid', f'pts_fathom_{country_key.lower()}_grid_{grid_size:04d}', 
+        rl_to_post(country_key, 'inters_grid', f'agg_samps_{country_key}_{grid_size:04d}', 
                    log=log.getChild(str(grid_size)))
 
         
@@ -267,7 +293,7 @@ def run_bldg_rl_topost(country_key, **kwargs):
     
 
 if __name__ == '__main__':
-    #run_grids_to_postgres()
+ 
     
     #run_bldg_rl_topost('DEU')
-    run_agg_rl_to_post('DEU', grid_size_l=[240, 1020])
+    run_agg_rl_topost('deu', dev=True)

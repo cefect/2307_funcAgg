@@ -55,7 +55,7 @@ from _03damage.coms_dmg import get_rloss
 from funcMetrics.func_prep import get_funcLib
 from funcMetrics.coms_fm import slice_serx, force_max_depth, force_zero_zero, force_monotonic
 
-from agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
+from _02agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
 
 
 
@@ -370,10 +370,10 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=True)
+    #run_bldg_loss('deu', dev=True)
     
  
-    #run_agg_loss('deu', dev=True)
+    run_agg_loss('deu', dev=True)
  
 
         
