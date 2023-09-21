@@ -377,9 +377,11 @@ def get_grid_rl_dx(
 
 if __name__ == '__main__':
     
-    #create_view_join_stats_to_rl('deu', 'f500_fluvial', dev=True, with_geom=False)
+    #create_view_merge_stats('deu', 'f500_fluvial', dev=False)
     
-    get_grid_rl_dx('deu', 'f500_fluvial', dev=True, limit=None)
+    #create_view_join_stats_to_rl('deu', 'f500_fluvial', dev=False, with_geom=False)
+    
+    get_grid_rl_dx('deu', 'f500_fluvial', dev=False, limit=None)
 
 
 

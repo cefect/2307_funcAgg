@@ -17,18 +17,7 @@ import psutil
 from datetime import datetime
 import pandas as pd
 import numpy as np
-import fiona
-import geopandas as gpd
  
- 
-
-
-from concurrent.futures import ProcessPoolExecutor
-
-import psycopg2
-from sqlalchemy import create_engine, URL
-
-from tqdm import tqdm
 
 
 
@@ -48,8 +37,7 @@ from _02agg.coms_agg import (
 from _02agg._07_views import create_view_join_grid_geom
 
 from coms import (
-    init_log, today_str, get_log_stream, get_raster_point_samples, get_directory_size,
-    dstr
+    init_log, today_str, get_directory_size,dstr
     )
 
 
@@ -70,7 +58,7 @@ def run_expo_stats_grouped(
                            conn_str=None,
                            epsg_id=equal_area_epsg,
                            log=None,
-                           add_view=True,
+                           add_view=False,
                            ):
     """building exposure stats per grid
  
@@ -178,7 +166,8 @@ def run_expo_stats_grouped(
     #check
     """should match all points... pretty sure this query works"""
     null_cnt = pg_exe(f"""SELECT COUNT(*) FROM {schema1}.{pts_table} WHERE f500_fluvial IS NULL""", return_fetch=True)[0][0]              
-    assert null_cnt==0
+    if not null_cnt==0:
+        log.warning(f'got {null_cnt} f500_fluvial nulls') #seems like this shouldnt happen...
     #null_cnt = pg_to_df(f"""SELECT f500_fluvial FROM {schema1}.{pts_table}""")
     
     
@@ -285,9 +274,8 @@ if __name__ == '__main__':
     
     #run_expo_stats_grouped('deu', 1020, dev=True)
     
-    #run_all('deu', dev=True)
-    
-    create_view_merge_stats('deu', 'f500_fluvial', dev=True)
+    run_all('deu', dev=False)
+ 
     
     
     

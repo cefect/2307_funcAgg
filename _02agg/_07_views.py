@@ -43,7 +43,7 @@ def create_view_join_grid_geom(schema, table_left, country_key,
                                conn_str=None):
     """create a new vew of the passed table that joins the grid geometry"""
     
-    """materlized view doesn't seem to be working in QGIS"""
+ 
     
     #===========================================================================
     # defaults
@@ -227,19 +227,19 @@ def run_view_grid_geom_union(country_key,
     if dev:
         schema = 'dev'
     else:
-        schema='grid'
+        schema='grids'
         
     """could also use the occupied tables"""
     tableName=f'agg_{country_key}'
     
     sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     
-    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName}')
+    sql(f'DROP VIEW IF EXISTS {schema}.{tableName}')
     #===========================================================================
     # buidl query
     #===========================================================================
     
-    cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
+    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
     
     first = True
     for grid_size in grid_size_l:
@@ -378,10 +378,10 @@ def run_view_grid_wd_wgeo(ck, grid_size_l=None, **kwargs):
     log.info(f'finished on \n    {d}')   
         
 if __name__ == '__main__':
-    #run_view_grid_geom_union('deu', dev=True)
+    run_view_grid_geom_union('deu', dev=False)
     #run_view_grid_samp_pivot('deu','f500_fluvial', dev=False, with_geom=False)
     
-    run_view_grid_wd_wgeo('deu', dev=False)
+    #run_view_grid_wd_wgeo('deu', dev=False)
     
     
     
