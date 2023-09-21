@@ -27,7 +27,8 @@ from coms import (
     ) 
 
 from _02agg.coms_agg import (
-    get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount
+    get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
+    pg_comment
     )
  
 
@@ -87,7 +88,7 @@ def run_bldg_rl_means(
  
     
     #===========================================================================
-    # #talbe params
+    # #talbe params-------
     #===========================================================================
     #source table keys
     keys_d = { 
@@ -190,6 +191,15 @@ def run_bldg_rl_means(
     #check the keys are unique
     keys_str = ', '.join(kl)
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+    
+    #add comment
+ 
+    source_d = dict(tableName=tableName,table_grid=table_grid, table_bldg=table_bldg, table_link=table_link )
+    
+    cmt_str = f'join mean building losses (grouped by grids) to the grid losses \n from tables: {source_d}\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} ')
     

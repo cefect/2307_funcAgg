@@ -37,6 +37,63 @@ from definitions import (
     )
 
  
+
+def create_view_join_grid_geom(schema, table_left, country_key,
+                               log=None, dev=False, 
+                               conn_str=None):
+    """create a new vew of the passed table that joins the grid geometry"""
+    
+    """materlized view doesn't seem to be working in QGIS"""
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
+    if log is None:
+        log = init_log(name=f'grid_geom')
+        
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    
+    log.info(f'creating a view with geometry from \'{table_left}\'')
+    
+    #===========================================================================
+    # table params
+    #===========================================================================
+    table_right = f'agg_{country_key}' #merge of all grid geometry... see run_view_grid_geom_union()
+    if dev:
+        schema_right = 'dev'
+    else:
+        schema_right = 'grids'
+    assert pg_table_exists(schema_right, table_right, asset_type='matview'), f'{schema_right}.{table_right} view must exist'
+    
+    keys_l = ['country_key', 'grid_size', 'i', 'j']
+    #=======================================================================
+    # setup
+    #=======================================================================
+    tableName = table_left + '_wgeo'
+    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName} CASCADE')
+    #=======================================================================
+    # build query
+    #=======================================================================
+    cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
+    
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l]) 
+    cmd_str+= f"""
+        SELECT tleft.*, tright.geom
+            FROM {schema}.{table_left} AS tleft
+                LEFT JOIN {schema_right}.{table_right} AS tright
+                    ON {link_cols}
+            """
+            
+    sql(cmd_str)
+ 
+    pg_register(schema, tableName)
+    
+    log.info(f'finished on {tableName}')
+    
+    return tableName
+
 def run_view_grid_samp_pivot(
         country_key, haz_key,
         grid_size_l=None,
@@ -71,9 +128,7 @@ def run_view_grid_samp_pivot(
      
     
     country_key=country_key.lower() 
-    
  
-    #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
     
     if conn_str is None: conn_str=get_conn_str(postgres_d)
     if log is None:
@@ -120,49 +175,12 @@ def run_view_grid_samp_pivot(
  
     sql(cmd_str)
     
+    log.info(f'finished w/ {tableName}')
     #===========================================================================
-    # add geometry
+    # add geometry-------
     #===========================================================================
-    if with_geom:
-        
-        """materlized view doesn't seem to be working in QGIS"""
-        log.info(f'creating a view with geometry')
-        
-        geom_table=f'agg_{country_key}'
-        if dev:
-            geom_schema='dev'
-        else:
-            geom_schema='grids'
-        
-        assert pg_table_exists(geom_schema, geom_table, asset_type='matview'), f'{geom_schema}.{geom_table} view must exist'
-        
-        #=======================================================================
-        # setup
-        #=======================================================================
-        tableName1 = tableName+'_wgeo'
-        
-        sql(f'DROP TABLE IF EXISTS {schema}.{tableName1}')
-        
-        
-        #=======================================================================
-        # build query
-        #=======================================================================
- 
-        cmd_str = f"""
-            CREATE TABLE {schema}.{tableName1} AS
-                SELECT ltab.*, rtab.geom
-                    FROM {schema}.{tableName} as ltab
-                        LEFT JOIN {geom_schema}.{geom_table} as rtab
-                            ON ltab.i=rtab.i 
-                            AND ltab.j=rtab.j 
-                            AND ltab.grid_size=rtab.grid_size
-                            AND ltab.country_key=rtab.country_key
-                            """
-                            
-        sql(cmd_str)
-        
-        sql(f'ALTER TABLE {schema}.{tableName1} ADD PRIMARY KEY (country_key, grid_size, i,j)')
-        pg_register(schema, tableName1)
+    if with_geom:        
+        create_view_join_grid_geom(schema, tableName, country_key, log=log, dev=dev, conn_str=conn_str)
         
         
  
@@ -247,7 +265,7 @@ def run_view_grid_geom_union(country_key,
         #'postgres_GB':get_directory_size(postgres_dir)}
         #'output_MB':os.path.getsize(ofp)/(1024**2)
         }
-    log.info(f'finishedw/ \n{meta_d}')
+    log.info(f'finished w/ {tableName} \n{meta_d}')
     
     return 
     
@@ -257,7 +275,7 @@ def run_view_grid_geom_union(country_key,
         
 if __name__ == '__main__':
     #run_view_grid_geom_union('deu', dev=True)
-    run_view_grid_samp_pivot('deu','f500_fluvial', dev=True)
+    run_view_grid_samp_pivot('deu','f500_fluvial', dev=True, with_geom=True)
     
     
     
