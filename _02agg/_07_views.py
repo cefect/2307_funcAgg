@@ -270,12 +270,91 @@ def run_view_grid_geom_union(country_key,
     return 
     
         
+def create_view_grid_occupied_wgeo(
+        country_key, grid_size,
+ 
+        log=None,
+        conn_str=None,
+        dev=False,
+        with_geom=False,
+        ):
+    """create a view of of exposed/occupied grids with polygon geometry (instead of centroid)
+    
+    needed by _04expo._01_full_links
+    
+    Returns
+    -----------
+    postgres view: inters_grid.agg_samps_{country_key}_{haz_key}"""
+ 
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()  
+ 
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
+    if log is None:
+        log = init_log(name=f'grid')
         
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    #===========================================================================
+    # table params
+    #===========================================================================
+    if dev:
+        schema = 'dev'
+        schema_right=schema
+    else:
+        schema='agg_bldg'
+        schema_right='grid'
         
+    table_left = f'agg_occupied_{country_key}_{grid_size:04d}'
+    table_right=f'agg_{country_key}_{grid_size:07d}'
+    tableName=table_left + '_poly'
+        
+ 
+    keys_l = ['country_key', 'grid_size', 'i', 'j']
+    #===========================================================================
+    # join polygons
+    #===========================================================================
+    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName}') 
+    
+    cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
+    
+    cols = ', '.join([f'tleft.{e}' for e in keys_l]) 
+    cols +=f', tleft.bldg_expo_cnt, tright.geom'
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l]) 
+    cmd_str+= f"""
+        SELECT {cols}
+            FROM {schema}.{table_left} AS tleft
+                LEFT JOIN {schema_right}.{table_right} AS tright
+                    ON {link_cols}
+            """
+    
+    sql(cmd_str)
+    
+    log.info(f'finished w/ {tableName}')
+ 
+ 
+    
+    return tableName
+
+
+def run_view_grid_occupied_wgeo(ck, grid_size_l=None, **kwargs):
+    log = init_log(name=f'grid')
+    
+    if grid_size_l is None: grid_size_l = gridsize_default_l
+    
+    d=dict()
+    for g in grid_size_l:
+        d[g] = create_view_grid_occupied_wgeo(ck, g, log=log, **kwargs)
+        
+    log.info(f'finished on \n    {d}')   
         
 if __name__ == '__main__':
     #run_view_grid_geom_union('deu', dev=True)
-    run_view_grid_samp_pivot('deu','f500_fluvial', dev=False, with_geom=False)
+    #run_view_grid_samp_pivot('deu','f500_fluvial', dev=False, with_geom=False)
+    
+    run_view_grid_occupied_wgeo('deu', dev=True)
     
     
     
