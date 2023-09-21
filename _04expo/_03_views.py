@@ -54,6 +54,7 @@ def create_view_merge_stats(country_key, haz_key,
                          grid_size_l=None,
          dev=False, conn_str=None,
          with_geom=False,
+         log=None,
         ):
     
     """create a view by unioning all the grid stats and selecting wet_cnts from one haz
@@ -66,7 +67,7 @@ def create_view_merge_stats(country_key, haz_key,
     #===========================================================================
     start=datetime.now()  
     
-    log = init_log(name=f'view')
+    if log is None: log = init_log(name=f'view')
     
     if grid_size_l is None: grid_size_l = gridsize_default_l
     
@@ -374,6 +375,15 @@ def get_grid_rl_dx(
     log.info(f'got {dx.shape}')
     return dx
 
+def run_all(ck, e, **kwargs):
+    log = init_log(name=f'grid_rl')
+    
+    create_view_merge_stats(ck, e, log=log, **kwargs)
+    
+    create_view_join_stats_to_rl(ck, e, log=log, **kwargs)
+    
+    get_grid_rl_dx(ck, e, log=log, use_cache=False, **kwargs)
+    
 
 if __name__ == '__main__':
     
@@ -381,7 +391,19 @@ if __name__ == '__main__':
     
     #create_view_join_stats_to_rl('deu', 'f500_fluvial', dev=False, with_geom=False)
     
-    get_grid_rl_dx('deu', 'f500_fluvial', dev=False, limit=None)
+    get_grid_rl_dx('deu', 'f500_fluvial', dev=False, use_cache=False, limit=None)
+    
+    
+    #run_all('deu', 'f500_fluvial', dev=False)
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 

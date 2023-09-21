@@ -158,6 +158,7 @@ def run_expo_stats_grouped(
             FROM {schema_left}.{table_left} AS tleft
                 LEFT JOIN {schema_right}.{table_right} AS tright
                     ON {link_cols}
+                        WHERE tright.f500_fluvial IS NOT NULL
             """
     
     sql(cmd_str)
@@ -167,17 +168,15 @@ def run_expo_stats_grouped(
     """should match all points... pretty sure this query works"""
     null_cnt = pg_exe(f"""SELECT COUNT(*) FROM {schema1}.{pts_table} WHERE f500_fluvial IS NULL""", return_fetch=True)[0][0]              
     if not null_cnt==0:
-        log.warning(f'got {null_cnt} f500_fluvial nulls') #seems like this shouldnt happen...
-    #null_cnt = pg_to_df(f"""SELECT f500_fluvial FROM {schema1}.{pts_table}""")
+        raise IOError(f'got {null_cnt} f500_fluvial nulls') #usually happens when the left join fails
+ 
     
     
     log.info(f'finished w/ {pts_table}')
  
     #===========================================================================
     # calc bldg stats------
-    #===========================================================================
-    
-    
+    #===========================================================================    
     #===========================================================================
     # params
     #===========================================================================
@@ -272,7 +271,7 @@ def run_all(ck, **kwargs):
 
 if __name__ == '__main__':
     
-    #run_expo_stats_grouped('deu', 1020, dev=True)
+    #run_expo_stats_grouped('deu', 1020, dev=False)
     
     run_all('deu', dev=False)
  
