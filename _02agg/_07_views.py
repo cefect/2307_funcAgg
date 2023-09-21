@@ -72,15 +72,19 @@ def create_view_join_grid_geom(schema, table_left, country_key,
     # setup
     #=======================================================================
     tableName = table_left + '_wgeo'
-    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName} CASCADE')
+    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
     #=======================================================================
     # build query
     #=======================================================================
-    cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
+    cmd_str = f'CREATE VIEW {schema}.{tableName} AS'
     
-    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l]) 
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l])
+    
+    #add an arbitrary indexer for QGIS viewing
+    cols =f'ROW_NUMBER() OVER (ORDER BY tleft.i, tleft.j) as fid, ' 
+    cols +=f'tleft.*, tright.geom' 
     cmd_str+= f"""
-        SELECT tleft.*, tright.geom
+        SELECT {cols}
             FROM {schema}.{table_left} AS tleft
                 LEFT JOIN {schema_right}.{table_right} AS tright
                     ON {link_cols}

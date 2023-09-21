@@ -107,7 +107,7 @@ def run_agg_bldg_full_links(
     keys_l = ['country_key', 'grid_size', 'i', 'j']
     
 
-    assert pg_getCRS(schema_grid, table_grid)==epsg_id
+    if with_geo: assert pg_getCRS(schema_grid, table_grid)==epsg_id
     #===========================================================================
     # spatially join grid keys
     #===========================================================================
@@ -165,8 +165,17 @@ def run_agg_bldg_full_links(
     log.info(f'finishedw/ \n{meta_d}')
     
     return tableName
- 
- 
+
+
+def run_all(ck, **kwargs):
+    log = init_log(name='occu')
+    
+    for grid_size in gridsize_default_l:
+        run_agg_bldg_full_links(ck, grid_size, log=log, **kwargs)
+        
 if __name__ == '__main__':
     
-    run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True)
+    #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=False)
+    
+    run_all('deu', dev=True)
+ 
