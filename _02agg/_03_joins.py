@@ -154,7 +154,7 @@ def _build_grid_inters_join(
     coln_l = pg_get_column_names('inters', tableName_inters)            
     print(f'columns\n    {coln_l}')
  
-    cols = 'pts.country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
+    cols = 'LOWER(pts.country_key) as country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
     
     
     cmd_str=f"""
