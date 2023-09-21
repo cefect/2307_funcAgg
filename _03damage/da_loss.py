@@ -129,7 +129,7 @@ from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount
     )
 
-from _03damage._04_views import get_grid_rl_dx
+from _04expo._03_views import get_grid_rl_dx
 
 
 
@@ -303,7 +303,7 @@ def plot_rl_agg_v_bldg(
     -------------
  
     """
-    raise IOError('looks pretty good. need to filter partials, add running-mean for buildings, add colorscale')
+    #raise IOError('looks pretty good. need to filter partials, add running-mean for buildings, add colorscale')
     
     #===========================================================================
     # defaults
@@ -311,7 +311,7 @@ def plot_rl_agg_v_bldg(
  
   
     if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', 'funcMetrics', 'da', today_str)
+        out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
      
     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='rl_agg')
@@ -328,7 +328,8 @@ def plot_rl_agg_v_bldg(
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
         dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
-        
+    
+    if not dev:
         dx_raw=dx_raw.sample(int(len(dx_raw)*0.1))
  
  
@@ -355,18 +356,16 @@ def plot_rl_agg_v_bldg(
     """
     mdf = mdex.to_frame().reset_index(drop=True)
     
- #==============================================================================
- #    mdf['wet_frac'] = mdf['wet_cnt']/mdf['bldg_cnt']
- #    
- # 
- #    #assert mdf['wet_frac'].max()<=1.0
- #    bx = mdf['wet_frac']>(min_wet_frac+1)
- #==============================================================================
-    bx = (mdf['bldg_expo_cnt']>1).values
+    mdf['wet_frac'] = mdf['wet_cnt']/mdf['bldg_cnt']
+     
+  
+    assert np.all(mdf['wet_frac'].max()<=1.0)
+    bx = (mdf['wet_frac']>min_wet_frac).values
+ 
     
     log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
     
-    dx2 = dx1.loc[bx, :].droplevel(['bldg_expo_cnt'])
+    dx2 = dx1.loc[bx, :].droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])
     
     mdex = dx2.index
     #===========================================================================
@@ -386,7 +385,7 @@ def plot_rl_agg_v_bldg(
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
-    color_d = _get_cmap(color_keys, name='viridis')
+    #color_d = _get_cmap(color_keys, name='viridis')
     
  
         
@@ -539,7 +538,7 @@ if __name__=='__main__':
     
 
 
-    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=False)
+    plot_rl_agg_v_bldg(country_key='deu', haz_key='f500_fluvial', dev=True)
     
     #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
    # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
