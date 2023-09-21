@@ -5,14 +5,16 @@
 set country=deu
  
  
-set gridsize=60
+ 
  
 
 :: Activate environment
 call %~dp0..\..\env\conda_activate
 echo on
 :: execute
-python -O main_06_topost.py --grid_size %gridsize% --country_key %country% 
+for %%G in (1020, 240, 60) do (
+    python -O main_06_topost.py --grid_size %%G --country_key %country%
+)    
  
 ECHO finished
 cmd.exe /k

@@ -210,6 +210,8 @@ def run_build_pdist(
 def _calc_grid_country(tableName, log, min_size, max_workers, debug_len=None, out_dir=None, use_icache=True):
     """calc pdist for a single table"""
     
+    raise IOError('this probably doesnt work anymore as inters_agg.{tableName} has changed')
+    
     log=log.getChild(tableName)
     start = datetime.now()
     #===========================================================================
