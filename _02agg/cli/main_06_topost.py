@@ -4,7 +4,7 @@ Created on Aug. 24, 2023
 @author: cefect
 '''
 import argparse
-from agg._06_topost import run_agg_samps_to_post as func
+from _02agg._06_topost import run_agg_samps_to_post as func
 
  
 

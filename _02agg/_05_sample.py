@@ -38,7 +38,7 @@ from sqlalchemy import create_engine, URL
 from tqdm import tqdm
 
 from coms import view, clean_geodataframe, pd_ser_meta, init_log_worker
-from agg.coms_agg import get_conn_str, pg_getCRS, pg_table_exists
+from _02agg.coms_agg import get_conn_str, pg_getCRS, pg_table_exists
 
 from definitions import (
     wrk_dir, lib_dir, index_country_fp_d, index_hazard_fp_d, postgres_d, 

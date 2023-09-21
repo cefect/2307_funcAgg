@@ -40,7 +40,7 @@ from definitions import temp_dir as temp_dirM
  
 
 
-from agg.coms_agg import (
+from _02agg.coms_agg import (
     get_conn_str, pg_getCRS, pg_to_df, pg_exe, pg_getcount, pg_spatialIndex, pg_get_column_names,
     pg_vacuum, pg_comment, pg_register
     )

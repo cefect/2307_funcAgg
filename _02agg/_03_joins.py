@@ -25,7 +25,7 @@ from coms import (
     init_log, today_str, get_directory_size,dstr, view,  
     ) 
 
-from agg.coms_agg import (
+from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register,
     pg_comment
     )
@@ -66,30 +66,19 @@ def run_join_agg_grids(
     ----------
     Postgres table [agg_bldg.bldgs_grid_link_{country_key}_{grid_size:04d}]
         bulding to grid links (only buidlings with some depths on f010_fluvial)
-
-    
  
     """
     
     #===========================================================================
     # defaults
     #===========================================================================
-    start=datetime.now()    
- 
- 
-    #===========================================================================
-    # if out_dir is None:
-    #     out_dir = os.path.join(wrk_dir, 'outs', 'agg', '01_join')
-    # if not os.path.exists(out_dir):os.makedirs(out_dir)
-    #===========================================================================
-    
- 
+    start = datetime.now()    
     
     log = init_log(name=f'jgrid')
     
-    if grid_size_l is None: grid_size_l=gridsize_default_l
-    if country_l is  None: country_l=[e.lower() for e in index_country_fp_d.keys()]
-    #if epsg_id is None: epsg_id=equal_area_epsg
+    if grid_size_l is None: grid_size_l = gridsize_default_l
+    if country_l is  None: country_l = [e.lower() for e in index_country_fp_d.keys()]
+    # if epsg_id is None: epsg_id=equal_area_epsg
     
     log.info(f'on \n    {country_l}\n    {conn_d}')
     

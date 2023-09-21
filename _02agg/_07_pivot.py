@@ -26,7 +26,7 @@ from coms import (
     init_log, today_str, get_directory_size,dstr, view,  
     ) 
 
-from agg.coms_agg import (
+from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
     pg_table_exists
     )

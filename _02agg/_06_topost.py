@@ -27,7 +27,7 @@ from sqlalchemy import create_engine, URL
 
 from tqdm import tqdm
 
-from agg.coms_agg import (
+from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_getCRS, pg_exe, pg_register, pg_comment
     )
 
@@ -194,7 +194,7 @@ def run_agg_samps_to_post(
     #===========================================================================
     tableName=f'agg_samps_{country_key}_{grid_size:04d}'
     
-    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE')
     #===========================================================================
     # build indexer
     #===========================================================================
