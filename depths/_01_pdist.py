@@ -79,9 +79,16 @@ def run_build_pdist(
     use_icache: bool
         whether to use the cached pickles for the 'i' groups (from tmp_dir)
         
+    Returns
+    ----------
+    pd.DataFrame write to .pkl for each grid_size and country_key
     """
     
-    
+    raise IOError(f"""this was run on an old table... not sure I trust it.
+            should use expo.grid_bldg_stats_{country_key}_{grid_size:04d}
+            and join to inters.{country_key} 
+
+        """)
     #===========================================================================
     # defaults
     #===========================================================================

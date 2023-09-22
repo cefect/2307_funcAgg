@@ -17,6 +17,7 @@ from definitions import wrk_dir, haz_label_d, temp_dir
 def load_pdist_concat(
         search_dir=r'l:\10_IO\2307_funcAgg\outs\expo_stats\pdist',
         infer_keys=False, #temporary because I forgot to add the indexers
+        use_cache=True,
         ):
     
     """load pdist results and concat
@@ -44,7 +45,7 @@ def load_pdist_concat(
     #===========================================================================
     # build
     #===========================================================================
-    if not os.path.exists(ofp):
+    if (not os.path.exists(ofp)) or (not use_cache):
         df_d = {os.path.basename(fp):pd.read_pickle(fp) for fp in fp_l}
         
         print(f'loading. infer_keys={infer_keys}')
