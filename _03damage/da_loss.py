@@ -284,12 +284,6 @@ def plot_rl_raw(
     log.info(f'wrote to \n    {ofp}')
     return ofp
         
-        
-    
- 
-
- 
-
  
 
 def plot_rl_agg_v_bldg(
@@ -326,7 +320,7 @@ def plot_rl_agg_v_bldg(
     start=datetime.now()
   
     if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', '03damage', 'da', today_str)
+        out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
      
     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='rl_agg')
@@ -386,14 +380,20 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # build pdf
     #===========================================================================
-    """want to use the same pdf"""
-    #get a weighted sample
-    df_sample = dx2.groupby(['grid_size', 'haz_key']).sample(int(len(dx2)*samp_frac))
-    
-    x,y = df_sample['grid_cent'].values, df_sample['bldg_mean'].values
-    xy = np.vstack([x,y])
-            
-    pdf = gaussian_kde(xy, bw_method=0.1)
+    #===========================================================================
+    # """want to use the same pdf
+    # 
+    # NO!
+    # """
+    # #get a weighted sample
+    # 
+    # ser_samp = dx2['bldg_mean'].groupby(['grid_size', 'haz_key', 'df_id']).sample(int(1e4))
+    # 
+    # x,y = ser_samp.index.get_level_values('grid_wd'), ser_samp.values
+    # xy = np.vstack([x,y])
+    #         
+    # pdf = gaussian_kde(xy)
+    #===========================================================================
  
     #===========================================================================
     # setup indexers
@@ -410,7 +410,7 @@ def plot_rl_agg_v_bldg(
         fserx_raw = get_funcLib() #select functions
     
     """
-    view(fserx.head(100))
+    view(fserx_raw.head(100))
     """
     
     #===========================================================================
@@ -456,7 +456,7 @@ def plot_rl_agg_v_bldg(
         
         assert (gdx0==0).sum().sum()==0
         
-        ax.set_ylim(0,40) #the function plots shoudl be teh same... but the hist plot will it's own
+        ax.set_ylim(0,45) #the function plots shoudl be teh same... but the hist plot will it's own
         #=======================================================================
         # plot function 
         #=======================================================================
@@ -481,18 +481,24 @@ def plot_rl_agg_v_bldg(
             #prep data
             df= gdx1.droplevel(kl[2]).reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
             
-            #geet a sample of hte data
-            df_sample = df.copy().sample(min(int(len(dx2)*samp_frac), len(df)))
-            
-            log.info(f'    w/ {df.size} and sample {df_sample.size}')
+
 
             #===================================================================
             # #plot bldg_mean scatter
             #===================================================================
+            
+            #geet a sample of hte data
+            df_sample = df.copy().sample(min(int(len(dx2)*samp_frac), len(df)))
+            
+            log.info(f'    w/ {df.size} and sample {df_sample.size}')
+            
             #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
             #as density
             x,y = df_sample.index.values, df_sample['bldg_mean'].values
             xy = np.vstack([x,y])
+            
+            """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
+            pdf = gaussian_kde(xy)
             z = pdf(xy) #Evaluate the estimated pdf on a set of points.
             
             # Sort the points by density, so that the densest points are plotted last
@@ -562,6 +568,7 @@ def plot_rl_agg_v_bldg(
  
         tstr = f'n= {len(gdf):.2e}\n'
         tstr +='$\overline{WSH}$= %.2f'%gdf['grid_wd'].mean()
+        #tstr +='\n$\sigma^2$= %.2f'%gdf['grid_wd'].var() #no... we want the asset variance
         ax.text(0.6, 0.5, tstr, 
                             transform=ax.transAxes, va='bottom', ha='left', 
                             #bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
@@ -602,7 +609,7 @@ def plot_rl_agg_v_bldg(
         if row_key==row_keys[1]:
 
             if col_key==col_keys[0]:
-                ax.legend(ncol=2, loc='upper center', frameon=False)
+                ax.legend(ncol=1, loc='upper right', frameon=False)
                 
         
         # last row
@@ -645,7 +652,7 @@ def plot_rl_agg_v_bldg(
     cbar = fig.colorbar(sm,
                      ax=leg_ax,  # steal space from here (couldnt get cax to work)
                      extend='both', #pointed ends
-                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.4f' % x),
+                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
                      label='density of $\overline{RL_{bldg,j}}$', 
                      orientation='horizontal',
                      fraction=.99,
@@ -698,7 +705,7 @@ def plot_TL_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=0.95,
-        samp_frac=0.005, #
+        samp_frac=0.008, #
         dev=False,
         ylab_d = clean_names_d,
         ):
@@ -725,7 +732,7 @@ def plot_TL_agg_v_bldg(
     start=datetime.now()
   
     if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', '03damage', 'da', today_str)
+        out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
      
     log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='rl_agg')
@@ -758,17 +765,7 @@ def plot_TL_agg_v_bldg(
     """
     dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
-    #===========================================================================
-    # build pdf
-    #===========================================================================
-    """want to use the same pdf"""
-    #get a weighted sample
-    df_sample = dx2.groupby(['grid_size', 'haz_key']).sample(int(1e4))
-    
-    x,y = df_sample['grid_cent'].values, df_sample['bldg_mean'].values
-    xy = np.vstack([x,y])
-            
-    pdf = gaussian_kde(xy, bw_method=0.1)
+ 
  
  
     #===========================================================================
@@ -864,6 +861,8 @@ def plot_TL_agg_v_bldg(
             #as density
             x,y = df_sample['grid_cent'].values, df_sample['bldg_mean'].values
             xy = np.vstack([x,y])
+            
+            pdf = gaussian_kde(xy)
             z = pdf(xy) #Evaluate the estimated pdf on a set of points.
             
             # Sort the points by density, so that the densest points are plotted last
@@ -978,8 +977,8 @@ def plot_TL_agg_v_bldg(
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel('grid relative losses ($RL_{grid,j}$) * group building counts ($B_{j}$)', labelpad=20)
-    macro_ax.set_xlabel('building group mean relative losses ($\overline{RL_{bldg,j}}$) * group building counts ($B_{j}$)')
+    macro_ax.set_ylabel('grid relative loss ($RL_{grid,j}$) * building group count ($B_{j}$)', labelpad=20)
+    macro_ax.set_xlabel('building group mean relative loss ($\overline{RL_{bldg,j}}$) * building group count ($B_{j}$)')
     
     """doesnt help
     fig.tight_layout()"""

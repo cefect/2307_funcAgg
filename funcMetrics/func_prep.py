@@ -48,8 +48,14 @@ def _get_mdex(vidnm, df_d,
  
         ]):
     
-    #print(df_d.keys())
+    #print(dstr(df_d.keys()))
     
+    print('\n'.join(df_d.keys()))
+    
+    
+    """
+    view(df_d['supplement_information'].head(100))
+    """
     #===========================================================================
     # helpers
     #===========================================================================
@@ -705,6 +711,8 @@ def get_funcLib(
     
     _print_lib(serx.index)
     
+ 
+    
     return serx
             
         
@@ -713,7 +721,7 @@ def get_funcLib(
     
 if __name__ == '__main__':
     
-    #load_dfunc_serx()
+    load_dfunc_serx()
     #write_dfunc_serx()
     
     #prep_wagenaar2018()
@@ -728,7 +736,7 @@ if __name__ == '__main__':
      
     #slice_lib()
     
-    get_funcLib(use_cache=False)
+    #get_funcLib(use_cache=False)
 
 
 
