@@ -77,7 +77,7 @@ def create_view_merge_stats(country_key, haz_key,
     #===========================================================================
     # query
     #===========================================================================
-    sql(f'DROP VIEW IF EXISTS {schema}.{tableName}')
+    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
     
     cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
     
@@ -127,7 +127,7 @@ def create_view_merge_stats(country_key, haz_key,
         #'postgres_GB':get_directory_size(postgres_dir)}
         #'output_MB':os.path.getsize(ofp)/(1024**2)
         }
-    log.info(f'finished on {tableName} w/ \n{meta_d}')
+    log.info(f'finished on {tableName} w/ \n{meta_d}\n\n')
     
     return tableName
 
@@ -186,7 +186,7 @@ def create_view_join_stats_to_rl(
     
     keys_l = ['country_key', 'grid_size', 'i', 'j']
  
-    
+    log.info(f'creating view from {table_left} and {table_right}')
     #===========================================================================
     # join depths
     #===========================================================================
@@ -232,7 +232,7 @@ def create_view_join_stats_to_rl(
 
 
 
-def run_all(ck, e, **kwargs):
+def run_all(ck='deu', e='f500_fluvial', **kwargs):
     log = init_log(name=f'grid_rl')
     
     create_view_merge_stats(ck, e, log=log, **kwargs)
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     #get_grid_rl_dx('deu', 'f500_fluvial', dev=False, use_cache=False, limit=None)
     
     
-    #run_all('deu', 'f500_fluvial', dev=False)
+    run_all(dev=False)
     
     
     

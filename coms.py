@@ -213,7 +213,7 @@ def get_filepaths(search_dir, pattern, single=True, ext=None, recursive=False):
     if not ext is None:
         l = [e for e in l if e.endswith(ext)]
     
-    assert len(l)>0
+    assert len(l)>0, f'failed to locate any files w/ patter = \'{pattern}\' from \n    {search_dir}'
     if single:
         assert len(l)==1, l
         return l[0]

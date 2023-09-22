@@ -44,7 +44,7 @@ from _02agg._07_views import create_view_join_grid_geom
 
 def run_view_merge_grid(country_key, haz_key,
                          grid_size_l=None,
-         dev=False, conn_str=None,
+         dev=False, conn_str=None, log=None,
         ):
     
     """create a view by unioning all the grid losses
@@ -57,7 +57,7 @@ def run_view_merge_grid(country_key, haz_key,
     #===========================================================================
     start=datetime.now()  
     
-    log = init_log(name=f'view')
+    if log is None: log = init_log(name=f'view')
     
     if grid_size_l is None: grid_size_l = gridsize_default_l
     
@@ -141,7 +141,11 @@ def run_view_join_depths(
  
         with_geom=False,
         ):
-    """for plotting, merge the grid_sizes and slice to a single haz_key """
+    """for plotting, merge the grid_sizes and slice to a single haz_key
+    
+    
+    needed by _03damage._05_mean_bins.get_grid_rl_dx()
+    """
         
 
     #if grid_size_l is None: grid_size_l = gridsize_default_l
@@ -225,9 +229,20 @@ def run_view_join_depths(
     return tableName
 
 
+def run_all(ck='deu', haz_key='f500_fluvial', **kwargs):
+    log = init_log(name=f'dmg_views')
+    
+    run_view_merge_grid('deu', 'f500_fluvial',log=log, **kwargs)
+    run_view_join_depths('deu', 'f500_fluvial',log=log, **kwargs)
+    
+
+
 if __name__ == '__main__':
     #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
-    run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
+    #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
+    
+    
+    run_all()
     
  
         

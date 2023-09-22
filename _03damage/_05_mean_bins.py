@@ -32,7 +32,7 @@ from definitions import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_getCRS, pg_to_df, pg_exe, pg_getcount, pg_spatialIndex, pg_get_column_names,
-    pg_vacuum, pg_comment, pg_register
+    pg_vacuum, pg_comment, pg_register, pg_table_exists
     )
 
 from _02agg._07_views import create_view_join_grid_geom
@@ -83,7 +83,7 @@ def get_grid_rl_dx(
         #===========================================================================
         # talbe params
         #===========================================================================
-        #see create_view_join_stats_to_rl()
+        #see _04expo._03_views.create_view_join_stats_to_rl()
         tableName = f'grid_rl_wd_bstats_{country_key}_{haz_key}' 
         
         if dev:
@@ -92,6 +92,7 @@ def get_grid_rl_dx(
         else:
             schema = 'damage' 
             
+        assert pg_table_exists(schema, tableName, asset_type='matview'), f'missing table dependency \'{tableName}\'... see _04expo._03_views'
         keys_l = ['country_key', 'grid_size','haz_key', 'i', 'j']
         
         #===========================================================================
@@ -171,11 +172,7 @@ def get_grid_rl_dx(
  
     log.info(f'got {dx.shape}')
     return dx
-
-def g(df):
-    bins = np.linspace(0, 1, 10)
-    groups = df.groupby(pd.cut(df.x, bins))
-    return groups.mean()
+ 
 
 def run_bldg_rl_mean_bins(
         country_key='deu', haz_key='f500_fluvial',
@@ -197,24 +194,25 @@ def run_bldg_rl_mean_bins(
     # load
     #===========================================================================
     if dx_raw is None: 
+ 
         dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
         
+    serx1 = dx_raw.stack().droplevel('country_key')
     #===========================================================================
     # filter
     #===========================================================================
-    dx1 = filter_rl_dx_minWetFrac(dx_raw, log=log)
+    serx2 = filter_rl_dx_minWetFrac(serx1, log=log)
     """no need to preserve grid_wd styled index"""
     
-    keys_l =  ['country_key', 'grid_size', 'haz_key'] #only keys we preserve
+    keys_l =  ['grid_size', 'haz_key', 'df_id'] #only keys we preserve
     #get clean
-     
-    dx2 = dx1.xs('bldg_mean', level='rl_type', axis=1)
+ 
      
     #get a slice with clean index
-    dx3 = dx2.reset_index(keys_l+['grid_wd']).reset_index(drop=True).set_index(keys_l+['grid_wd'])
+    serx3 = serx2['bldg_mean'].reset_index(keys_l+['grid_wd']).reset_index(drop=True).set_index(keys_l+['grid_wd'])
      
     #get the meanned bins
-    compute_binned_mean(dx3, log=log)
+    compute_binned_mean(serx3, log=log)
              
  
 
@@ -230,7 +228,7 @@ def filter_rl_dx_minWetFrac(dx1, min_wet_frac=0.95, log=None):
  
     return dx1.loc[bx, :].droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])
         
-def compute_binned_mean(dx_raw, log=None, out_dir=None, use_cache=False, bin_cnt=21):
+def compute_binned_mean(serx, log=None, out_dir=None, use_cache=False, bin_cnt=21):
     """calc binned mean"""
     
     if out_dir is None:
@@ -241,12 +239,13 @@ def compute_binned_mean(dx_raw, log=None, out_dir=None, use_cache=False, bin_cnt
     if log is None:
         log = init_log(name=f'grid_rl')
      
+    log = log.getChild('meanBin')
  
     #===========================================================================
     # cache
     #===========================================================================
     fnstr = f'grid_rl_meansBin'
-    uuid = hashlib.shake_256(f'{dx_raw.head()}_{dx_raw.shape}_{dx_raw.index.shape}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
+    uuid = hashlib.shake_256(f'{serx.head()}_{serx.shape}_{serx.index.shape}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
      
     #===========================================================================
@@ -254,8 +253,7 @@ def compute_binned_mean(dx_raw, log=None, out_dir=None, use_cache=False, bin_cnt
     #===========================================================================
     if (not os.path.exists(ofp)) or (not use_cache):
  
-        #prep the data
-        serx = dx_raw.stack().swaplevel().sort_index(sort_remaining=True).rename('bldg_mean_rl')
+        log.info(f'building on {len(serx)}')
         
         #keys to group iterate over
         keys_l = [e for e in serx.index.names if not 'grid_wd' in e]
@@ -265,8 +263,7 @@ def compute_binned_mean(dx_raw, log=None, out_dir=None, use_cache=False, bin_cnt
         #bins_ar = np.linspace(0, 100, bin_cnt)
         
         d = dict()
-        for keys, gserx in serx.groupby(keys_l, axis=0):
- 
+        for keys, gserx in serx.groupby(keys_l): 
  
             #reshape
             df = gserx.reset_index('grid_wd').reset_index(drop=True).dropna(how='any')
@@ -278,6 +275,7 @@ def compute_binned_mean(dx_raw, log=None, out_dir=None, use_cache=False, bin_cnt
             """this gives the mean of the x values also... which are probably better to plot against?"""
             d[keys] = df.groupby(categories, observed=False).mean().rename(columns = {'grid_wd':'grid_wd_bin', 'bldg_mean_rl':'bldg_mean_rl_bin'})
             
+        log.info(f'built binned means for {len(d)} groups')
         res_dx = pd.concat(d, names=serx.index.names)
         
         #=======================================================================

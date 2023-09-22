@@ -122,7 +122,7 @@ def run_bldg_rl_means(
     #===========================================================================
     #setup
     table_link1 = f'{table_bldg}_linkd'
-    sql(f'DROP TABLE IF EXISTS temp.{table_link1}')
+    sql(f'DROP TABLE IF EXISTS temp.{table_link1} CASCADE')
     
     #execute
     link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['bldg']])    
@@ -141,7 +141,7 @@ def run_bldg_rl_means(
     #===========================================================================
     # join average building loss to the grid losses
     #===========================================================================
-    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE')
 
     kl = keys_d['grid'] + ['haz_key']
     #retrieve function column names

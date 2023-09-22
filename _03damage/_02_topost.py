@@ -292,12 +292,41 @@ def run_bldg_rl_topost(country_key, **kwargs):
     return rl_to_post(country_key, 'inters',country_key, log = init_log(name=f'rlBldg'), **kwargs)
         
     
+def run_all(ck='deu', grid_size_l=None, **kwargs):
     
+    if grid_size_l is None: grid_size_l=gridsize_default_l
+    log = init_log(name=f'rl_topost')
+    
+    #===========================================================================
+    # buildings
+    #===========================================================================
+    res = rl_to_post(ck, 'inters',ck, log = init_log(name=f'rlBldg'), **kwargs)
+    log.info(f'finished buildings w/ \'{res}\'')
+    
+    #===========================================================================
+    # grids
+    #===========================================================================
+    d=dict()
+    log.info(f'on {len(grid_size_l)} grids')
+    for grid_size in grid_size_l:
+        d[grid_size] = rl_to_post(ck, 'inters_grid', f'agg_samps_{ck}_{grid_size:04d}', 
+                   log=log.getChild(str(grid_size)), **kwargs)
+        
+    log.info(f'finished w/ \n    {d}')
     
     
 
 if __name__ == '__main__':
- 
+    """need to run both of these"""
     
-    #run_bldg_rl_topost('deu', dev=False)
-    run_agg_rl_topost('deu', dev=False)
+    run_bldg_rl_topost('deu', dev=False)
+    #run_agg_rl_topost('deu', dev=False)
+    
+    
+    
+    
+    #run_all()
+    
+    
+    
+    
