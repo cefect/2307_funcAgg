@@ -1,5 +1,5 @@
 [![DOI](https://zenodo.org/badge/682497962.svg)](https://zenodo.org/badge/latestdoi/682497962)
-# Aggregation of Damage Functions
+# Flood Damage Function Aggregation Processing Pipeline and Data Analysis Scripts
 scripts for computation and data analysis of potential errors arising from aggregation of different loss functions
 
 
