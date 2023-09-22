@@ -302,7 +302,7 @@ def _02prep_wagenaar2018(
         ):
     
     """load and prep wagenaar_2018"""
-    
+    raise IOError('convert this to cm')
     #===========================================================================
     # defaults
     #===========================================================================
@@ -576,14 +576,16 @@ def slice_lib(
     
     lib_serx1 = lib_serx_raw[bx.values]
     
+    print('global slice w/')
     _print_lib(lib_serx1.index)
     #===========================================================================
     # slice
     #===========================================================================
     res_d = dict()
+    print(f'looping per model_id')
     for model_id, gserx in lib_serx1.groupby('model_id'):
         dfid_l = gserx.index.unique('df_id')
-        print(f'model_id {model_id} got {len(dfid_l)} funcs')
+        print(f'model_id {model_id} got {len(dfid_l)} funcs %s'%gserx.index.unique('abbreviation').tolist())
         #=======================================================================
         # ammend FLEMO
         #=======================================================================
@@ -591,49 +593,59 @@ def slice_lib(
             """
             view(gserx)
             """
-            mdf = gserx.index.to_frame().reset_index(drop=True)
- 
-            #simple selection
-            bx = np.logical_and(
-                mdf['coverage_attribute']=='building',
-                np.logical_and(
-                    mdf['building_quality_attribute'].isin(['low/medium quality', np.nan]),
-                    mdf['sector_attribute'].isin(['residential', 'commercial'])
-                    )
-                )
-            for coln in use_null_coln_d[model_id]:
-                #print(mdf[coln].value_counts(dropna=False))
-                
-                #select rows of interest
-                """nan values are used when no other info is available"""
-                bx_i = mdf[coln].isna() 
-                
-                #append slicer
-                bx = np.logical_and(bx, bx_i)
-                
-                print(f'    for \'{coln}\' selected {bx_i.sum()} entries with combined selection of {bx.sum()}')
-                
-            print(f'selected {bx.sum()}/{len(bx)}')
-            """
-            view(gserx[bx.values])
-            """
-            res_d[model_id] = gserx[bx.values]
+ #==============================================================================
+ #            mdf = gserx.index.to_frame().reset_index(drop=True)
+ # 
+ #            #simple selection
+ #            bx = np.logical_and(
+ #                mdf['coverage_attribute']=='building',
+ #                np.logical_and(
+ #                    mdf['building_quality_attribute'].isin(['low/medium quality', np.nan]),
+ #                    mdf['sector_attribute'].isin(['residential', 'commercial'])
+ #                    )
+ #                )
+ #            for coln in use_null_coln_d[model_id]:
+ #                #print(mdf[coln].value_counts(dropna=False))
+ #                
+ #                #select rows of interest
+ #                """nan values are used when no other info is available"""
+ #                bx_i = mdf[coln].isna() 
+ #                
+ #                #append slicer
+ #                bx = np.logical_and(bx, bx_i)
+ #                
+ #                print(f'    for \'{coln}\' selected {bx_i.sum()} entries with combined selection of {bx.sum()}')
+ #                
+ #            print(f'selected {bx.sum()}/{len(bx)}')
+ #            """
+ #            view(gserx[bx.values])
+ #            """
+ #            rserx = gserx[bx.values]
+ #==============================================================================
+            
+            #decided to just take the resi model 
+            rserx = gserx.loc[gserx.index.get_level_values('df_id')==26]
                 
             
         elif 941 in dfid_l:
-            gserx=gserx*100
-            print(model_id)
+            rserx =gserx*100
+            print(f'scaled {model_id} by 100')
         
         #=======================================================================
         # no changes
         #=======================================================================
         else:
-            res_d[model_id] = gserx
+            rserx = gserx.copy()
+            
+        #=======================================================================
+        # wrap
+        #=======================================================================
+        res_d[model_id] = rserx
             
         #=======================================================================
         # check
         #=======================================================================
-        assert gserx.max()>1.0, f'rl not in percent on {model_id}'
+        assert rserx.max()>1.0, f'rl not in percent on {model_id}'
             
             
     #===========================================================================
@@ -641,6 +653,9 @@ def slice_lib(
     #===========================================================================
     lib_serx_new = pd.concat(res_d.values())
     _print_lib(lib_serx_new.index)
+    """
+    view(lib_serx_new)
+    """
 
     
     return lib_serx_new
@@ -649,7 +664,7 @@ def slice_lib(
 
 
 def get_funcLib(
-        lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230915.pkl',
+        lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
         out_dir=None,
         use_cache=True,
         **kwargs):
@@ -673,7 +688,7 @@ def get_funcLib(
     #===========================================================================
     # get hash
     #===========================================================================
-    uuid = hashlib.shake_256((lib_fp).encode("utf-8"), usedforsecurity=False).hexdigest(8)
+    uuid = hashlib.shake_256((f'{lib_fp}_{kwargs}').encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'dfuncLib_sliced_{uuid}.pkl')
     
     
@@ -704,16 +719,16 @@ if __name__ == '__main__':
     #prep_wagenaar2018()
     
     #===========================================================================
-    # join_to_funcLib(
+    # _03join_to_funcLib(
     #     r'l:\10_IO\2307_funcAgg\outs\funcMetrics\wagenaar2018\20230915\wagenaar2018_10_20230915.pkl',
     #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl') 
     #===========================================================================
     
-    _04add_zero_zero()
+ 
      
     #slice_lib()
     
-    #get_funcLib()
+    get_funcLib(use_cache=False)
 
 
 
