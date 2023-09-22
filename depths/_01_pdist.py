@@ -37,7 +37,7 @@ from coms import (
     init_log, today_str, get_directory_size,dstr, view,  get_log_stream
     ) 
 
-from agg.coms_agg import get_conn_str, pg_exe
+from _02agg.coms_agg import get_conn_str, pg_exe
 
 from definitions import (
     index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l,
