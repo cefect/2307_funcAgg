@@ -293,7 +293,7 @@ def plot_rl_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=0.95,
-        samp_frac=0.001, #
+        samp_frac=0.0001, #
         dev=False,
         ylab_d = clean_names_d,
         ):
@@ -446,7 +446,7 @@ def plot_rl_agg_v_bldg(
     # loop and plot-----
     #===========================================================================
     #letter=list(string.ascii_lowercase)[j]
-    
+    meta_lib=dict()
  
     for (row_key, col_key), gdx0 in dx2.groupby(kl[:2]):
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
@@ -457,6 +457,8 @@ def plot_rl_agg_v_bldg(
         assert (gdx0==0).sum().sum()==0
         
         ax.set_ylim(0,45) #the function plots shoudl be teh same... but the hist plot will it's own
+        
+        
         #=======================================================================
         # plot function 
         #=======================================================================
@@ -470,6 +472,7 @@ def plot_rl_agg_v_bldg(
         #=======================================================================
         # plot per hazard
         #=======================================================================
+        
         for color_key, gdx1 in gdx0.groupby(kl[2]):
             """setup for multiple hazards... but this is too busy"""
             #===================================================================
@@ -542,6 +545,12 @@ def plot_rl_agg_v_bldg(
                             transform=ax.transAxes, va='bottom', ha='right', 
                             bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
                             )
+        
+        #=======================================================================
+        # meta
+        #=======================================================================
+        if not row_key in meta_lib: meta_lib[row_key] = dict()
+        meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean}
         
  
         
@@ -669,7 +678,21 @@ def plot_rl_agg_v_bldg(
     plt.show()
     
     """
- 
+    
+    #===========================================================================
+    # meta
+    #===========================================================================
+    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
+                        names=['df_id', 'stat'])
+    
+    mdf1 = meta_df.stack().unstack(level='stat')
+    
+    mdf1['bias'] = mdf1['grid_rl_pop_mean']/mdf1['bldg_rl_pop_mean']
+    
+    
+    
+    
+    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
         
     #===========================================================================
     # write
@@ -763,11 +786,18 @@ def plot_TL_agg_v_bldg(
     view(mdf.head(100))
  
     """
+    #===========================================================================
+    # """doesnt really help much"""
+    # #drop those w/ less than 5 bldgs
+    # bx = (dx1.index.get_level_values('bldg_cnt')>=5)
+    # log.info(f'selecting {bx.sum()}/{len(bx)} rl entries w/ few buildings')
+    # dx1 = dx1[bx] 
+    #===========================================================================
+    
     dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
- 
- 
- 
+    
+
     #===========================================================================
     # setup indexers
     #===========================================================================        
@@ -784,7 +814,7 @@ def plot_TL_agg_v_bldg(
  
  
     #drop meta and add zero-zero
-    fserx = force_monotonic(force_zero_zero(slice_serx(fserx_raw, xs_d=None), log=log),log=log)
+    #fserx = force_monotonic(force_zero_zero(slice_serx(fserx_raw, xs_d=None), log=log),log=log)
     
     #===========================================================================
     # setup figure
@@ -862,7 +892,7 @@ def plot_TL_agg_v_bldg(
             x,y = df_sample['grid_cent'].values, df_sample['bldg_mean'].values
             xy = np.vstack([x,y])
             
-            pdf = gaussian_kde(xy)
+            pdf = gaussian_kde(xy, bw_method=0.1)
             z = pdf(xy) #Evaluate the estimated pdf on a set of points.
             
             # Sort the points by density, so that the densest points are plotted last
@@ -874,11 +904,8 @@ def plot_TL_agg_v_bldg(
             # plot 1:1
             #===================================================================
             c = [0,10e5]
-            ax.plot(c,c, color='black', linestyle='solid', linewidth=0.75)
+            ax.plot(c,c, color='black', linestyle='solid', linewidth=0.5)
  
- 
-
-            
             #===================================================================
             # #plot grid cent
             #===================================================================
@@ -914,13 +941,7 @@ def plot_TL_agg_v_bldg(
         
         ax.set_xlim(1,10e4)
         ax.set_ylim(1,10e4)
-        
  
- 
- 
-        
-        
-            
     #===========================================================================
     # get some function meta
     #===========================================================================
@@ -1053,7 +1074,7 @@ if __name__=='__main__':
     #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
    # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
    
-    plot_TL_agg_v_bldg()
+    plot_TL_agg_v_bldg(samp_frac=0.01)
 
     
  
