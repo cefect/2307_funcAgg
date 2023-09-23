@@ -21,4 +21,5 @@ dependencies:
     - psycopg2
     - SQLAlchemy
     - GeoAlchemy2
+    - palettable
     
