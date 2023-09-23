@@ -69,14 +69,14 @@ def get_rloss(dd_ar,
     #=======================================================================
     # interploate
     #=======================================================================
- 
-    res_ar = np.apply_along_axis(lambda x:np.interp(x,
+    f = lambda x:np.interp(x,
                                 dd_ar[0], #depths (xcoords)
                                 dd_ar[1], #damages (ycoords)
                                 left=0, #depth below range
                                 right=max(dd_ar[1]), #depth above range
-                                ),
-                        0, xuq)
+                                )
+    
+    res_ar = np.apply_along_axis(f,0, xuq.astype(float))
     
 
     #=======================================================================

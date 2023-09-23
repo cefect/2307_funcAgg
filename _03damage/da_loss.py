@@ -148,9 +148,10 @@ from _03damage._06_total import get_total_losses
  
 def plot_rl_raw(
         tableName='rl_deu_grid_0060',
-        schema='dev',
+        schema='damage',
         out_dir=None,
         figsize=None,
+        figsize_scaler=2,
         conn_str=None,
         limit=None,
  
@@ -220,7 +221,9 @@ def plot_rl_raw(
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, 
                                constrained_layout=False,
-                               sharex=True, sharey=True, add_subfigLabel=False, figsize=figsize)
+                               sharex=True, sharey=True, add_subfigLabel=False, 
+                               figsize=figsize,
+                               figsize_scaler=figsize_scaler)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
@@ -298,11 +301,14 @@ def plot_rl_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=0.95,
+        dfid_l = [942,  944, 945, 946], 
         samp_frac=0.0001, #
         dev=False,
         ylab_d = clean_names_d,
         cmap='PuRd_r',
         ):
+    
+    raise IOError('looks like the centroid bias is more severe.... I think we need to include a f(mean(bldg_wd)) version')
     
     """plot relative loss from grid centroids and building means    
     
@@ -366,9 +372,20 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     """want to exclude partials
     
-    view(mdf.head(100))
+    view(dx1.head(100))
+    
+    mdex.unique('df_id')
  
     """
+    #select functions
+    if not dfid_l is None:
+        bx = mdex.to_frame().reset_index(drop=True)['df_id'].isin(dfid_l).values
+        assert bx.any()
+        log.info(f'w/ {len(dfid_l)} df_ids selected {bx.sum()}/{len(bx)}')
+        dx1 = dx1.loc[bx, :]
+        mdex = dx1.index
+    
+    
     dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
  
@@ -1103,7 +1120,7 @@ def plot_TL_agg_v_bldg(
     
 if __name__=='__main__':
     
-
+    #plot_rl_raw()
 
     
     

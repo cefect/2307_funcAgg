@@ -92,7 +92,7 @@ def get_grid_rl_dx(
         else:
             schema = 'damage' 
             
-        assert pg_table_exists(schema, tableName, asset_type='matview'), f'missing table dependency \'{tableName}\'... see _04expo._03_views'
+        assert pg_table_exists(schema, tableName, asset_type='matview'), f'missing table dependency \'{tableName}\'\n    see _04expo._03_views.create_view_join_stats_to_rl()'
         keys_l = ['country_key', 'grid_size','haz_key', 'i', 'j']
         
         #===========================================================================
@@ -295,6 +295,9 @@ if __name__=='__main__':
     
     
     run_bldg_rl_mean_bins('deu', dev=False)
+    
+    
+    print(f'finished')
     
     
     

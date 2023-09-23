@@ -99,7 +99,7 @@ def rl_to_post(
  
         schema='damage',
          log=None,
-         dev=True,
+         dev=False,
  
         ):
     """concat loss chunk .pkls and port to post
@@ -319,13 +319,13 @@ def run_all(ck='deu', grid_size_l=None, **kwargs):
 if __name__ == '__main__':
     """need to run both of these"""
     
-    run_bldg_rl_topost('deu', dev=False)
+    #run_bldg_rl_topost('deu', dev=False)
     #run_agg_rl_topost('deu', dev=False)
     
     
     
     
-    #run_all()
+    run_all()
     
     
     

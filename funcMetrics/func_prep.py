@@ -679,7 +679,7 @@ def _05join_hill(
     """
     df1  = df_raw.copy()
     df1.index.name=mdex.names[-1]
-    df1.index = df1.index.round(1)
+    df1.index = (df1.index*0.01).round(2)
     
     model_id = mdex.to_frame()['model_id'].max()
     df_id = mdex.to_frame()['df_id'].max()
@@ -729,7 +729,7 @@ def _05join_hill(
     # append
     #===========================================================================
     res_d[i+1] = lib_serx
-    lib_serx_new = pd.concat(res_d.values(), axis=0)
+    lib_serx_new = pd.concat(res_d.values(), axis=0).astype(float)
     
     print(f'added {i+1} to obtain {len(lib_serx_new)}')
     
@@ -942,6 +942,9 @@ def get_funcLib(
  
     
     return serx
+"""
+view(serx)
+"""
             
         
     
