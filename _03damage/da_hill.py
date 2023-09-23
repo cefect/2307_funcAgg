@@ -1,12 +1,12 @@
 """playing with the hill function"""
 
 
-
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
-xar = np.linspace(0, 500, 10)
+xar = np.linspace(0, 500, 50)
 
 ka = max(xar)
 rl_max = 100
@@ -26,7 +26,7 @@ def hill(l, n, ka=ka):
     return (rl_max*2) / (1 + (ka / l)**n)
 
 # Define the Hill coefficients
-hill_coefficients = [0.5,0.9, 1,1.1, 2] #+ np.linspace(1,2,5).tolist()
+hill_coefficients = [0.2, 0.5,0.9, 1,1.1, 2] #+ np.linspace(1,2,5).tolist()
 
 
 
@@ -65,8 +65,13 @@ plt.legend()
 plt.title(f"Hill Function Dose-Response Curves ka={ka}")
 
 # Show the plot
-plt.show()
-print('finished')
+
+fig = plt.gcf()
+
+ofp = os.path.join(r'l:\10_IO\2307_funcAgg\outs\damage\da', 'hill_funcs.svg')
+fig.savefig(ofp,   transparent=True)
+
+print(f'wrote to\n    {ofp}')
 
 
 

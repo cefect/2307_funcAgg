@@ -429,6 +429,9 @@ def _02prep_wagenaar2018(
     view(df1)
     view(df3)
     """
+
+
+    
     
 
 
@@ -439,7 +442,16 @@ def _03join_to_funcLib(func_fp,
         abbr='Wagenaar (2018)',
         wd_scale=0.01, #for scaling to meters
         ):
-    """join a new function to the function library"""
+    """join a new function to the function library
+    
+    
+    params
+    --------
+    func_fp: str
+        filepath to the new function to be added
+        pd.Series(RL (pct), index=wd (cm))
+    
+    """
     
     #===========================================================================
     # defaults
@@ -453,6 +465,10 @@ def _03join_to_funcLib(func_fp,
     # load
     #===========================================================================
     func_raw = pd.read_pickle(func_fp)
+    
+    """
+    view(func_raw)
+    """
     
     #load library
     if lib_fp is None: 
@@ -523,6 +539,215 @@ def _03join_to_funcLib(func_fp,
     return ofp
 
 
+def _04build_hills(
+        out_dir=None,
+        coefs_t = (
+            (1.0, 1000, 100),
+            (1.0, 1000, 50),
+            #(1.0, 200, 50),
+            (0.5, 1000, 100),
+            #(0.6, 1000, 100),
+            (0.75, 1000, 100),
+            #(0.8, 1000, 100),
+            #(0.9, 1000, 100),
+            ),
+        
+        ):
+    """construct example hill functions and prep for database inclusion
+    
+    see also damage.da_hill
+    
+    params
+    --------
+    coefs: tuple
+        hill_coef, xmax, ymax
+    
+    Returns
+    ----------
+    writes pick fp for pd.DataFrame(RL (pct), index=wd (cm), columns=different hill function parameterizations)
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    
+    
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'func', 'hill', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='hill')
+    
+    
+    xar = np.linspace(1, 1001, 31) #discretiazation of the x (depths) domain
+    
+    #===========================================================================
+    # functions
+    #===========================================================================
+ 
+    def hill(x, h, xmax, ymax):
+        """modfieid hill function""" 
+ 
+
+        return  (ymax*2) / (1 + (xmax / x)**h)
+    
+    
+    #===========================================================================
+    # loop and construct for each hill
+    #===========================================================================
+    log.info(f'building for {len(coefs_t)}')
+    res_d = dict()
+    for i, coefs in enumerate(coefs_t):
+        log.info(f'w/ {coefs}')
+        yar = hill(xar, *coefs)
+        
+        #add zero        
+        ser = pd.Series(np.array([[0]+yar.tolist()])[0],
+            index=np.array([[0]+xar.tolist()])[0],
+            name=f'hill_n{coefs[0]}_x{coefs[1]}_y{coefs[2]}')
+        
+        #remove any exceeding xmax
+        res_d[i] = ser[ser.index.values<coefs[1]]
+        
+        
+        
+    df = pd.concat(res_d.values(), axis=1)
+    
+    #===========================================================================
+    # add a linear one as well
+    #===========================================================================
+    f = lambda x:(100/max(df.index))*x
+    df['line'] = np.array(map(f, df.index))
+    
+    #===========================================================================
+    # write
+    #===========================================================================
+    ofp = os.path.join(out_dir, f'hill_funcs_{len(df.columns)}_{today_str}.pkl')
+    df.to_pickle(ofp)
+    
+    log.info(f'wrote {df.shape} to \n    {ofp}')
+    
+    #===========================================================================
+    # plot
+    #===========================================================================
+    df.plot()
+        
+        
+def _05join_hill(
+        func_fp=r'l:\10_IO\2307_funcAgg\outs\func\hill\20230923\hill_funcs_5_20230923.pkl',
+        out_dir=None,   
+        lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
+ 
+         
+        ):
+    """join a new function to the function library
+    
+    
+    params
+    --------
+    func_fp: str
+        filepath to the new function to be added
+        pd.Series(RL (pct), index=wd (cm))
+    
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'join_hill')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    #===========================================================================
+    # load
+    #===========================================================================
+    df_raw = pd.read_pickle(func_fp)
+ 
+    
+    """
+    view(func_raw)
+    """
+ 
+        
+    lib_serx = pd.read_pickle(lib_fp)
+    mdex =lib_serx.index
+    
+    """
+    view(lib_serx.head(100))
+    """
+    df1  = df_raw.copy()
+    df1.index.name=mdex.names[-1]
+    df1.index = df1.index.round(1)
+    
+    model_id = mdex.to_frame()['model_id'].max()
+    df_id = mdex.to_frame()['df_id'].max()
+    #===========================================================================
+    # loop and build meta for each
+    #===========================================================================
+    res_d = dict()
+    for i, (abbr, ser) in enumerate(df1.items()):
+        print(abbr)
+        
+        #=======================================================================
+        # advance
+        #=======================================================================
+        model_id+=1
+        df_id+=1
+        #===========================================================================
+        # #prep the new function
+        #===========================================================================
+        ser1 = ser.rename(lib_serx.name)
+        #rename
+     
+ 
+        #add some meta
+        meta_d = {
+            'abbreviation':abbr,
+            'figueriredo2018':False,
+            'damage_formate_attribute':'relative',
+            'function_formate_attribute':'discrete',
+            'coverage_attribute':'building',
+            'sector_attribute':'residential',
+            'country_attribute':'DEU',        
+            'df_id':df_id,
+            'model_id':model_id}
+        
+        ser1.index = pd_mdex_append_level(ser1.index, meta_d)
+        
+        #fill in blanks
+        meta_d2 = dict()
+        for k in mdex.names:
+            if not k in ser1.index.names:
+                meta_d2[k] = np.nan
+                
+        ser1.index = pd_mdex_append_level(ser1.index, meta_d2)
+        
+        res_d[abbr] = ser1.reorder_levels(mdex.names)
+    #===========================================================================
+    # append
+    #===========================================================================
+    res_d[i+1] = lib_serx
+    lib_serx_new = pd.concat(res_d.values(), axis=0)
+    
+    print(f'added {i+1} to obtain {len(lib_serx_new)}')
+    
+    #===========================================================================
+    # write
+    #===========================================================================
+    dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
+    ofp = os.path.join(out_dir, f'dfuncLib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    
+    lib_serx_new.to_pickle(ofp)
+    
+    print(f'wrote to \n    {ofp}')
+    
+    return ofp
+"""
+lib_serx_new.index.unique('abbreviation')
+view(lib_serx_new)
+"""
 
 
 
@@ -535,15 +760,17 @@ def _print_lib(mdex):
 def slice_lib(
         lib_fp=None,
  
-        use_null_coln_d = {
-            3:[#FLEMO
-            #'unicede_occupancy_attribute',
-            'construction_material_attribute',
-            #'building_quality_attribute',
-            'number_of_floors_attribute',
-            'basement_occurance_attribute',
-            'precaution_attribute',
-            ]}
+        #=======================================================================
+        # use_null_coln_d = {
+        #     3:[#FLEMO
+        #     #'unicede_occupancy_attribute',
+        #     'construction_material_attribute',
+        #     #'building_quality_attribute',
+        #     'number_of_floors_attribute',
+        #     'basement_occurance_attribute',
+        #     'precaution_attribute',
+        #     ]}
+        #=======================================================================
         ):
     """apply some to the library
     
@@ -670,7 +897,8 @@ def slice_lib(
 
 
 def get_funcLib(
-        lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
+        #lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
+        lib_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_24_699_20230923.pkl', #with hill funcs
         out_dir=None,
         use_cache=True,
         **kwargs):
@@ -721,7 +949,7 @@ def get_funcLib(
     
 if __name__ == '__main__':
     
-    load_dfunc_serx()
+    #load_dfunc_serx()
     #write_dfunc_serx()
     
     #prep_wagenaar2018()
@@ -732,11 +960,13 @@ if __name__ == '__main__':
     #     lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\figueiredo2018\20230915\dfuncLib_figu2018_20230915.pkl') 
     #===========================================================================
     
+    #_04build_hills()
+    #_05join_hill()
  
      
     #slice_lib()
     
-    #get_funcLib(use_cache=False)
+    get_funcLib(use_cache=False)
 
 
 
