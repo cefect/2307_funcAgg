@@ -351,8 +351,13 @@ def get_grid_wd_dx(
         
         log.info(f'finished w/ {len(dx_raw)} total rows')
         
- 
-        dx = dx_raw
+        
+        #=======================================================================
+        # clean
+        #=======================================================================
+        
+        """some nulls on grid wd because of the left join"""
+        dx = dx_raw.fillna(0.0)
         #===========================================================================
         # write
         #===========================================================================
@@ -367,6 +372,11 @@ def get_grid_wd_dx(
     else:
         log.info(f'loading from cache:\n    {ofp}')
         dx = pd.read_pickle(ofp)
+        
+        """
+        dx.isna().sum()
+        dx.index.to_frame().isna().sum()
+        """
  
  
     log.info(f'got {dx.shape}')
@@ -393,7 +403,7 @@ if __name__ == '__main__':
     
  
     
-    get_grid_wd_dx(dev=False)
+    get_grid_wd_dx(dev=False, use_cache=False)
     
  
     

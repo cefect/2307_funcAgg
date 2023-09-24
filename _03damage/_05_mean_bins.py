@@ -226,7 +226,7 @@ def filter_rl_dx_minWetFrac(dx1, min_wet_frac=0.95, log=None):
     assert bx.any()
     log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
  
-    return dx1.loc[bx, :].droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])
+    return dx1.loc[bx, :] #.droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])
         
 def compute_binned_mean(serx, log=None, out_dir=None, use_cache=False, bin_cnt=21):
     """calc binned mean"""

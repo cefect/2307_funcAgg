@@ -133,14 +133,8 @@ from funcMetrics.coms_fm import (
 
 from palettable.colorbrewer.sequential import PuBu_9, RdPu_3
 
-from _02agg.coms_agg import (
-    get_conn_str,   
-    )
-
-from _03damage._05_mean_bins import get_grid_rl_dx, compute_binned_mean, filter_rl_dx_minWetFrac
- 
-from _03damage._06_total import get_total_losses
-
+from _03damage._05_mean_bins import filter_rl_dx_minWetFrac
+from _05depths._02_views import get_grid_wd_dx 
 
 #===============================================================================
 # data
@@ -201,7 +195,7 @@ def plot_rlMean_v_gCentroid(
     #===========================================================================
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
-        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
+        dx_raw = get_grid_wd_dx(country_key=country_key, haz_key=haz_key, log=log, use_cache=True, dev=dev)
     
     """no.. better to just sample the kde
     if not dev:
@@ -215,7 +209,7 @@ def plot_rlMean_v_gCentroid(
     
     """
     
-    dx1 = dx_raw.stack().droplevel('country_key')
+    dx1 = dx_raw.droplevel('country_key')
     mdex = dx1.index
     
     assert len(mdex.unique('haz_key'))==1
@@ -231,84 +225,30 @@ def plot_rlMean_v_gCentroid(
     mdex.unique('df_id')
  
     """
-    #select functions
-    if not dfid_l is None:
-        bx = mdex.to_frame().reset_index(drop=True)['df_id'].isin(dfid_l).values
-        assert bx.any()
-        log.info(f'w/ {len(dfid_l)} df_ids selected {bx.sum()}/{len(bx)}')
-        dx1 = dx1.loc[bx, :]
-        mdex = dx1.index
-    
+ 
     
     dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
  
-    # get binned means 
-    
-    keys_l =  ['grid_size', 'haz_key', 'df_id', 'grid_wd'] #only keys we preserve   
- 
-    #get a slice with clean index
-    sx1 = dx2['bldg_mean'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
-     
-    mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=True)
-    
-    
-    #===========================================================================
-    # build pdf
-    #===========================================================================
-    #===========================================================================
-    # """want to use the same pdf
-    # 
-    # NO!
-    # """
-    # #get a weighted sample
-    # 
-    # ser_samp = dx2['bldg_mean'].groupby(['grid_size', 'haz_key', 'df_id']).sample(int(1e4))
-    # 
-    # x,y = ser_samp.index.get_level_values('grid_wd'), ser_samp.values
-    # xy = np.vstack([x,y])
-    #         
-    # pdf = gaussian_kde(xy)
-    #===========================================================================
  
     #===========================================================================
     # setup indexers
     #===========================================================================        
-    keys_d = {'row':'df_id',  'col':'grid_size', 'color':'haz_key'}
+    keys_d = {'row':'haz_key',  'col':'grid_size'}
     kl = list(keys_d.values())     
     log.info(f' loaded {len(dx1)}')
     
-    
-    #===========================================================================
-    # prep loss functions---------
-    #===========================================================================
-    if fserx_raw is None: 
-        fserx_raw = get_funcLib() #select functions
-    
-    """
-    view(fserx_raw.head(100))
-    """
-    
-    #===========================================================================
-    # no need as the interp just uses max loss anyway
-    # #extend
-    # """using full index as we are changing the index (not just adding values"""
-    # fserx_extend = force_max_depth(fserx, max_depth, log).rename('rl')
-    #===========================================================================
  
-    #drop meta and add zero-zero
-    fserx = force_and_slice(fserx_raw, log=log)
     
     #===========================================================================
     # setup figure
     #===========================================================================
-    row_keys, col_keys, color_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
-    
-    #add the hist
-    row_keys = ['hist'] + row_keys
+    row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+ 
     
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
                                constrained_layout=False, #needs to be unconstrainted for over label to work
+                               figsize_scaler=3,
                                sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
@@ -328,87 +268,55 @@ def plot_rlMean_v_gCentroid(
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
         ax = ax_d[row_key][col_key]
         
-        gdx0 = gdx0.droplevel(kl[:2])
+        gdx0 = gdx0.droplevel(kl[:2]).dropna()
         
-        assert (gdx0==0).sum().sum()==0
+        #assert (gdx0==0).sum().sum()==0
         
-        #ax.set_ylim(0,45) #the function plots shoudl be teh same... but the hist plot will it's own
+ 
+        xar, yar = gdx0['bmean_wd'], gdx0['grid_wd']
+        #===================================================================
+        # #plot bldg_mean scatter
+        #===================================================================
         
+        #geet a sample of hte data
+        df_sample = gdx0.sample(min(int(len(dx2)*samp_frac), len(gdx0)))
         
+        log.info(f'    w/ {gdx0.size} and sample {df_sample.size}')
+        
+        #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
+        #as density
+        x,y = df_sample['bmean_wd'].values, df_sample['grid_wd'].values
+        xy = np.vstack([x,y])
+        
+        """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
+        pdf = gaussian_kde(xy)
+        z = pdf(xy) #Evaluate the estimated pdf on a set of points.
+        
+        # Sort the points by density, so that the densest points are plotted last
+        indexer = z.argsort()
+        x, y, z = x[indexer], y[indexer], z[indexer]
+        cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        
+                #===================================================================
+        # plot 1:1
+        #===================================================================
+        c = [0,gdx0.max().max()]
+        ax.plot(c,c, color='black', linestyle='dashed', linewidth=0.5)
+        
+ 
         #=======================================================================
-        # plot function 
+        # linear regression
         #=======================================================================
-        wd_rl_df = fserx.xs(row_key, level='df_id').reset_index('wd').reset_index(drop=True)
-        xar, yar = wd_rl_df['wd']*100, wd_rl_df['rl']
+ 
+        
+        #regression
+        lm = scipy.stats.linregress(xar, yar)
          
-        ax.plot(xar, yar, color='black', marker='o', linestyle='solid', alpha=1.0, 
-                markersize=3,fillstyle='none', linewidth=0.75, label=f'$f(WSH)$')
-        
+        predict = lambda x:np.array([lm.slope*xi + lm.intercept for xi in x])            
+        ax.plot(np.array(c), predict(np.array(c)), color='red', linestyle='solid', label='regression', marker=None)
+         
+        print({'rvalue':lm.rvalue, 'slope':lm.slope, 'intercept':lm.intercept})
  
-        #=======================================================================
-        # plot per hazard
-        #=======================================================================
-        
-        for color_key, gdx1 in gdx0.groupby(kl[2]):
-            """setup for multiple hazards... but this is too busy"""
-            #===================================================================
-            # prep
-            #===================================================================
-            #c=color_d[color_key]
-            c='black'
-            
-            #prep data
-            df= gdx1.droplevel(kl[2]).reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
-            
-
-
-            #===================================================================
-            # #plot bldg_mean scatter
-            #===================================================================
-            
-            #geet a sample of hte data
-            df_sample = df.copy().sample(min(int(len(dx2)*samp_frac), len(df)))
-            
-            log.info(f'    w/ {df.size} and sample {df_sample.size}')
-            
-            #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
-            #as density
-            x,y = df_sample.index.values, df_sample['bldg_mean'].values
-            xy = np.vstack([x,y])
-            
-            """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
-            pdf = gaussian_kde(xy)
-            z = pdf(xy) #Evaluate the estimated pdf on a set of points.
-            
-            # Sort the points by density, so that the densest points are plotted last
-            indexer = z.argsort()
-            x, y, z = x[indexer], y[indexer], z[indexer]
-            cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
- 
-            #===================================================================
-            # plot binned bldg_mean lines
-            #===================================================================
-            bin_serx = mean_bin_dx.loc[idx[col_key, color_key, row_key, :], :].reset_index(drop=True
-                                           ).set_index('grid_wd_bin').iloc[:,0]
-                               
-            ax.plot(bin_serx, color=c, alpha=1.0, marker=None, linestyle='dashed', 
-                    markersize=2, linewidth=1.5,
-                    label='$\overline{RL_{bldg,j}}(WSH)$')
-            
-            """need gridspec for this
-            #===================================================================
-            # violin
-            #===================================================================
-            ax.violin([df_sample.index.values.ravel()], positions=[1000])"""
-
-            
-            #===================================================================
-            # #plot grid cent
-            #===================================================================
-            #===================================================================
-            # ax.plot(df['grid_cent'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
-            #         label='grid')
-            #===================================================================
             
         #===================================================================
         # text-------
@@ -419,17 +327,19 @@ def plot_rlMean_v_gCentroid(
         tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
         tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
         
-        rmse = np.sqrt(np.mean((gdx0['bldg_mean'] - gdx0['grid_cent'])**2))
+        rmse = np.sqrt(np.mean((xar - yar)**2))
         tstr+='\nRMSE: %.2f'%rmse
         
         bias = gmean/bmean
         tstr+='\nbias: %.2f'%(bias)
         
+        tstr+='\nr: %.2f'%(lm.rvalue)
+        
+        
         #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
         
         coords = (0.8, 0.05)
-        if row_key==402:
-            coords = (coords[0], 0.5) #move it up
+ 
  
         
         ax.text(*coords, tstr, size=6,
@@ -441,88 +351,44 @@ def plot_rlMean_v_gCentroid(
         # meta
         #=======================================================================
         if not row_key in meta_lib: meta_lib[row_key] = dict()
-        meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean, 'bias':bias}
+        meta_lib[row_key][col_key] = {'bldg_pop_mean':bmean, 'grid_pop_mean':gmean, 'bias':bias}
         
  
         
-    #===========================================================================
-    # plot histograms---------
-    #===========================================================================
-    """
-    plt.show()
-    """
-    wd_df = dx2.unstack(level='df_id').index.to_frame().reset_index(drop=True).drop(['i', 'j'], axis=1)
-    for grid_size, gdf in wd_df.groupby('grid_size'):
-        ax = ax_d['hist'][grid_size]
-        
-        ax.hist(gdf['grid_wd'], bins = np.linspace(0, 1000, 31 ), color='black', alpha=0.5, density =True)
-        
-        #turn off some spines
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        
-        #===================================================================
-        # text
-        #===================================================================
  
-        tstr = f'n= {len(gdf):.2e}\n'
-        tstr +='$\overline{WSH}$= %.2f'%gdf['grid_wd'].mean()
-        #tstr +='\n$\sigma^2$= %.2f'%gdf['grid_wd'].var() #no... we want the asset variance
-        ax.text(0.6, 0.5, tstr, 
-                            transform=ax.transAxes, va='bottom', ha='left', 
-                            #bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
- 
-        
-        
-            
-    #===========================================================================
-    # get some function meta
-    #===========================================================================
-    #get model-dfid lookup
- 
-    meta_df = fserx_raw.index.to_frame().reset_index(drop=True).loc[:, ['df_id', 'model_id', 'abbreviation']
-                                      ].drop_duplicates().set_index('df_id') 
-  
-    #add defaults and convert to df_id
-    ylab_d1=dict()
-    for i, row in meta_df.iterrows():
-        if not row['model_id'] in ylab_d:
-            ylab_d1[i] = row['abbreviation']
-        else:
-            ylab_d1[i] = ylab_d[row['model_id']]
  
     #===========================================================================
     # post----
     #===========================================================================    
     for row_key, col_key, ax in rc_ax_iter:
- 
+        pass
         #ax.grid()
         
         # first row
-        if row_key == row_keys[0]:
-            ax.set_xlim(0,1000)
-            ax.set_title(f'{col_key}m grid')
-            
-        #second row
-        if row_key==row_keys[1]:
-
-            if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='upper right', frameon=False)
-                
-        
-        # last row
-        if row_key == row_keys[-1]: 
-            pass 
-            # ax.set_xlabel(f'WSH (cm)')
-             
-        # first col
-        if col_key == col_keys[0]: 
-            if not row_key=='hist':
-                ax.set_ylabel(ylab_d1[row_key])
-            else:
-                ax.set_ylabel(f'density of WSH')
+#===============================================================================
+#         if row_key == row_keys[0]:
+#             ax.set_xlim(0,1000)
+#             ax.set_title(f'{col_key}m grid')
+#             
+#         #second row
+#         if row_key==row_keys[1]:
+# 
+#             if col_key==col_keys[0]:
+#                 ax.legend(ncol=1, loc='upper right', frameon=False)
+#                 
+#         
+#         # last row
+#         if row_key == row_keys[-1]: 
+#             pass 
+#             # ax.set_xlabel(f'WSH (cm)')
+#              
+#         # first col
+#         if col_key == col_keys[0]: 
+#             if not row_key=='hist':
+#                 ax.set_ylabel(ylab_d1[row_key])
+#             else:
+#                 ax.set_ylabel(f'density of WSH')
+#===============================================================================
  
             
     #===========================================================================
@@ -531,8 +397,8 @@ def plot_rlMean_v_gCentroid(
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel(f'relative loss in % (RL)', labelpad=20)
-    macro_ax.set_xlabel(f'water depth in cm (WSH)')
+    macro_ax.set_ylabel(f'grid centroid water depth in cm', labelpad=20)
+    macro_ax.set_xlabel(f'child depth mean in cm')
     
     """doesnt help
     fig.tight_layout()"""
@@ -541,7 +407,7 @@ def plot_rlMean_v_gCentroid(
     # #add colorbar
     #===========================================================================
     #create the axis
-    fig.subplots_adjust(bottom=0.15)
+    fig.subplots_adjust(bottom=0.25)
     leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
     leg_ax.set_visible(False)    
     
@@ -564,12 +430,7 @@ def plot_rlMean_v_gCentroid(
     # tighten up
     #===========================================================================
     fig.subplots_adjust(top=0.95, right=0.95)
-    
-    """
-    plt.show()
-    
-    """
-    
+ 
     #===========================================================================
     # meta
     #===========================================================================
@@ -590,7 +451,7 @@ def plot_rlMean_v_gCentroid(
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'wd_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
     
     plt.close('all')
@@ -615,7 +476,7 @@ def plot_rlMean_v_gCentroid(
 if __name__=='__main__':
     
  
-    plot_rlMean_v_gCentroid(dev=False, samp_frac=0.001)
+    plot_rlMean_v_gCentroid(dev=False, samp_frac=0.01)
 
     
  
