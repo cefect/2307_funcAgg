@@ -59,14 +59,14 @@ def run_join_agg_grids(
         
  
         ):
-    """join grid ids to building points
+    """join grid ids to building points (with some exposure)
     
     uses inters.{country_key}
 
     Returns
     ----------
     Postgres table [agg_bldg.bldgs_grid_link_{country_key}_{grid_size:04d}]
-        bulding to grid links (only buidlings with some depths on f010_fluvial)
+        bulding to grid links (only buidlings with some depths on f500_fluvial)
  
     """
     

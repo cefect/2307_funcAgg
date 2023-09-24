@@ -86,6 +86,9 @@ def pg_getcount(schema, tableName,  conn_str=None):
         with conn.cursor() as cur:
             cur.execute(f"""SELECT COUNT(*) FROM {schema}.{tableName}""")
             return int(cur.fetchone()[0])
+        
+def pg_get_nullcount(schema, tableName, colName, **kwargs):
+    return pg_exe(f"""SELECT COUNT(*) FROM {schema}.{tableName} WHERE {colName} IS NULL""", return_fetch=True, **kwargs)[0][0]  
 
 def pg_to_df(cmd_str, conn_d=postgres_d):
     """load a filtered table to geopanbdas"""

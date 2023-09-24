@@ -2,7 +2,8 @@
 
 @echo off
  
-set country=deu 
+set country=deu
+set geom_type=poly
  
  
 
@@ -10,10 +11,7 @@ set country=deu
 call %~dp0..\..\env\conda_activate
 echo on
 :: execute
-for %%G in (1020, 240, 60) do ( 
-    python -O main_04_occupied.py --grid_size %%G  --country_key %country%  
-    ECHO finished %%G
-)
+python -O main_04_occupied.py --geom_type %geom_type%
  
 ECHO finished
 cmd.exe /k
