@@ -49,10 +49,11 @@ from coms import (
 def create_view_merge_bmeans(country_key='deu', 
                              #haz_key='f500_fluvial',
                          grid_size_l=None,
-         dev=False, conn_str=None,
+         dev=False,
+          conn_str=None,
          with_geom=False,
          log=None,
-         include_gcent=True,
+         include_gcent=False,
         ):
     
     """create a view by unioning all the child building mean depths
@@ -75,18 +76,22 @@ def create_view_merge_bmeans(country_key='deu',
     # table params
     #===========================================================================
     keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
-    if dev:
-        schema = 'dev'
-    else:
-        schema='inters_agg'
+
  
-    
+ 
+    #both options are created with _05depths._01_bmean_wd.run_bldg_wd_means()
     if include_gcent:
         tableName=f'agg_samps_{country_key}_jbmean'
+        schema = f'inters_agg'
+        asset_type='matview'
     else:
         #just the child mean depths
         tableName=f'agg_wd_bmean_{country_key}'
+        schema='inters_agg'
+        asset_type='table'
     
+    if dev:
+        schema = 'dev'
     
 
     #===========================================================================
@@ -103,22 +108,13 @@ def create_view_merge_bmeans(country_key='deu',
         else:  
             tableName_i = f'agg_wd_bmean_{country_key}_{grid_size:04d}'
             
-        assert pg_table_exists(schema, tableName_i, asset_type='matview'), f'missing {schema}.{tableName_i}'
+        assert pg_table_exists(schema, tableName_i, asset_type=asset_type), f'missing {schema}.{tableName_i}'
  
         
                 
         if not first:
             cmd_str += 'UNION\n'
-        else:
-            """changed to a simple merge"""
-            #build column selection 
-            #full_coln_l = pg_get_column_names(schema, tableName_i, asset_type='matview')
-            #haz_col = [e for e in full_coln_l  if haz_key in e][0] #column name of wet counts we want
-            #keep_coln_l = [e for e in full_coln_l  if not e.endswith('wetcnt')] #other columns            
-            
-            #assemble
-            #cols = ', '.join(keep_coln_l)
-            #cols+=f', {haz_col} as wet_cnt'
+        else: 
             cols = '*'
  
         
@@ -153,7 +149,7 @@ def create_view_merge_bmeans(country_key='deu',
         #'postgres_GB':get_directory_size(postgres_dir)}
         #'output_MB':os.path.getsize(ofp)/(1024**2)
         }
-    log.info(f'finished on {tableName} w/ \n{meta_d}\n\n')
+    log.info(f'finished on {schema}.{tableName} w/ \n{meta_d}\n\n')
     
     return tableName
 
@@ -383,27 +379,33 @@ def get_grid_wd_dx(
     return dx
  
 
-
-
-def run_all( **kwargs):
+def run_all(use_cache=False, **kwargs):
     log = init_log(name=f'depths.views')
     
     create_view_merge_bmeans(log=log, **kwargs)
     
     create_view_join_stats_to_bmeans(log=log, **kwargs)
     
-    get_grid_wd_dx(log=log, **kwargs)
+    get_grid_wd_dx(log=log, use_cache=use_cache, **kwargs)
  
     
 
 if __name__ == '__main__':
-    #create_view_merge_bmeans(dev=True)
+    #create_view_merge_bmeans(dev=False, include_gcent=False)
     
     #create_view_join_stats_to_bmeans(dev=False, with_geom=False)
     
  
     
-    get_grid_wd_dx(dev=False, use_cache=False)
+    #get_grid_wd_dx(dev=False, use_cache=False)
+    
+    
+    run_all(dev=True)
+    
+    
+    
+    
+    print('done')
     
  
     

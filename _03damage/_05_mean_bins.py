@@ -83,7 +83,7 @@ def get_grid_rl_dx(
         #===========================================================================
         # talbe params
         #===========================================================================
-        #see _04expo._03_views.create_view_join_stats_to_rl()
+        #see _03damage._04_views.create_view_join_stats_to_rl()
         tableName = f'grid_rl_wd_bstats_{country_key}_{haz_key}' 
         
         if dev:
@@ -125,14 +125,29 @@ def get_grid_rl_dx(
         # clean up
         #===========================================================================
         #exposure meta
-        expo_colns = ['bldg_expo_cnt', 'grid_wd', 'bldg_cnt', 'wet_cnt']
+        expo_colns = ['bldg_expo_cnt', 'grid_wd', 'bldg_cnt', 'wet_cnt', 'sample_type']
         df1 = df_raw.copy()
-        df1.loc[:, expo_colns] = df1.loc[:, expo_colns].fillna(0.0)        
+        
+        #fill null bldg depths
+        
+        bx = df1['grid_wd'].isna()
+        if bx.any():
+            raise IOError(f'shouldnt have nulls here')
+            log.info(f'found {bx.sum()}/{len(bx)} null \'grid_wd\' vals... filling with zero')
+            
+            df1.loc[bx, 'grid_wd']=0.0
+            
+            assert set(df1.loc[bx, 'sample_type'].unique()).symmetric_difference(['bldg_mean'])==set()
+        
+        bx = df1.loc[:, expo_colns].isna().any()
+        assert not bx.any(), f'got some nulls on the expo columns\n{df1.loc[:, expo_colns].isna().sum()}'
+        #df1.loc[:, expo_colns] = df1.loc[:, expo_colns].fillna(0.0)        
         df1=df1.set_index(expo_colns, append=True)
         
         #split bldg and grid losses
         col_bx = df1.columns.str.contains('_mean') 
         
+        #grid losses
         grid_dx = df1.loc[:, ~col_bx]
         rnm_d = {k:int(k.split('_')[1]) for k in grid_dx.columns.values}
         grid_dx = grid_dx.rename(columns=rnm_d).sort_index(axis=1)
@@ -177,7 +192,7 @@ def get_grid_rl_dx(
 def run_bldg_rl_mean_bins(
         country_key='deu', haz_key='f500_fluvial',
         dx_raw=None,
-        log=None,dev=False,use_cache=True,out_dir=None,
+        log=None,dev=False,use_cache=False,out_dir=None,
         ):
     """compute a binned mean of the bldg RL"""
      
@@ -195,7 +210,7 @@ def run_bldg_rl_mean_bins(
     #===========================================================================
     if dx_raw is None: 
  
-        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
+        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=use_cache, dev=dev)
         
     serx1 = dx_raw.stack().droplevel('country_key')
     #===========================================================================
@@ -212,7 +227,7 @@ def run_bldg_rl_mean_bins(
     serx3 = serx2['bldg_mean'].reset_index(keys_l+['grid_wd']).reset_index(drop=True).set_index(keys_l+['grid_wd'])
      
     #get the meanned bins
-    compute_binned_mean(serx3, log=log)
+    compute_binned_mean(serx3, log=log, use_cache=use_cache)
              
  
 
@@ -297,7 +312,7 @@ if __name__=='__main__':
     run_bldg_rl_mean_bins('deu', dev=False)
     
     
-    print(f'finished')
+    print(f'done')
     
     
     

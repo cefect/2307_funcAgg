@@ -122,26 +122,23 @@ def run_view_merge_grid(country_key, haz_key,
         #'postgres_GB':get_directory_size(postgres_dir)}
         #'output_MB':os.path.getsize(ofp)/(1024**2)
         }
-    log.info(f'finished on {tableName} w/ \n{meta_d}')
+    log.info(f'finished on {schema}.{tableName} w/ \n{meta_d}')
     
     return tableName
 
-    
-        
-        
-    
-
+ 
 def run_view_join_depths(
         country_key, haz_key,
  
         log=None,
         conn_str=None,
         dev=False,
- 
+        
+        sample_type='bldg_mean',
  
         with_geom=False,
         ):
-    """for plotting, merge the grid_sizes and slice to a single haz_key
+    """join the depths to the RL merge
     
     
     needed by _03damage._05_mean_bins.get_grid_rl_dx()
@@ -168,11 +165,29 @@ def run_view_join_depths(
     # talbe params
     #===========================================================================
  
-    
-    table_left=f'rl_mean_{country_key}_{haz_key}' #losses for all grrid sizes merged... see run_view_merge_grid()
+    #losses for all grrid sizes merged... see run_view_merge_grid()
+    table_left=f'rl_mean_{country_key}_{haz_key}' 
     tableName = table_left+'_wd'
-    table_right=f'agg_samps_{country_key}_{haz_key}' #wd for all grids. see _02agg._07_views()
+    
  
+ 
+    # set source table based on sampling type
+ 
+    if sample_type=='grid_cent':
+        
+        #wd for all grids. see _02agg._07_views.run_view_grid_samp_pivot()
+        schema_right='inters_grid'
+        table_right=f'agg_samps_{country_key}_{haz_key}'
+ 
+        
+    elif sample_type=='bldg_mean':
+        
+        #wd for building means merged
+        #_05depths._02_views.create_view_merge_bmeans(include_gcent=False)
+        schema_right = 'inters_agg'
+        table_right=f'agg_wd_bmean_{country_key}'
+    else:
+        raise KeyError(sample_type)
     
     if dev:
         schema='dev'
@@ -181,23 +196,33 @@ def run_view_join_depths(
     else:
         schema='damage' 
         schema_left='damage'
-        schema_right='inters_grid'       
+              
         
     
     keys_l = ['country_key', 'grid_size', 'i', 'j']
  
-    
+    assert pg_table_exists(schema_left, table_left, asset_type='matview'), \
+        f'missing left: %s.%s'%(schema_left, table_left)
+        
+    assert pg_table_exists(schema_right, table_right, asset_type='table'), \
+        f'missing right: %s.%s'%(schema_right, table_right)
     #===========================================================================
     # join depths
     #===========================================================================
-    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName}')    
+    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName} CASCADE')    
     
-    
+    #build query
     cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
     
     link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l]) 
+    cols = f'tleft.*, '
+    if sample_type=='grid_cent':
+        cols+= f'tright.{haz_key} AS grid_wd'
+    elif sample_type=='bldg_mean':
+        cols+= f'tright.{haz_key}_bmean AS grid_wd' 
+    
     cmd_str+= f"""
-        SELECT tleft.*, tright.{haz_key} AS grid_wd
+        SELECT {cols}
             FROM {schema_left}.{table_left} AS tleft
                 LEFT JOIN {schema_right}.{table_right} AS tright
                     ON {link_cols}
@@ -262,7 +287,7 @@ def create_view_join_stats_to_rl(
     #===========================================================================
  
     #grids w/ grid RL, mean RL, grid WD ... see run_view_join_depths()
-    table_left=f'rl_mean_grid_{country_key}_{haz_key}_wd'
+    table_left=f'rl_mean_{country_key}_{haz_key}_wd'
     
     #grids w/ bldg_cnt and wet_cnt
     table_right=f'grid_bldg_stats_{country_key}_{haz_key}' #wd for all grids. see _02agg._07_views()
@@ -281,6 +306,12 @@ def create_view_join_stats_to_rl(
         
     
     keys_l = ['country_key', 'grid_size', 'i', 'j']
+    
+    assert pg_table_exists(schema_left, table_left, asset_type='matview'), \
+        f'missing left %s.%s'%(schema_left, table_left)
+    
+    assert pg_table_exists(schema_right, table_right), \
+        f'missing right %s.%s'%(schema_left, table_left)
  
     log.info(f'creating view from {table_left} and {table_right}')
     #===========================================================================
@@ -330,16 +361,25 @@ def create_view_join_stats_to_rl(
 def run_all(ck='deu', haz_key='f500_fluvial', **kwargs):
     log = init_log(name=f'dmg_views')
     
-    run_view_merge_grid('deu', 'f500_fluvial',log=log, **kwargs)
-    run_view_join_depths('deu', 'f500_fluvial',log=log, **kwargs)
+    run_view_merge_grid(ck, haz_key,log=log, **kwargs)
+    run_view_join_depths(ck, haz_key,log=log, **kwargs)
+    create_view_join_stats_to_rl(ck, haz_key,log=log, **kwargs)
     
 
 
 if __name__ == '__main__':
     #run_view_merge_grid('deu', 'f500_fluvial',dev=True)
     #run_view_join_depths('deu', 'f500_fluvial', dev=True, with_geom=False)    
+    #create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=True)
     
-    run_all(dev=False)
+    
+    run_all(dev=True)
+    
+    
+    
+    
+    
+    print('done')
     
  
         

@@ -379,7 +379,7 @@ def get_grid_wd_dx(
         
         
 if __name__ == '__main__':
-    run_all( dev=True)
+    run_all( dev=False)
     #run_bldg_wd_means('deu', 1020, dev=True, add_geom=True)
     
  

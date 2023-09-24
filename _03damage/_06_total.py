@@ -111,25 +111,16 @@ def get_total_losses(
     
  
     
- 
- 
-    
-    
-    
-    """
-    
-    view(dx.head(100))
-    """
-    
-    
-    
-    
     
     
 if __name__=='__main__':
     
     
-    run_total_losses(dev=False)
+    get_total_losses(dev=False, use_cache=False)
+    
+    
+    
+    print('done')
 
 
 
