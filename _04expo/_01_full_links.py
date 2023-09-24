@@ -45,7 +45,7 @@ def run_agg_bldg_full_links(
          grid_size,
          
          filter_bldg_expo=False,
-         filter_cent_expo=True,
+         filter_cent_expo=False,
  
         conn_str=None, 
         log=None,
@@ -96,7 +96,10 @@ def run_agg_bldg_full_links(
     #===========================================================================
     
     if filter_bldg_expo:
+        """exclude some buildings from the link table"""
         raise NotImplementedError(f'see  _02agg._03_joins')
+    else:
+        """use grids with some buidling exposure"""
  
     
     
