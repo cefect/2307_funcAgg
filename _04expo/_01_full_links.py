@@ -41,7 +41,11 @@ from definitions import (
 
 
 def run_agg_bldg_full_links(
-         country_key, grid_size,
+         country_key, 
+         grid_size,
+         
+         filter_bldg_expo=False,
+         filter_cent_expo=True,
  
         conn_str=None, 
         log=None,
@@ -60,6 +64,12 @@ def run_agg_bldg_full_links(
     ----------
     haz_key: str
         column with grid wd used to identify grids as 'exposed' (want most extreme)
+        
+    filter_bldg_expo: bool
+        only include those buildings with some exposure
+    
+    filter_cent_expo: bool
+        only include buildings in grid cells with some centroid exposure
         
         
     """
@@ -84,16 +94,31 @@ def run_agg_bldg_full_links(
     #===========================================================================
     # talbe params
     #===========================================================================
+    
+    if filter_bldg_expo:
+        raise NotImplementedError(f'see  _02agg._03_joins')
  
-    tableName = f'bldgs_grid_link_full_{country_key}_{grid_size:04d}'
+    
     
     #wd for all buildings. see _01intersect._03_topost
     table_left=f'{country_key}' 
     
-    #wd for all grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
-    table_grid=f'agg_expo_{country_key}_{grid_size:04d}_poly' 
+
+    #select the grid table
+    if filter_cent_expo:
+        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
+        table_grid=f'agg_expo_{country_key}_{grid_size:04d}_poly'
+        schema_grid='inters_grid'
+        expo_str = '2x'
+    else:
+        #those grids with building exposure (using similar layer as for the centroid sampler)
+        #see _02agg._04_occupied
+        table_grid=f'agg_occupied_{country_key}_{grid_size:04d}_poly'
+        schema_grid=f'agg_bldg' 
+        expo_str = '1x'
+        
+    tableName = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'
  
-    
     if dev:
         schema='dev'
         schema_left, schema_grid=schema, schema        
@@ -101,12 +126,8 @@ def run_agg_bldg_full_links(
     else:
         schema='expo' 
         schema_left='inters'
-        schema_grid='inters_grid'       
         
-    
-    keys_l = ['country_key', 'grid_size', 'i', 'j']
-    
-
+ 
     if with_geo: assert pg_getCRS(schema_grid, table_grid)==epsg_id
     #===========================================================================
     # spatially join grid keys
@@ -118,9 +139,7 @@ def run_agg_bldg_full_links(
     
     """
     
-    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}')    
-    
- 
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}') 
     
     cols = 'LOWER(pts.country_key) as country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
     if with_geo: cols+=', pts.geometry as geom'
@@ -151,9 +170,7 @@ def run_agg_bldg_full_links(
         pg_register(schema, tableName)
     pg_vacuum(schema, tableName)
     
- 
-            
-            
+         
     #===========================================================================
     # #wrap
     #===========================================================================
@@ -167,15 +184,16 @@ def run_agg_bldg_full_links(
     return tableName
 
 
-def run_all(ck, **kwargs):
-    log = init_log(name='occu')
+def run_all(country_key='deu', **kwargs):
+    log = init_log(name='links')
     
     for grid_size in gridsize_default_l:
-        run_agg_bldg_full_links(ck, grid_size, log=log, **kwargs)
+        run_agg_bldg_full_links(country_key, grid_size, log=log, **kwargs)
         
 if __name__ == '__main__':
     
-    run_agg_bldg_full_links('deu', 1020, dev=False, with_geo=False)
+    run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
+ 
     
     #run_all('deu', dev=False)
  
