@@ -41,8 +41,7 @@ from definitions import (
 def run_bldg_rl_means(
         
         country_key, grid_size,
-    
-        out_dir=None,
+ 
         conn_str=None,
  
          log=None,
@@ -70,8 +69,6 @@ def run_bldg_rl_means(
     
     country_key = country_key.lower() 
  
-    # log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
-    
     if conn_str is None: conn_str = get_conn_str(postgres_d)
     if log is None:
         log = init_log(name=f'rl_mean')
@@ -86,9 +83,7 @@ def run_bldg_rl_means(
         'bldg':['country_key', 'gid', 'id'],
         'grid':['country_key', 'grid_size', 'i', 'j']        
     }
-    
-
-        
+ 
         
     tableName=f'rl_mean_{country_key}_{grid_size:04d}' #output    
     
@@ -188,13 +183,7 @@ def run_bldg_rl_means(
     # clean
     #===========================================================================
     sql(f'DROP TABLE IF EXISTS temp.{table_link1}')
-    #sql(f'DROP TABLE IF EXISTS temp.{tableName}2')
-    
-    #===========================================================================
-    # row_cnt = pg_getcount('temp', tableName)
-    # log.info(f'built table of averages w/ {row_cnt} entries in  %.2f secs'%(datetime.now() - start).total_seconds())
-    #===========================================================================
-    
+ 
     #check the keys are unique
     keys_str = ', '.join(kl)
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
@@ -213,8 +202,7 @@ def run_bldg_rl_means(
     try:
         pg_vacuum(schema, tableName)
         """table is a-spatial"""
-        #pg_spatialIndex(schema, tableName, columnName='geometry')
-        #pg_register(schema, tableName)
+ 
     except Exception as e:
         log.error(f'failed cleaning w/\n    {e}')
     

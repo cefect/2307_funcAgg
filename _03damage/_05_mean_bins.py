@@ -163,8 +163,8 @@ def get_grid_rl_dx(
      
         
         dx = pd.concat({
-            'bldg_mean':bldg_dx, 
-            'grid_cent':grid_dx, 
+            'bldg':bldg_dx, 
+            'grid':grid_dx, 
             #'expo':df.loc[:, expo_colns].fillna(0.0)
             }, 
             names = ['rl_type', 'df_id'], axis=1).dropna(how='all') 

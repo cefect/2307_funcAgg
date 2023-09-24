@@ -351,10 +351,10 @@ def run_all(ck='deu', haz_key='f500_fluvial', **kwargs):
 if __name__ == '__main__':
     #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
     #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)    
-    create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=False)
+    #create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=False)
     
     
-    #run_all(dev=True)
+    run_all(dev=False)
     
     
     

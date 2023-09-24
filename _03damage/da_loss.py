@@ -391,13 +391,30 @@ def plot_rl_agg_v_bldg(
     
     #testing
     """some rounding issue?
+    
+    seems a bit too extreme to be a rounding issue
+        could try a test aoi around the offending grids
+        then write a pure pandas workflow?
+        
+        lets start with taking a closer look at the dev results
+        
+        
+        
     dx2.max()
     dx2.index.to_frame().reset_index(drop=True)['grid_wd'].max()
     
-    tdx = dx2.xs(946, level='df_id')
+    tdx = dx2.xs(946, level='df_id').round(1)
+    
+    tdx['bias'] = tdx['bldg_mean']/tdx['grid_cent']
+    tdx['mae'] = abs(tdx['bldg_mean']-tdx['grid_cent'])
+    view(tdx.sort_values('mae', ascending=False).head(100))
+    
     bx = tdx['bldg_mean'].round(3)==tdx['grid_cent'].round(3)
     print(bx.sum())
-    view(tdx[~bx].head(100))"""
+    print(np.invert(bx).sum())
+    view(tdx[~bx].head(100))
+    
+    """
     
  
     # get binned means    
@@ -411,23 +428,7 @@ def plot_rl_agg_v_bldg(
     """
     view(dx2.head(100))
     """
-    #===========================================================================
-    # build pdf
-    #===========================================================================
-    #===========================================================================
-    # """want to use the same pdf
-    # 
-    # NO!
-    # """
-    # #get a weighted sample
-    # 
-    # ser_samp = dx2['bldg_mean'].groupby(['grid_size', 'haz_key', 'df_id']).sample(int(1e4))
-    # 
-    # x,y = ser_samp.index.get_level_values('grid_wd'), ser_samp.values
-    # xy = np.vstack([x,y])
-    #         
-    # pdf = gaussian_kde(xy)
-    #===========================================================================
+ 
  
     #===========================================================================
     # setup indexers
@@ -1136,7 +1137,7 @@ if __name__=='__main__':
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01)
+    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01, use_cache=True)
 
     
  

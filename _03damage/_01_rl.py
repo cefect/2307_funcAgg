@@ -61,7 +61,7 @@ from _02agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
 
 
 
-def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=True, dev=False):
+def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_cache=False, dev=False):
     """compute loss for this hazard chunk on all functions"""
     #===========================================================================
     # defaults
@@ -101,7 +101,7 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
             #loss_ar = np.full(len(wd_ar), float(df_id))
             
             #append index and collect
-            d[df_id] = pd.Series(loss_ar, index=ser.index, name=df_id)
+            d[df_id] = pd.Series(loss_ar, index=ser.index, name=df_id, dtype=np.float32)
             
             #print(d[df_id].to_dict())
     
@@ -250,7 +250,7 @@ def loss_calc_country_assetType(
     #collapse to dictinoary of wd-rl    
     func_d = dict()    
     for df_id, gserx in fserx_s.groupby('df_id'):
-        func_d[df_id] = gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values.copy()
+        func_d[df_id] = gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.astype(float).values
  
     #===========================================================================
     # loop on hazards
@@ -296,7 +296,7 @@ def loss_calc_country_assetType(
         #=======================================================================
         # chunk loop
         #=======================================================================
-        for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
+        for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize), dtype={haz_coln:np.float32})):
             log.info(f'{i} on {gdf.shape}')
             
             if len(gdf)==0:
@@ -305,7 +305,7 @@ def loss_calc_country_assetType(
             assert len(gdf.columns)==1
             fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
-            ser = gdf.iloc[:,0]
+            ser = gdf.iloc[:,0].astype(np.float32)
             ser = ser.rename(ser.name.replace('_bmean', ''))
             
             res_d[i] = write_loss_haz_chunk(ser, copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
@@ -379,9 +379,6 @@ def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwarg
             tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
             haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
  
- 
-            
-        
         #=======================================================================
         # run
         #=======================================================================

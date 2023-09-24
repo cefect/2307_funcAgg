@@ -207,7 +207,7 @@ def rl_to_post(
             # #clean up
             #===================================================================
             df1 = df_raw.copy().round(1).astype(np.float32)
-            df1.columns = [f'dfid_{e:04d}' for e in df1.columns]
+            df1 = df1.rename(columns={e:f'dfid_{e:04d}' for e in df1.columns})
             df1.columns.name=None
             
             df2 = df1.reset_index()
@@ -330,7 +330,7 @@ if __name__ == '__main__':
     
     
     
-    run_all(dev=False)
+    run_all(dev=False) #takes a few mins
     
     
     
