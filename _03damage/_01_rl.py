@@ -140,6 +140,8 @@ def loss_calc_country_assetType(
         fserx=None,
        haz_coln_l=None,
        wd_scale=0.01, 
+       
+       
  
        
        #index_fp=None,
@@ -243,16 +245,10 @@ def loss_calc_country_assetType(
     """
     view(fserx_s)
     """
-    #collapse to dictinoary of wd-rl
-    #func_d = {df_id: gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values for df_id, gserx in fserx_s.groupby('df_id')}
-    
+    #collapse to dictinoary of wd-rl    
     func_d = dict()    
     for df_id, gserx in fserx_s.groupby('df_id'):
         func_d[df_id] = gserx.droplevel(list(range(gserx.index.nlevels-1))).reset_index().T.values.copy()
-     
-    
- 
-        
  
     #===========================================================================
     # loop on hazards
@@ -274,11 +270,9 @@ def loss_calc_country_assetType(
         #=======================================================================
         # build query
         #=======================================================================
-        if asset_type=='bldgs':
-            
+        if asset_type=='bldgs':            
             index_col=['country_key','gid','id']
-        elif asset_type=='grid':
- 
+        elif asset_type=='grid': 
             index_col=['country_key','grid_size', 'i', 'j']
         else:
             raise IOError(asset_schema)
@@ -294,15 +288,15 @@ def loss_calc_country_assetType(
         # #only non-zeros
         # cmd_str+=f'WHERE '+ ' >0 AND '.join(haz_coln_l)
         #=======================================================================
-        
-        #dev limter (see i break below also)
-        #cmd_str+= f'\nLIMIT {chunksize*4}'
-        log.info(cmd_str)
-        res_d=dict()
-        
  
+        log.info(cmd_str)
+        res_d=dict()        
+        #=======================================================================
+        # chunk loop
+        #=======================================================================
         for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize))):
             log.info(f'{i} on {gdf.shape}')
+            
             if len(gdf)==0:
                 log.warning(f'for chunk {i} got no rows... skipping') #not sure why this would happen
                 continue
@@ -310,11 +304,6 @@ def loss_calc_country_assetType(
             fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
             res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
-            
-            """
-            view(gdf.head())
-            """
-            #wrap chunk
  
             cnt+=1
             
@@ -385,10 +374,13 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=False)
+    run_bldg_loss('deu', dev=True)
     
  
-    #run_agg_loss('deu', dev=False)
+    #run_agg_loss('deu', dev=True)
+    
+    
+    print('done')
  
 
         
