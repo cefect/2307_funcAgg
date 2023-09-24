@@ -524,8 +524,8 @@ def _write_hist(dx, keys_d, out_dir=None, maxd=500):
     
 def plot_exponential_dist(params, data):
     """plotting an exponential distribution (for debugging"""
-    import matplotlib.pyplot as plt
-# Plot the raw histogram and the fitted distribution
+ 
+#     Plot the raw histogram and the fitted distribution
     _ = plt.hist(data, bins=20, density=True, alpha=0.6, color='g')
     ax = plt.gca()
     ax.set_xlim(0, data.max())

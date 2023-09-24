@@ -28,7 +28,7 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment
+    pg_comment, pg_table_exists
     )
  
 
@@ -41,11 +41,7 @@ from definitions import (
 def run_bldg_rl_means(
         
         country_key, grid_size,
- 
- 
-       
-       #index_fp=None,
-                               
+    
         out_dir=None,
         conn_str=None,
  
@@ -66,29 +62,24 @@ def run_bldg_rl_means(
 
     """
     
-    
     #===========================================================================
     # defaults
     #===========================================================================
     
-    start=datetime.now()   
+    start = datetime.now()   
     
-    country_key=country_key.lower() 
-
+    country_key = country_key.lower() 
  
-    #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
+    # log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
     
-    if conn_str is None: conn_str=get_conn_str(postgres_d)
+    if conn_str is None: conn_str = get_conn_str(postgres_d)
     if log is None:
         log = init_log(name=f'rl_mean')
     
     sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     
-
- 
-    
     #===========================================================================
-    # #talbe params-------
+    # talbe params-------
     #===========================================================================
     #source table keys
     keys_d = { 
@@ -116,7 +107,9 @@ def run_bldg_rl_means(
     schema_grid = schema_bldg
     
  
-    
+    assert pg_table_exists(schema_bldg, table_bldg)
+    assert pg_table_exists(schema_link, table_link)
+    assert pg_table_exists(schema_grid, table_grid)
     #===========================================================================
     # join buidling losses to grid links
     #===========================================================================
@@ -172,11 +165,8 @@ def run_bldg_rl_means(
                         ON {link_cols}
                             GROUP BY {grp_cols}
     """
-    
-    print(cmd_str)
-    sql(cmd_str)
-    
- 
+
+    sql(cmd_str) 
     #===========================================================================
     # clean
     #===========================================================================
@@ -243,8 +233,8 @@ def run_all(ck, grid_size_l=None, **kwargs):
         
         
 if __name__ == '__main__':
-    run_all('deu', dev=False)
-    #run_bldg_rl_means('deu', 1020, dev=True)
+    #run_all('deu', dev=False)
+    run_bldg_rl_means('deu', 1020, dev=True)
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
     
