@@ -53,7 +53,7 @@ def get_grid_rl_dx(
     
     """helper to retrieve results from run_view_join_depths() as a dx
     
-     WARNING: this relies on _04expo.create_view_join_stats_to_rl()
+     WARNING: this relies on _04expo.create_view_join_stats_to_rl() 
     """ 
     
     #===========================================================================
@@ -192,7 +192,7 @@ def get_grid_rl_dx(
 def run_bldg_rl_mean_bins(
         country_key='deu', haz_key='f500_fluvial',
         dx_raw=None,
-        log=None,dev=False,use_cache=False,out_dir=None,
+        log=None,dev=False,use_cache=False, 
         ):
     """compute a binned mean of the bldg RL"""
      
@@ -228,6 +228,20 @@ def run_bldg_rl_mean_bins(
      
     #get the meanned bins
     compute_binned_mean(serx3, log=log, use_cache=use_cache)
+    
+    #===========================================================================
+    # wrap
+    #===========================================================================
+        #meta
+    meta_d = {
+        'tdelta':(datetime.now() - start).total_seconds(), 
+        'RAM_GB':psutil.virtual_memory()[3] / 1000000000, 
+        #'postgres_GB':get_directory_size(postgres_dir)}
+        #'output_MB':os.path.getsize(ofp)/(1024**2)
+        }
+ 
+    
+    return  
              
  
 

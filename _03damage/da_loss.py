@@ -147,7 +147,7 @@ from _03damage._06_total import get_total_losses
 #===============================================================================
  
 def plot_rl_raw(
-        tableName='rl_deu_grid_0060',
+        tableName='rl_deu_grid_0060', #rl_{country_key}_{asset_type}
         schema='damage',
         out_dir=None,
         figsize=None,
@@ -306,9 +306,10 @@ def plot_rl_agg_v_bldg(
         dev=False,
         ylab_d = clean_names_d,
         cmap='PuRd_r',
+        use_cache=True,
         ):
     
-    raise IOError('looks like the centroid bias is more severe.... I think we need to include a f(mean(bldg_wd)) version')
+
     
     """plot relative loss from grid centroids and building means    
     
@@ -347,7 +348,7 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
-        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=True, dev=dev)
+        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=use_cache, dev=dev)
     
     """no.. better to just sample the kde
     if not dev:
@@ -388,17 +389,28 @@ def plot_rl_agg_v_bldg(
     
     dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
     
- 
-    # get binned means 
+    #testing
+    """some rounding issue?
+    dx2.max()
+    dx2.index.to_frame().reset_index(drop=True)['grid_wd'].max()
     
+    tdx = dx2.xs(946, level='df_id')
+    bx = tdx['bldg_mean'].round(3)==tdx['grid_cent'].round(3)
+    print(bx.sum())
+    view(tdx[~bx].head(100))"""
+    
+ 
+    # get binned means    
     keys_l =  ['grid_size', 'haz_key', 'df_id', 'grid_wd'] #only keys we preserve   
  
     #get a slice with clean index
     sx1 = dx2['bldg_mean'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
      
-    mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=True)
+    mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=use_cache)
     
-    
+    """
+    view(dx2.head(100))
+    """
     #===========================================================================
     # build pdf
     #===========================================================================
@@ -537,8 +549,8 @@ def plot_rl_agg_v_bldg(
             bin_serx = mean_bin_dx.loc[idx[col_key, color_key, row_key, :], :].reset_index(drop=True
                                            ).set_index('grid_wd_bin').iloc[:,0]
                                
-            ax.plot(bin_serx, color=c, alpha=1.0, marker=None, linestyle='dashed', 
-                    markersize=2, linewidth=1.5,
+            ax.plot(bin_serx, color='red', alpha=1.0, marker=None, linestyle='dashed', 
+                    markersize=2, linewidth=1.0,
                     label='$\overline{RL_{bldg,j}}(WSH)$')
             
             """need gridspec for this
@@ -1120,20 +1132,16 @@ def plot_TL_agg_v_bldg(
     
 if __name__=='__main__':
     
-    #plot_rl_raw()
-
-    
-    
-    #plot_rl_raw( tableName='rl_deu_grid_0060', schema='dev')
-   # plot_rl_raw( tableName='rl_deu_bldgs', schema='dev')
+    #plot_rl_raw(tableName='rl_deu_grid_bmean_1020')
+ 
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False, samp_frac=0.001)
+    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01)
 
     
  
     
-    print('finished ')
+    print('done ')
     
     
     

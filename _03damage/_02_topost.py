@@ -91,10 +91,7 @@ def rl_to_post(
  
        haz_coln_l=None,
        search_dir=None,
-       
-       #index_fp=None,
-                               
-        out_dir=None,
+ 
         conn_str=None,
  
         schema='damage',
@@ -116,13 +113,9 @@ def rl_to_post(
     #===========================================================================
     # defaults
     #===========================================================================
-    start=datetime.now()   
-    
+    start=datetime.now()    
     country_key=country_key.lower() 
-    
  
-    #log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
-    
     if conn_str is None: conn_str=get_conn_str(postgres_d)
     
     #hazard columns
@@ -158,8 +151,6 @@ def rl_to_post(
     # load indexers
     #===========================================================================
     """because we have 1 index per hazard column"""
-    
-    #d=dict()
  
     
     if search_dir is None: 
@@ -171,8 +162,6 @@ def rl_to_post(
     #['chunk', 'country_key', 'asset_schema', 'tableName', 'haz_key']
     serx = pd.read_pickle(meta_fp).stack().droplevel('out_dir').rename('fp')
  
- 
-    
     #base directory for relative pathing
     base_dir = os.path.dirname(meta_fp)
  
@@ -200,10 +189,7 @@ def rl_to_post(
     first=True
     for haz_key, gserx in serx.groupby('haz_key'):
         log.info(f'{tableName} on {haz_key} w/ {gserx.shape}')
-        
 
-        
- 
         #=======================================================================
         # loop and upload each
         #=======================================================================
@@ -283,16 +269,13 @@ def rl_to_post(
     return  tableName
     
 def run_agg_rl_topost(country_key, grid_size_l=None, 
-                      sample_type='inters_grid', 
+                      sample_type='bldg_mean', log=None,
                       **kwargs):
     
     if grid_size_l is None: grid_size_l=gridsize_default_l
-    log = init_log(name=f'rlAgg')
+    if log is None: log = init_log(name=f'rlAgg')
     
-
  
-            
-    
     d=dict()
     log.info(f'on {len(grid_size_l)} grids')
     for grid_size in grid_size_l:
@@ -316,33 +299,25 @@ def run_agg_rl_topost(country_key, grid_size_l=None,
                    log=log.getChild(str(grid_size)), **kwargs)
         
     log.info(f'finished w/ \n    {d}')
+    
+    return d
 
         
 def run_bldg_rl_topost(country_key, **kwargs):
-    return rl_to_post(country_key, 'inters',country_key, log = init_log(name=f'rlBldg'), **kwargs)
+    return rl_to_post(country_key, 'inters',country_key,  **kwargs)
         
     
-def run_all(ck='deu', grid_size_l=None, **kwargs):
+def run_all(ck='deu',   **kwargs):
     
-    if grid_size_l is None: grid_size_l=gridsize_default_l
+ 
     log = init_log(name=f'rl_topost')
     
     #===========================================================================
     # buildings
     #===========================================================================
-    res = rl_to_post(ck, 'inters',ck, log = init_log(name=f'rlBldg'), **kwargs)
-    log.info(f'finished buildings w/ \'{res}\'')
+    run_bldg_rl_topost(ck, log=log, **kwargs)
     
-    #===========================================================================
-    # grids
-    #===========================================================================
-    d=dict()
-    log.info(f'on {len(grid_size_l)} grids')
-    for grid_size in grid_size_l:
-        d[grid_size] = rl_to_post(ck, 'inters_grid', f'agg_samps_{ck}_{grid_size:04d}', 
-                   log=log.getChild(str(grid_size)), **kwargs)
-        
-    log.info(f'finished w/ \n    {d}')
+    run_agg_rl_topost(ck, log=log, **kwargs)
     
     
 
@@ -350,12 +325,12 @@ if __name__ == '__main__':
     """need to run both of these"""
     
     #run_bldg_rl_topost('deu', dev=False)
-    run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
+    #run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
     
     
     
     
-    #run_all(dev=True)
+    run_all(dev=False)
     
     
     

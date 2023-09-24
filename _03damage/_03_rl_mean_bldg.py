@@ -47,7 +47,7 @@ def run_bldg_rl_means(
  
          log=None,
          dev=False,
-         sample_type='grid_cent'
+         sample_type='bldg_mean'
         ):
     """join mean building losses (grouped by grids) to the grid losses
     
@@ -250,7 +250,7 @@ def run_all(ck, grid_size_l=None, **kwargs):
         
         
 if __name__ == '__main__':
-    run_all('deu', dev=True, sample_type='bldg_mean')
+    run_all('deu', dev=False)
     #run_bldg_rl_means('deu', 1020, dev=True, sample_type='bldg_mean')
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)

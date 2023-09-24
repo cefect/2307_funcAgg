@@ -70,13 +70,9 @@ def run_view_merge_grid(country_key, haz_key,
     if dev:
         schema = 'dev'
     else:
-        schema='damage'
-        
-    """could also use the occupied tables"""
-    tableName=f'rl_mean_{country_key}_{haz_key}'
-    
-    
-    
+        schema = 'damage'
+ 
+    tableName = f'rl_mean_{country_key}_{haz_key}'
     
     #===========================================================================
     # buidl query
@@ -104,14 +100,7 @@ def run_view_merge_grid(country_key, haz_key,
  
     sql(cmd_str)
     
-    #===========================================================================
-    # clean
-    #===========================================================================
-    keys_str = ', '.join(keys_l)
-    
-    """not working...."""
-    #sql(f'ALTER MATERIALIZED VIEW {schema}.{tableName} ADD PRIMARY KEY ({keys_str})') #doesnt work for views
-    #sql(f'ALTER MATERIALIZED VIEW {schema}.{tableName} ADD CONSTRAINT unique_{tableName} UNIQUE ({keys_str})')
+ 
     #===========================================================================
     # wrap
     #===========================================================================
@@ -143,10 +132,7 @@ def run_view_join_depths(
     
     needed by _03damage._05_mean_bins.get_grid_rl_dx()
     """
-        
-
-    #if grid_size_l is None: grid_size_l = gridsize_default_l
-    
+ 
     #===========================================================================
     # defaults
     #===========================================================================
@@ -169,7 +155,6 @@ def run_view_join_depths(
     table_left=f'rl_mean_{country_key}_{haz_key}' 
     tableName = table_left+'_wd'
     
- 
  
     # set source table based on sampling type
  
@@ -236,9 +221,7 @@ def run_view_join_depths(
     if with_geom:
         create_view_join_grid_geom(schema, tableName, country_key, log=log, dev=dev, conn_str=conn_str)
     
-    
-    
-    
+ 
     #===========================================================================
     # wrap
     #===========================================================================
@@ -265,9 +248,7 @@ def create_view_join_stats_to_rl(
         ):
     """merge rl, rl_mean, wd views (run_view_join_depths()) with expo stats (create_view_merge_stats())"""
         
-
-    #if grid_size_l is None: grid_size_l = gridsize_default_l
-    
+ 
     #===========================================================================
     # defaults
     #===========================================================================
@@ -368,12 +349,12 @@ def run_all(ck='deu', haz_key='f500_fluvial', **kwargs):
 
 
 if __name__ == '__main__':
-    #run_view_merge_grid('deu', 'f500_fluvial',dev=True)
-    #run_view_join_depths('deu', 'f500_fluvial', dev=True, with_geom=False)    
-    #create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=True)
+    #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
+    #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)    
+    create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=False)
     
     
-    run_all(dev=True)
+    #run_all(dev=True)
     
     
     

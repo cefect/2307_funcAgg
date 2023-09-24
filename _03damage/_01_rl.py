@@ -402,7 +402,7 @@ if __name__ == '__main__':
  
     
     
-    #run_bldg_loss('deu', dev=True)
+    #run_bldg_loss('deu', dev=False)
     
  
     run_agg_loss('deu', dev=False, sample_type='bldg_mean')
