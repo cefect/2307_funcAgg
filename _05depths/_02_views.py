@@ -22,7 +22,9 @@ import numpy as np
 import fiona
 import geopandas as gpd
  
- 
+import psycopg2
+#print('psycopg2.__version__=' + psycopg2.__version__)
+from sqlalchemy import create_engine, URL
 
  
 
@@ -133,6 +135,8 @@ def create_view_merge_bmeans(country_key='deu',
     cmd_str+=f'ORDER BY grid_size, i, j\n'
     sql(cmd_str)
     
+
+    
     #===========================================================================
     # join geometry
     #===========================================================================
@@ -222,6 +226,7 @@ def create_view_join_stats_to_bmeans(
     cols +=f', tleft.{haz_key} as grid_wd'
     cols +=f', tleft.{haz_key}_bmean as bmean_wd'
     cols += f', tright.bldg_cnt, tright.wet_cnt' 
+    cols += f', \'{haz_key}\' as haz_key'
     
     cmd_str = f"""
     CREATE MATERIALIZED VIEW {schema}.{tableName} AS
@@ -234,6 +239,15 @@ def create_view_join_stats_to_bmeans(
     
     #exe
     sql(cmd_str)
+    
+    
+    #===========================================================================
+    # #===========================================================================
+    # # add haz key
+    # #===========================================================================
+    # sql(f"""ALTER MATERIALIZED VIEW {schema}.{tableName} ADD COLUMN haz_key VARCHAR(255) DEFAULT \'{haz_key}\'""")
+    # sql(f'REFRESH MATERIALIZED VIEW {schema}.{tableName}')
+    #===========================================================================
     
     #===========================================================================
     # join geometry
@@ -259,32 +273,129 @@ def create_view_join_stats_to_bmeans(
     return tableName
 
 
+def get_grid_wd_dx(
+        country_key='deu', haz_key='f500_fluvial',
+ 
+        log=None,conn_str=None,dev=False,use_cache=True,out_dir=None,
+        limit=None,
+ 
+        ):
+    
+    """download dx from create_view_join_stats_to_bmeans()
+    
+    see also _03damage._05_mean_bins.get_grid_rl_dx()
+    """ 
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()
+    
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'depths','02_views', country_key, haz_key)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
+    
+    if log is None:
+        log = init_log(name=f'grid_wd')
+    
+    if dev: use_cache=False
+    #===========================================================================
+    # cache
+    #===========================================================================
+    fnstr = f'grid_wd_{country_key}_{haz_key}'
+    uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
+    ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
+    
+    if (not os.path.exists(ofp)) or (not use_cache):
+        
+        #===========================================================================
+        # talbe params
+        #===========================================================================
+        #see create_view_join_stats_to_bmeans()
+        tableName = f'grid_wd_bmean_bstats_{country_key}_{haz_key}' 
+        
+        if dev:
+            schema = 'dev'
+    
+        else:
+            schema = 'inters_agg' 
+            
+        assert pg_table_exists(schema, tableName, asset_type='matview'), f'missing table dependency \'{tableName}\'\n    see create_view_join_stats_to_bmeans()'
+        keys_l = ['country_key', 'grid_size','haz_key', 'i', 'j', 'bldg_cnt', 'wet_cnt']
+        
+        #===========================================================================
+        # download
+        #===========================================================================
+        conn =  psycopg2.connect(conn_str)
+        engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
+        
+        #row_cnt=0
+        
+        """only ~600k rows"""
+        
+        cmd_str = f'SELECT * FROM {schema}.{tableName}'
+        
+        if not limit is None:
+            cmd_str+=f'\n    LIMIT {limit}'
+ 
+        log.info(cmd_str)
+        dx_raw = pd.read_sql(cmd_str, engine, index_col=keys_l)
+        """
+        view(df_raw.head(100))        
+        """    
+        
+        engine.dispose()
+        conn.close()
+        
+        log.info(f'finished w/ {len(dx_raw)} total rows')
+        
+ 
+        dx = dx_raw
+        #===========================================================================
+        # write
+        #===========================================================================
+        """
+        view(dx.head(100))
+        """
+        
+ 
+        log.info(f'writing {dx.shape} to \n    {ofp}')
+        dx.sort_index(sort_remaining=True).sort_index(sort_remaining=True, axis=1).to_pickle(ofp)
+    
+    else:
+        log.info(f'loading from cache:\n    {ofp}')
+        dx = pd.read_pickle(ofp)
+ 
+ 
+    log.info(f'got {dx.shape}')
+    return dx
+ 
 
 
 
-def run_all(ck='deu', e='f500_fluvial', **kwargs):
-    log = init_log(name=f'grid_rl')
+def run_all( **kwargs):
+    log = init_log(name=f'depths.views')
     
-    create_view_merge_stats(ck, e, log=log, **kwargs)
+    create_view_merge_bmeans(log=log, **kwargs)
     
-    create_view_join_stats_to_rl(ck, e, log=log, **kwargs)
+    create_view_join_stats_to_bmeans(log=log, **kwargs)
     
-    from _03damage._05_mean_bins import get_grid_rl_dx
-    get_grid_rl_dx(ck, e, log=log, use_cache=False, **kwargs)
+    get_grid_wd_dx(log=log, **kwargs)
+ 
     
 
 if __name__ == '__main__':
     #create_view_merge_bmeans(dev=True)
     
-    create_view_join_stats_to_bmeans(dev=True, with_geom=True)
-    
-    #create_view_join_stats_to_rl('deu', 'f500_fluvial', dev=False, with_geom=False)
-    
-    #get_grid_rl_dx('deu', 'f500_fluvial', dev=False, use_cache=False, limit=None)
-    
+    #create_view_join_stats_to_bmeans(dev=False, with_geom=False)
     
  
     
+    get_grid_wd_dx(dev=False)
+    
+ 
     
     
     
