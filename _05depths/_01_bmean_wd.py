@@ -118,7 +118,7 @@ def run_bldg_wd_means(
         schema_link='expo'
  
     assert pg_table_exists(schema_bldg, table_bldg)
-    assert pg_table_exists(schema_link, table_link)
+    assert pg_table_exists(schema_link, table_link), f'{schema_link}.{table_link} does not exist\n    see _04expo._01_full_links'
     #assert pg_table_exists(schema_grid, table_grid), f'{schema_grid}.{table_grid} does not exist'
     #===========================================================================
     # join buidling wd to grid links
@@ -379,10 +379,10 @@ def get_grid_wd_dx(
         
         
 if __name__ == '__main__':
-    #run_all( dev=False)
+    run_all( dev=True)
     #run_bldg_wd_means('deu', 1020, dev=True, add_geom=True)
     
-    create_view_join_bstats_to_wd()
+ 
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
     
