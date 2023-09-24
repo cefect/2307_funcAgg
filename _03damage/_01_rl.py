@@ -197,7 +197,7 @@ def loss_calc_country_assetType(
             
     assert isinstance(tableName, str)
     
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid'}[asset_schema]
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid'}[asset_schema]
     
     if dev:
         asset_schema='dev'
@@ -214,6 +214,8 @@ def loss_calc_country_assetType(
     if haz_coln_l is None: 
         from definitions import haz_coln_l
         #haz_coln_l = [e[1:] for e in haz_coln_l] #remove the f prefix
+        
+        
     assert isinstance(haz_coln_l, list)
     
     
@@ -303,7 +305,10 @@ def loss_calc_country_assetType(
             assert len(gdf.columns)==1
             fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
-            res_d[i] = write_loss_haz_chunk(gdf.iloc[:,0], copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
+            ser = gdf.iloc[:,0]
+            ser = ser.rename(ser.name.replace('_bmean', ''))
+            
+            res_d[i] = write_loss_haz_chunk(ser, copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
  
             cnt+=1
             
@@ -348,18 +353,41 @@ def loss_calc_country_assetType(
     return 
 
 
-def run_agg_loss(country_key, grid_size_l=None,  **kwargs):
+def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwargs):
     """compute losses from agg grid centroid samples"""
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
     
+    
+
+    
     d=dict()
     log.info(f'on {len(grid_size_l)} grids')
     for grid_size in grid_size_l:
-        d[grid_size] = loss_calc_country_assetType(country_key, 
-                                                   asset_schema='inters_grid', 
-                                                   tableName=f'agg_samps_{country_key}_{grid_size:04d}', 
-                                                   log=log,
+        
+        
+        #===========================================================================
+        # set source table based on sampling type
+        #===========================================================================
+        if sample_type=='grid_cent':
+            asset_schema='inters_grid'
+            tableName=f'agg_samps_{country_key}_{grid_size:04d}'
+            haz_coln_l=None
+            
+        elif sample_type=='bldg_mean':
+            asset_schema = 'inters_agg'
+            tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
+            haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
+ 
+ 
+            
+        
+        #=======================================================================
+        # run
+        #=======================================================================
+        d[grid_size] = loss_calc_country_assetType(country_key,asset_schema=asset_schema, 
+                                                   tableName=tableName, log=log,
+                                                   haz_coln_l=haz_coln_l,
                                                    **kwargs)
         
     log.info(f'finished on {len(d)}')
@@ -374,10 +402,10 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=True)
+    #run_bldg_loss('deu', dev=True)
     
  
-    #run_agg_loss('deu', dev=True)
+    run_agg_loss('deu', dev=False, sample_type='bldg_mean')
     
     
     print('done')

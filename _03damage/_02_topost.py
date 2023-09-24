@@ -132,15 +132,22 @@ def rl_to_post(
     assert isinstance(haz_coln_l, list)
     
     #asset type
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid'}[asset_schema]
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid_bmean'}[asset_schema]
     
     keys_d=dict(country_key=country_key, asset_type=asset_type)
     log.info(f'on {keys_d}')
     
-    if asset_type=='grid':
+    if 'grid' in asset_type:
         grid_size=int(asset_tableName.split('_')[-1])
         keys_d['grid_size'] = grid_size
         keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
+    #===========================================================================
+    # elif asset_type=='grid_bmean':
+    #     grid_size=int(asset_tableName.split('_')[-1])
+    #     keys_d['grid_size'] = grid_size
+    #     keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
+    #===========================================================================
+        
     elif asset_type=='bldgs':
         keys_l = ['country_key', 'gid', 'id', 'haz_key']
 
@@ -177,8 +184,9 @@ def rl_to_post(
     #===========================================================================
     tableName=f'rl_{country_key}_{asset_type}'
     
-    if asset_type =='grid':
+    if 'grid' in asset_type:
         tableName+=f'_{grid_size:04d}'
+
     
     """writing all hazard keys to one table"""
     
@@ -247,7 +255,7 @@ def rl_to_post(
     pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
     
     cmt_str = f'port of {cnt} .pkl rl results for \'{asset_type}\' loaded from {base_dir}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} w/ {pg_getcount(schema, tableName)} rows')
@@ -274,15 +282,37 @@ def rl_to_post(
     log.info(meta_d)
     return  tableName
     
-def run_agg_rl_topost(country_key, grid_size_l=None, **kwargs):
+def run_agg_rl_topost(country_key, grid_size_l=None, 
+                      sample_type='inters_grid', 
+                      **kwargs):
     
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
     
+
+ 
+            
+    
     d=dict()
     log.info(f'on {len(grid_size_l)} grids')
     for grid_size in grid_size_l:
-        d[grid_size] = rl_to_post(country_key, 'inters_grid', f'agg_samps_{country_key}_{grid_size:04d}', 
+        #=======================================================================
+        # get params forthis type
+        #=======================================================================
+        if sample_type=='grid_cent':
+            asset_schema='inters_grid'
+            tableName=f'agg_samps_{country_key}_{grid_size:04d}'
+            
+        elif sample_type=='bldg_mean':
+            asset_schema = 'inters_agg'
+            tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
+        else:
+            raise IOError(sample_type)
+    
+        #=======================================================================
+        # run
+        #=======================================================================
+        d[grid_size] = rl_to_post(country_key, asset_schema, tableName, 
                    log=log.getChild(str(grid_size)), **kwargs)
         
     log.info(f'finished w/ \n    {d}')
@@ -320,12 +350,12 @@ if __name__ == '__main__':
     """need to run both of these"""
     
     #run_bldg_rl_topost('deu', dev=False)
-    #run_agg_rl_topost('deu', dev=False)
+    run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
     
     
     
     
-    run_all()
+    #run_all(dev=True)
     
     
     

@@ -161,6 +161,7 @@ def plot_rlMean_v_gCentroid(
     
     """grid centroids vs. child building means 
     
+    not sure we need thsi for hte paper... but a nice check
     
     
     Params

@@ -47,7 +47,7 @@ def run_bldg_rl_means(
  
          log=None,
          dev=False,
- 
+         sample_type='grid_cent'
         ):
     """join mean building losses (grouped by grids) to the grid losses
     
@@ -86,13 +86,16 @@ def run_bldg_rl_means(
         'bldg':['country_key', 'gid', 'id'],
         'grid':['country_key', 'grid_size', 'i', 'j']        
     }
+    
+
         
         
     tableName=f'rl_mean_{country_key}_{grid_size:04d}' #output    
-    table_grid=f'rl_{country_key}_grid_{grid_size:04d}' #grid losses
-    table_bldg = f'rl_{country_key}_bldgs' #building losses
-    table_link =f'bldgs_grid_link_{country_key}_{grid_size:04d}'
     
+    table_bldg = f'rl_{country_key}_bldgs' #building losses
+    
+    #Link all buildings to  exposed grids for: 1x) grids w/ exposed buildings
+    table_link = f'bldgs_grid_link_1x_{country_key}_{grid_size:04d}'
     
     if dev: 
         schema='dev'
@@ -102,9 +105,23 @@ def run_bldg_rl_means(
     else:
         schema='damage'
         schema_bldg='damage' 
-        schema_link='agg_bldg'
+        schema_link='expo'
         
     schema_grid = schema_bldg
+    
+    
+    #grid losses by type
+    if sample_type=='grid_cent':
+        #centroid based losses
+        table_grid=f'rl_{country_key}_grid_{grid_size:04d}' 
+ 
+        
+    elif sample_type=='bldg_mean':
+        #building mean based losses
+        table_grid=f'rl_{country_key}_grid_bmean_{grid_size:04d}' #grid losses
+        
+    else:
+        raise IOError(sample_type)
     
  
     assert pg_table_exists(schema_bldg, table_bldg)
@@ -149,7 +166,7 @@ def run_bldg_rl_means(
     cols+=f', COUNT(tright.id) AS bldg_expo_cnt, '  #we only have exposed buildings so this isnt very useful
     cols+= ', '.join([f'CAST(AVG(tright.{e}) AS real) AS {e}_mean' for e in func_coln_l])
     
-    
+    cols +=f', \'{sample_type}\' as sample_type'
  
     """not too worried about nulls as we filter for those with high wetted fraction"""
     
@@ -187,8 +204,8 @@ def run_bldg_rl_means(
  
     source_d = dict(tableName=tableName,table_grid=table_grid, table_bldg=table_bldg, table_link=table_link )
     
-    cmt_str = f'join mean building losses (grouped by grids) to the grid losses \n from tables: {source_d}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str = f'join mean building losses (grouped by grids) to the grid losses (sample_type={sample_type}) \n from tables: {source_d}\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} ')
@@ -233,8 +250,8 @@ def run_all(ck, grid_size_l=None, **kwargs):
         
         
 if __name__ == '__main__':
-    #run_all('deu', dev=False)
-    run_bldg_rl_means('deu', 1020, dev=True)
+    run_all('deu', dev=True, sample_type='bldg_mean')
+    #run_bldg_rl_means('deu', 1020, dev=True, sample_type='bldg_mean')
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
     

@@ -47,7 +47,7 @@ def run_view_merge_grid(country_key, haz_key,
          dev=False, conn_str=None, log=None,
         ):
     
-    """create a view by unioning all the grid losses
+    """create a view by unioning all the rl_mean tables
     
     useful for joins later"""
     
@@ -73,7 +73,7 @@ def run_view_merge_grid(country_key, haz_key,
         schema='damage'
         
     """could also use the occupied tables"""
-    tableName=f'rl_mean_grid_{country_key}_{haz_key}'
+    tableName=f'rl_mean_{country_key}_{haz_key}'
     
     
     
@@ -169,7 +169,7 @@ def run_view_join_depths(
     #===========================================================================
  
     
-    table_left=f'rl_mean_grid_{country_key}_{haz_key}' #losses for all grrid sizes merged... see run_view_merge_grid()
+    table_left=f'rl_mean_{country_key}_{haz_key}' #losses for all grrid sizes merged... see run_view_merge_grid()
     tableName = table_left+'_wd'
     table_right=f'agg_samps_{country_key}_{haz_key}' #wd for all grids. see _02agg._07_views()
  
@@ -224,7 +224,7 @@ def run_view_join_depths(
         #'postgres_GB':get_directory_size(postgres_dir)}
         #'output_MB':os.path.getsize(ofp)/(1024**2)
         }
-    log.info(f'finished on {tableName} w/ \n{meta_d}')
+    log.info(f'finished on {schema}.{tableName} w/ \n{meta_d}')
     
     return tableName
 
@@ -336,11 +336,10 @@ def run_all(ck='deu', haz_key='f500_fluvial', **kwargs):
 
 
 if __name__ == '__main__':
-    #run_view_merge_grid('deu', 'f500_fluvial',dev=False)
-    #run_view_join_depths('deu', 'f500_fluvial', dev=False, with_geom=False)
+    #run_view_merge_grid('deu', 'f500_fluvial',dev=True)
+    #run_view_join_depths('deu', 'f500_fluvial', dev=True, with_geom=False)    
     
-    
-    run_all()
+    run_all(dev=False)
     
  
         
