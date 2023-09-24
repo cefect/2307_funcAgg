@@ -105,8 +105,11 @@ def run_expo_stats_grouped(
     #===========================================================================
     # params
     #===========================================================================
-    #points with grid indexers
-    table_left = f'bldgs_grid_link_full_{country_key}_{grid_size:04d}'
+ 
+    #gid:bldg links for buildings in grids with some building expousre
+    #see _04expo._01_full_links
+    table_left =f'bldgs_grid_link_1x_{country_key}_{grid_size:04d}'
+    #table_left = f'bldgs_grid_link_full_{country_key}_{grid_size:04d}'
     
     #sample values for all haz_keys
     table_right = f'{country_key}'

@@ -90,14 +90,16 @@ def pg_getcount(schema, tableName,  conn_str=None):
 def pg_get_nullcount(schema, tableName, colName, **kwargs):
     return pg_exe(f"""SELECT COUNT(*) FROM {schema}.{tableName} WHERE {colName} IS NULL""", return_fetch=True, **kwargs)[0][0]  
 
-def pg_to_df(cmd_str, conn_d=postgres_d):
-    """load a filtered table to geopanbdas"""
+def pg_to_df(cmd_str, conn_str=None):
+    """load a query with pandas"""
     
-    conn =  psycopg2.connect(get_conn_str(conn_d))
+    if conn_str is None: conn_str=get_conn_str(postgres_d)
+    
+    conn =  psycopg2.connect(conn_str)
     #set engine for geopandas
     engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
     try:
-        result = pd.read_sql_query(cmd_str, engine)
+        result = pd.read_sql(cmd_str, engine)
         
     except Exception as e:
         raise IOError(f'failed query w/ \n    {e}')
@@ -111,24 +113,31 @@ def pg_to_df(cmd_str, conn_d=postgres_d):
     return result
 
 
-def pg_get_column_names(schema, tableName, conn_str=None):
+def pg_get_column_names(schema, tableName, conn_str=None, asset_type='tables'):
     """get the column names""" 
     
     if conn_str is None:conn_str = get_conn_str(postgres_d)
+    
+    assert pg_table_exists(schema, tableName, conn_str=conn_str, asset_type=asset_type),  f'table {schema}.{tableName} does not exist'
+    if 'table' in asset_type:
         
-    with psycopg2.connect(conn_str) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""SELECT column_name
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                        WHERE TABLE_NAME = %s AND TABLE_SCHEMA = %s
-                        ORDER BY ordinal_position
-                        """,(tableName, schema))
- 
-            l = cur.fetchall()
-    assert len(l)>0, f'table {schema}.{tableName} does not exist'
+        with psycopg2.connect(conn_str) as conn:
+            with conn.cursor() as cur:
+               
+                cur.execute(
+                    f"""SELECT column_name
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = %s AND TABLE_SCHEMA = %s
+                            ORDER BY ordinal_position
+                            """,(tableName, schema)) 
+     
+                l = cur.fetchall()
+        assert len(l)>0, f'table {schema}.{tableName} returned no columns'
+        res_l = [e[0] for e in l]
+    else:
+        res_l = pg_to_df(f"""SELECT * FROM {schema}.{tableName} LIMIT 1""", conn_str=conn_str).columns.tolist()
             
-    return [e[0] for e in l]
+    return res_l
 
 def pg_register(schema, tableName, conn_str=None):
     """register the geometry of the table"""
@@ -176,6 +185,8 @@ def pg_table_exists(schema_name, table_name, conn_str=None, asset_type='tables')
                         FROM pg_catalog.pg_matviews
                         WHERE matviewname = %s
                     );""", (table_name, ))
+            else:
+                raise KeyError(asset_type)
             result = cur.fetchone()[0]
  
     return result

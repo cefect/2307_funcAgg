@@ -195,8 +195,18 @@ def run_all(country_key='deu', **kwargs):
         
 if __name__ == '__main__':
     
-    run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
+    #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
     
-    #run_all('deu', dev=False)
+    run_all('deu', dev=True)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
  
