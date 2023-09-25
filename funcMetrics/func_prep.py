@@ -8,7 +8,7 @@ pre-processing on functions
 #===============================================================================
 # IMPORTS---------
 #===============================================================================
-import os, hashlib
+import os, hashlib, logging
 import numpy as np
 import pandas as pd
 
@@ -773,7 +773,7 @@ def _06join_linear(
     #===========================================================================
     # build linear------
     #===========================================================================
-    xar = np.linspace(0, 1000, 3)
+    xar = np.linspace(0, 10, 3)
  
     ser = pd.Series(xar*ymax/xar.max(), index=pd.Index(xar, name='wd'))
     
@@ -983,6 +983,7 @@ def get_funcLib(
         lib_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_24_699_20230925.pkl', #with hill funcs
         out_dir=None,
         use_cache=True,
+        log=None,
         **kwargs):
     """retrieve the filtered function library serx
     
@@ -1000,6 +1001,7 @@ def get_funcLib(
     if out_dir is None:
         out_dir = os.path.join(temp_dir, 'funcMetrics', 'get_funcLib')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
+    if log is None: log = logging.getLogger('funcLib')
     
     #===========================================================================
     # get hash
@@ -1007,16 +1009,16 @@ def get_funcLib(
     uuid = hashlib.shake_256((f'{lib_fp}_{kwargs}').encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'dfuncLib_sliced_{uuid}.pkl')
     
-    
+    log.info(f'loading full function set from {os.path.basename(lib_fp)}')
     #===========================================================================
     # build
     #===========================================================================
     if (not os.path.exists(ofp)) or (not use_cache):
         serx = slice_lib(lib_fp, **kwargs)
         serx.to_pickle(ofp)
-        print(f'wrote to\n    {ofp}')
+        log.info(f'wrote to\n    {ofp}')
     else:
-        print(f'loading from cache\n    {ofp}')
+        log.info(f'loading slice from cache\n    {ofp}')
         serx = pd.read_pickle(ofp)
     
     _print_lib(serx.index)
@@ -1033,7 +1035,7 @@ view(serx)
     
     
 if __name__ == '__main__':
-    
+    pass
     #load_dfunc_serx()
     #write_dfunc_serx()
     
@@ -1048,7 +1050,7 @@ if __name__ == '__main__':
     #_04build_hills()
     #_05join_hill()
     
-    _06join_linear(r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_23_698_20230925.pkl')
+    #_06join_linear(r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_23_698_20230925.pkl')
  
      
     #slice_lib()

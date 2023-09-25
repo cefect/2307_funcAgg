@@ -317,8 +317,8 @@ def loss_calc_country_assetType(
         
         #debug
         #cmd_str += f'\nAND i=19666 AND j=90844'
-        cmd_str+=f'\nAND gid = 12'
-        cmd_str+=f'\nAND id in (68258, 68261, 68262, 68263, 36427, 94206, 94211, 94212, 384050, 384051)'
+        #cmd_str+=f'\nAND gid = 12'
+        #cmd_str+=f'\nAND id in (68258, 68261, 68262, 68263, 36427, 94206, 94211, 94212, 384050, 384051)'
         
         cmd_str +=f'\nORDER BY '+ ', '.join(index_col) #needed to get consistent pulls?
         #=======================================================================
@@ -401,7 +401,7 @@ def loss_calc_country_assetType(
     return 
 
 
-def run_agg_loss(country_key, grid_size_l=None, haz_coln_l=None, sample_type='grid_cent', **kwargs):
+def run_agg_loss(country_key='deu', grid_size_l=None, haz_coln_l=None, sample_type='grid_cent',   **kwargs):
     """compute losses from agg grid centroid samples"""
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
@@ -441,7 +441,7 @@ def run_agg_loss(country_key, grid_size_l=None, haz_coln_l=None, sample_type='gr
     
     return d
 
-def run_bldg_loss(country_key, filter_cent_expo=False, **kwargs):
+def run_bldg_loss(country_key='deu', filter_cent_expo=False,   **kwargs):
     
     #select source table  by exposure filter strategy
     if filter_cent_expo:
@@ -462,9 +462,11 @@ def run_bldg_loss(country_key, filter_cent_expo=False, **kwargs):
 
 if __name__ == '__main__':
  
+    run_bldg_loss( dev=False)
     
+    #run_agg_loss(dev=False)
     
-    run_bldg_loss('deu', dev=False, haz_coln_l=['f500_fluvial'], dfid_l=[946])
+    #run_bldg_loss('deu', dev=False, haz_coln_l=['f500_fluvial'], dfid_l=[946])
     
  
     #run_agg_loss('deu', dev=False, sample_type='bldg_mean', grid_size_l=[60], haz_coln_l=['f500_fluvial_bmean'], dfid_l=[946])
