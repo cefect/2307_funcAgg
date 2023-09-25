@@ -32,6 +32,7 @@ import matplotlib
 #matplotlib.use('Qt5Agg') #sets the backend (case sensitive)
 matplotlib.set_loglevel("info") #reduce logging level
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
  
 #set teh styles
 plt.style.use('default')
@@ -159,7 +160,7 @@ def plot_gstats(
         ):
     
  
-    
+    raise IOError('best not to use subfigures... and use a gridspect with child gridspecs')
     """grid centroids vs. child building means 
     
     not sure we need thsi for hte paper... but a nice check
@@ -174,7 +175,7 @@ def plot_gstats(
         relative to size of complete data set (not the gruops)
  
     """
-    raise IOError('lets add other hazard scenarios, binned mean line, and side distributions?')
+ 
     #===========================================================================
     # defaults
     #===========================================================================
@@ -213,9 +214,7 @@ def plot_gstats(
     
     dx1 = dx_raw.xs(country_key, level='country_key')#.xs(haz_key, level='haz_key', axis=1)
     
-    
  
-    
     #===========================================================================
     # filter data
     #===========================================================================
@@ -247,7 +246,10 @@ def plot_gstats(
     mdex = dx2.index
     #===========================================================================
     # setup indexers
-    #===========================================================================        
+    #===========================================================================
+    xlims = (0, max(dx2[xcoln]))
+    ylims = (0, max(dx2[ycoln]))
+            
     keys_d = {'row':'haz_key',  'col':'grid_size'}
     kl = list(keys_d.values())     
     log.info(f' loaded {len(dx1)}')
@@ -260,17 +262,27 @@ def plot_gstats(
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
  
     
-    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
-                               constrained_layout=False, #needs to be unconstrainted for over label to work
-                               figsize_scaler=3,
-                               sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
+    #===========================================================================
+    # fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
+    #                            constrained_layout=False, #needs to be unconstrainted for over label to work
+    #                            figsize_scaler=3,
+    #                            sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
+    #===========================================================================
+    #using sub-figures
+    fig = plt.figure(constrained_layout=False, figsize=(len(row_keys)*3, len(col_keys)*3))
+    subfigs_ll = fig.subfigures(len(row_keys), len(col_keys), wspace=0.0)
     
-    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+    #only have 1 haz_key for now
+    #subfigs_ll=[subfigs_ll]
+    subfig_d = {row_key: {col_key: subfig for col_key, subfig in zip(col_keys, row)} for row_key, row in zip(row_keys, subfigs_ll)}
+    
+    
+    rc_sf_iter = [(row_key, col_key, ax) for row_key, ax_di in subfig_d.items() for col_key, ax in ax_di.items()]
     
     #color_d = _get_cmap(color_keys, name='viridis')
     
  
-    
+    log.info(f'on \n    cols:{col_keys}\n    rows:{row_keys}')
     
     #===========================================================================
     # loop and plot-----
@@ -280,16 +292,30 @@ def plot_gstats(
  
     for (row_key, col_key), gdx0 in dx2.groupby(kl[:2]):
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
-        ax = ax_d[row_key][col_key]
         
+        #=======================================================================
+        # setup subfigure
+        #=======================================================================
+        subfig = subfig_d[row_key][col_key]
+        
+        # Define the gridspec (2x2)
+        gs = gridspec.GridSpec(2, 2, 
+                               height_ratios=[1,4], width_ratios=[4,1],
+                               figure=subfig,
+                               wspace=0.0, hspace=0.0)
+        
+        # Scatter plot (lower left)
+        ax_main = subfig.add_subplot(gs[1, 0])
+ 
+        
+        #=======================================================================
+        # prep data
+        #=======================================================================
         gdx0 = gdx0.droplevel(kl[:2]).dropna()
-        
-        #assert (gdx0==0).sum().sum()==0
-        
  
         xar, yar = gdx0[xcoln], gdx0[ycoln]
         #===================================================================
-        # #plot bldg_mean scatter
+        # #plot density scatter
         #===================================================================
         
         #geet a sample of hte data
@@ -309,7 +335,45 @@ def plot_gstats(
         # Sort the points by density, so that the densest points are plotted last
         indexer = z.argsort()
         x, y, z = x[indexer], y[indexer], z[indexer]
-        cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        cax = ax_main.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        
+        #ax_main.set_aspect('equal')
+        ax_main.set_xlim(xlims)
+        ax_main.set_ylim(ylims)
+        #=======================================================================
+        # right (y) histogram
+        #=======================================================================
+        hist_kwargs = dict(color='black', alpha=0.5, bins=20)
+        # Histogram of y values (lower right)
+        ax_right = subfig.add_subplot(gs[1,1], 
+                                      sharey=ax_main, #cant use this with turning off/on the histograms
+                                      )
+        ax_right.hist(yar, orientation='horizontal', **hist_kwargs)
+        ax_right.axis('off')
+        #=======================================================================
+        # ax_right.spines['left'].set_visible(False)
+        # ax_right.spines['right'].set_visible(False)
+        # ax_right.spines['top'].set_visible(False)
+        # ax_right.set_yticks([])
+        #=======================================================================
+        
+        #=======================================================================
+        # top (x) histogram
+        #=======================================================================
+        # Histogram of x values (top)
+        ax_top = subfig.add_subplot(gs[0,0], 
+                            sharex=ax_main
+                            )
+        ax_top.hist(xar, **hist_kwargs)
+        
+        ax_top.axis('off')
+        #=======================================================================
+        # ax_top.spines['bottom'].set_visible(False)
+        # ax_top.spines['top'].set_visible(False)
+        # ax_top.spines['right'].set_visible(False)
+        # ax_top.set_xticks([])
+        #=======================================================================
+        
         
  
         #===================================================================
@@ -350,13 +414,15 @@ def plot_gstats(
  #==============================================================================
         
  
-        
+    """
+    plt.show()
+    """
  
  
     #===========================================================================
     # post----
     #===========================================================================    
-    for row_key, col_key, ax in rc_ax_iter:
+    for row_key, col_key, ax in rc_sf_iter:
         pass
         #ax.grid()
         
@@ -391,10 +457,12 @@ def plot_gstats(
     # #macro labelling
     #===========================================================================
     #plt.subplots_adjust(left=1.0)
-    macro_ax = fig.add_subplot(111, frame_on=False)
-    _hide_ax(macro_ax) 
-    macro_ax.set_ylabel(ycoln, labelpad=20)
-    macro_ax.set_xlabel(xcoln)
+    #===========================================================================
+    # macro_ax = fig.add_subplot(111, frame_on=False)
+    # _hide_ax(macro_ax) 
+    # macro_ax.set_ylabel(ycoln, labelpad=20)
+    # macro_ax.set_xlabel(xcoln)
+    #===========================================================================
     
     """doesnt help
     fig.tight_layout()"""
@@ -425,7 +493,7 @@ def plot_gstats(
     #===========================================================================
     # tighten up
     #===========================================================================
-    fig.subplots_adjust(top=0.95, right=0.95)
+    #fig.subplots_adjust(top=0.95, right=0.95)
  
     #===========================================================================
     # meta
@@ -469,7 +537,7 @@ def plot_gstats(
 if __name__=='__main__':
     
  
-    plot_gstats(dev=False, samp_frac=0.01)
+    plot_gstats(dev=False, samp_frac=0.001)
 
     
  
