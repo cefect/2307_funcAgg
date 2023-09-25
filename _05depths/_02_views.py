@@ -207,6 +207,13 @@ def create_view_join_stats_to_bmeans(
         schema_right='expo'       
         
     
+    #check dependencies
+    assert pg_table_exists(schema_left, table_left, asset_type='matview'), \
+        f'missing left: %s.%s'%(schema_left, table_left)
+        
+    assert pg_table_exists(schema_right, table_right, asset_type='table'), \
+        f'missing right: %s.%s'%(schema_right, table_right)
+        
     keys_l = ['country_key', 'grid_size', 'i', 'j']
  
     log.info(f'creating view from {table_left} and {table_right}')

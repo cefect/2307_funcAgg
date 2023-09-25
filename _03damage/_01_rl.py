@@ -401,7 +401,7 @@ def loss_calc_country_assetType(
     return 
 
 
-def run_agg_loss(country_key='deu', grid_size_l=None, haz_coln_l=None, sample_type='grid_cent',   **kwargs):
+def run_agg_loss(country_key='deu', grid_size_l=None, haz_coln_l=None, sample_type='bldg_mean',   **kwargs):
     """compute losses from agg grid centroid samples"""
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
@@ -462,9 +462,9 @@ def run_bldg_loss(country_key='deu', filter_cent_expo=False,   **kwargs):
 
 if __name__ == '__main__':
  
-    run_bldg_loss( dev=False)
+    #run_bldg_loss( dev=False)
     
-    #run_agg_loss(dev=False)
+    run_agg_loss(dev=False)
     
     #run_bldg_loss('deu', dev=False, haz_coln_l=['f500_fluvial'], dfid_l=[946])
     

@@ -326,7 +326,7 @@ def run_bldg_rl_topost(country_key, filter_cent_expo=False, log=None, **kwargs):
     return rl_to_post(country_key, asset_schema,tableName, log=log, **kwargs)
         
     
-def run_all(ck='deu',   **kwargs):
+def run_all(country_key='deu',   **kwargs):
     
  
     log = init_log(name=f'rl_topost')
@@ -334,22 +334,22 @@ def run_all(ck='deu',   **kwargs):
     #===========================================================================
     # buildings
     #===========================================================================
-    run_bldg_rl_topost(ck, log=log, **kwargs)
+    run_bldg_rl_topost(country_key, log=log, **kwargs)
     
-    run_agg_rl_topost(ck, log=log, **kwargs)
+    run_agg_rl_topost(country_key, log=log, **kwargs)
     
     
 
 if __name__ == '__main__':
-    """need to run both of these"""
+ 
     
-    run_bldg_rl_topost('deu', dev=False)
-    #run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
-    
-    
+    #run_bldg_rl_topost('deu', dev=True)
+    #run_agg_rl_topost('deu', dev=True)
     
     
-    #run_all(dev=False) #takes a few mins
+    
+    
+    run_all(dev=True) #takes a few mins
     
     
     

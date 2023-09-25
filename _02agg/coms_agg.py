@@ -183,8 +183,8 @@ def pg_table_exists(schema_name, table_name, conn_str=None, asset_type='table'):
                     SELECT EXISTS (
                         SELECT 1
                         FROM pg_catalog.pg_matviews
-                        WHERE matviewname = %s
-                    );""", (table_name, ))
+                        WHERE matviewname = %s AND schemaname = %s
+                    );""", (table_name, schema_name))
             else:
                 raise KeyError(asset_type)
             result = cur.fetchone()[0]

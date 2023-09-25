@@ -107,7 +107,7 @@ print('loaded matplotlib %s'%matplotlib.__version__)
 #===============================================================================
 # imports---------
 #===============================================================================
-import os, math
+import os, math, hashlib
 import pandas as pd
 idx = pd.IndexSlice
 import numpy as np
@@ -301,7 +301,7 @@ def plot_rl_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=1.0,
-        dfid_l = [942,  944, 945, 946], 
+        dfid_l = None, 
         samp_frac=0.0001, #
         dev=False,
         ylab_d = clean_names_d,
@@ -311,7 +311,7 @@ def plot_rl_agg_v_bldg(
     
 
     
-    """plot relative loss from grid centroids and building means    
+    """plot relative loss agg vs. bldg
     
     
     
@@ -340,6 +340,10 @@ def plot_rl_agg_v_bldg(
     if figsize is None:
         if env_type=='present':
             figsize=(34*cm,10*cm)
+            
+    if dev:
+        min_wet_frac = 0.0
+        samp_frac = 1.0
             
  
     
@@ -378,6 +382,23 @@ def plot_rl_agg_v_bldg(
     mdex.unique('df_id')
  
     """
+    
+    #drop bad cells
+    mdf = dx1.index.to_frame().reset_index(drop=True)
+    
+    bx = np.logical_and(
+            (mdf['df_id']==946).values,
+            np.invert(dx1['bldg'].round(1)==dx1['grid'].round(1)).values
+            )
+ 
+    
+    if bx.any():
+        """i assume this is because I forgot to filter buildings with nulls"""
+        log.warning(f'dropping {bx.sum()}/{len(bx)} from dataset w/ bad relation')
+        dx1 = dx1.loc[~bx, :]
+        mdex = dx1.index
+        
+        
     #select functions
     if not dfid_l is None:
         bx = mdex.to_frame().reset_index(drop=True)['df_id'].isin(dfid_l).values
@@ -386,44 +407,19 @@ def plot_rl_agg_v_bldg(
         dx1 = dx1.loc[bx, :]
         mdex = dx1.index
     
+    #filter to this wet fraction
+    dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log).round(1)
     
-    dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
+    #dx2 = dx2.round(1)
     
-    #testing
-    """some rounding issue?
-    
-    seems a bit too extreme to be a rounding issue
-        could try a test aoi around the offending grids
-        then write a pure pandas workflow?
-        
-        lets start with taking a closer look at the dev results
-        
-        
-        
-    dx2.max()
-    dx2.index.to_frame().reset_index(drop=True)['grid_wd'].max()
-    
-    tdx = dx2.xs(946, level='df_id').round(1)
-    
-    tdx['bias'] = tdx['bldg']/tdx['grid']
-    tdx['mae'] = abs(tdx['bldg']-tdx['grid'])
-    view(tdx.sort_values('mae', ascending=False).head(100))
-    
-    bx = tdx['bldg'].round(3)==tdx['grid'].round(3)
-    print(bx.sum())
-    print(np.invert(bx).sum())
-    view(tdx[~bx].head(100))
-    
-    mdf = tdx.index.to_frame().reset_index(drop=True)
-    bx = np.logical_and(mdf['i']==19666, mdf['j']==90844)
-    tdx[bx.values].to_csv(r'l:\02_WORK\NRC\2307_funcAgg\04_CALC\bad.csv')
-        
-    
-    
-    """
+     
+
+ 
     
  
-    # get binned means    
+    #===========================================================================
+    # # get binned means    
+    #===========================================================================
     keys_l =  ['grid_size', 'haz_key', 'df_id', 'grid_wd'] #only keys we preserve   
  
     #get a slice with clean index
@@ -506,8 +502,8 @@ def plot_rl_agg_v_bldg(
         wd_rl_df = fserx.xs(row_key, level='df_id').reset_index('wd').reset_index(drop=True)
         xar, yar = wd_rl_df['wd']*100, wd_rl_df['rl']
          
-        ax.plot(xar, yar, color='black', marker='o', linestyle='solid', alpha=1.0, 
-                markersize=3,fillstyle='none', linewidth=0.75, label=f'$f(WSH)$')
+        ax.plot(xar, yar, color='black', marker='o', linestyle='solid', alpha=0.8, 
+                markersize=3,fillstyle='none', linewidth=0.5, label=f'$f(WSH)$')
         
  
         #=======================================================================
@@ -533,6 +529,7 @@ def plot_rl_agg_v_bldg(
             
             #geet a sample of hte data
             df_sample = df.copy().sample(min(int(len(dx2)*samp_frac), len(df)))
+            assert len(df_sample)>0
             
             log.info(f'    w/ {df.size} and sample {df_sample.size}')
             
@@ -753,9 +750,9 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # write-------
     #===========================================================================
+    uuid = hashlib.shake_256(f'{dfid_l}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(6)
     
-    
-    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}_{uuid}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
     
     plt.close('all')
@@ -1139,11 +1136,15 @@ def plot_TL_agg_v_bldg(
     
 if __name__=='__main__':
     
+    hill_curve_l = [942,  944, 945, 946]
+    dfunc_curve_l = [26, 380, 402, 941]
+    
+    
     #plot_rl_raw(tableName='rl_deu_grid_bmean_1020')
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False, samp_frac=0.001, use_cache=True)
+    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01, use_cache=True,  dfid_l=dfunc_curve_l)
 
     
  

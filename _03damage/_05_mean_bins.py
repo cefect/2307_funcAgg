@@ -74,6 +74,9 @@ def get_grid_rl_dx(
     #===========================================================================
     # cache
     #===========================================================================
+ 
+    
+    
     fnstr = f'grid_rl_{country_key}_{haz_key}'
     uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
@@ -323,7 +326,7 @@ def compute_binned_mean(serx, log=None, out_dir=None, use_cache=False, bin_cnt=2
 if __name__=='__main__':
     
     
-    run_bldg_rl_mean_bins('deu', dev=False)
+    run_bldg_rl_mean_bins('deu', dev=False, use_cache=False)
     
     
     print(f'done')

@@ -186,6 +186,7 @@ def run_view_join_depths(
     
     keys_l = ['country_key', 'grid_size', 'i', 'j']
  
+    #check dependencies
     assert pg_table_exists(schema_left, table_left, asset_type='matview'), \
         f'missing left: %s.%s'%(schema_left, table_left)
         
@@ -354,7 +355,7 @@ if __name__ == '__main__':
     #create_view_join_stats_to_rl('deu', 'f500_fluvial',dev=False)
     
     
-    run_all(dev=False)
+    run_all(dev=True)
     
     
     
