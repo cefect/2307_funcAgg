@@ -54,13 +54,9 @@ def run_bldg_wd_means(
          add_geom=False,
  
         ):
-    """join mean building depths (grouped by grids) to the grid losses
+    """calc mean buildilng depths
     
-    NOTE: the building loss means ignore nulls and zeros 
-        because we pre-filtered these in _02agg.join
-        not a big deal because we filter out partials for the analysis
-        
-        but can NOT filter by grid centroid exposure
+ 
         
     this script is similar to _03damage._03_rl_mean_bldg
     

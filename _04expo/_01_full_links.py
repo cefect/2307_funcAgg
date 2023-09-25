@@ -30,9 +30,11 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register,
-    pg_comment, pg_getCRS, pg_register
+    pg_comment, pg_getCRS, pg_register, pg_table_exists, pg_get_nullcount
     )
  
+ 
+from _01intersect._04_views import create_view_join_bldg_geom
 
 from definitions import (
     index_country_fp_d, wrk_dir, postgres_d, equal_area_epsg, postgres_dir, gridsize_default_l, haz_label_d
@@ -193,12 +195,189 @@ def run_all(country_key='deu', **kwargs):
     for grid_size in gridsize_default_l:
         run_agg_bldg_full_links(country_key, grid_size, log=log, **kwargs)
         
+        
+
+def create_view_expo_bldgs_wd(
+        
+        country_key='deu', 
+
+        filter_cent_expo=False,
+ 
+        conn_str=None,
+ 
+         log=None,
+         dev=False,
+         add_geom=False,
+         grid_size_l=None,
+ 
+        ):
+    """join  building depths to exposed grid link table
+    
+ 
+    
+    
+    Returns
+    -------
+    postgres mat view
+        inters_agg.wd_mean_{country_key}_{grid_size:04d} 
+
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    
+    start = datetime.now()   
+    
+    country_key = country_key.lower() 
+    
+    if grid_size_l is None: grid_size_l = gridsize_default_l
+ 
+    # log.info(f'on \n    {index_d.keys()}\n    {postgres_d}')
+    
+    if conn_str is None: conn_str = get_conn_str(postgres_d)
+    if log is None:
+        log = init_log(name=f'wd_mean')
+    
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    #===========================================================================
+    # talbe params-------
+    #===========================================================================
+    #source table keys
+    keys_d = { 
+        'bldg':['country_key', 'gid', 'id'],
+        'grid':['country_key', 'grid_size', 'i', 'j']        
+    }
+    
+    if filter_cent_expo:
+        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
+ 
+        expo_str = '2x'
+    else:
+        #those grids with building exposure (using similar layer as for the centroid sampler) 
+        expo_str = '1x'
+        
+        
+    tableName=f'bldgs_grid_link_{expo_str}_{country_key}' #output
+ 
+    table_bldg = f'{country_key}' #building dephts
+ 
+    if dev: 
+        schema='dev'
+        schema_bldg=schema        
+ 
+        
+    else:
+        schema='expo'
+        schema_bldg='inters' 
+ 
+ 
+    assert pg_table_exists(schema_bldg, table_bldg)
+    
+    #===========================================================================
+    # merge all the link tables-----
+    #===========================================================================
+    """no need to materlized this as we only query onces"""
+    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
+    
+    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
+    
+    first = True
+    source_d=dict()
+    for grid_size in grid_size_l:        
+    
+        tableName_i = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'    
+        source_d[grid_size] =   tableName_i       
+            
+        assert pg_table_exists(schema, tableName_i, asset_type='table'), f'missing {schema}.{tableName_i}'        
+                
+        if not first:
+            cmd_str += 'UNION\n'
+        else: 
+            cols = '*'
+ 
+        
+        cmd_str += f'SELECT {cols}\n'
+        cmd_str += f'FROM {schema}.{tableName_i} \n'
+        
+ 
+        # filters        
+        first = False
+    
+    cmd_str+=f'ORDER BY grid_size, i, j\n'
+    sql(cmd_str)
+    
+    
+ 
+    #===========================================================================
+    # join buidling wd 
+    #===========================================================================
+    #setup
+    tableName1 = tableName+'_bwd'
+ 
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName1} CASCADE')
+    
+    #build query    
+    
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['bldg']])  
+    
+    haz_cols = [e for e in pg_get_column_names(schema_bldg, table_bldg) if e.startswith('f')]
+    
+    """not including geometry here"""
+    cols= ', '.join([f'tleft.{e}' for e in keys_d['bldg'] if not e in keys_d['grid']]) + ', '
+    cols+= ', '.join([f'tleft.{e}' for e in keys_d['grid']]) + ', '    
+    cols+= ', '.join([f'tright.{e}' for e in haz_cols])
+ 
+    #execute (using a sub-query)
+    sql(f"""
+    CREATE TABLE {schema}.{tableName1} AS
+        SELECT {cols}
+            FROM {schema}.{tableName} as tleft
+                LEFT JOIN {schema_bldg}.{table_bldg} as tright
+                    ON {link_cols}
+    
+    """) 
+    #===========================================================================
+    # post
+    #===========================================================================    
+    keys_str = ', '.join(keys_d['bldg']+['grid_size'])
+    sql(f'ALTER TABLE {schema}.{tableName1} ADD PRIMARY KEY ({keys_str})')
+    
+    assert pg_get_nullcount(schema, tableName1, 'i')==0, f'bad link?'
+ 
+    #add comment 
+    source_d = dict(tableName=tableName, table_bldg=table_bldg)
+    
+    cmt_str = f'merge of full links \n from tables: {source_d}\n'
+    cmt_str += f'joined to buidling depths \'{table_bldg}\'\n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    pg_comment(schema, tableName1, cmt_str)
+    
+    log.info(f'cleaning {tableName} ')
+    
+    try:
+        pg_vacuum(schema, tableName1)
+        """table is a-spatial"""
+        #pg_spatialIndex(schema, tableName, columnName='geometry')
+        #pg_register(schema, tableName)
+    except Exception as e:
+        log.error(f'failed cleaning w/\n    {e}')
+        
+    #===========================================================================
+    # add geometry
+    #===========================================================================
+    if add_geom:
+        create_view_join_bldg_geom(schema, tableName1, log=log, dev=dev, country_key=country_key)
+ 
+        
+        
 if __name__ == '__main__':
     
     #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
-    
-    run_all('deu', dev=True)
+    create_view_expo_bldgs_wd(dev=True, add_geom=True)
+    #run_all('deu', dev=True)
     
     
     
