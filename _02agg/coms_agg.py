@@ -151,7 +151,7 @@ def pg_comment(schema, tableName, cmt_str, conn_str=None):
     """alter the comment on a table
     
     cmt_str = f'port of {cnt} .gpkg sample files on grid centroids\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     
     """
     if conn_str is None:conn_str = get_conn_str(postgres_d)

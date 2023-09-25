@@ -125,7 +125,7 @@ def rl_to_post(
     assert isinstance(haz_coln_l, list)
     
     #asset type
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid_bmean'}[asset_schema]
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid_bmean', 'expo':'bldgs'}[asset_schema]
     
     keys_d=dict(country_key=country_key, asset_type=asset_type)
     log.info(f'on {keys_d}')
@@ -303,8 +303,22 @@ def run_agg_rl_topost(country_key, grid_size_l=None,
     return d
 
         
-def run_bldg_rl_topost(country_key, **kwargs):
-    return rl_to_post(country_key, 'inters',country_key,  **kwargs)
+def run_bldg_rl_topost(country_key, filter_cent_expo=False, log=None, **kwargs):
+    if log is None: log = init_log(name=f'rlBldg')
+    
+    #select source table  by exposure filter strategy
+    if filter_cent_expo:
+        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
+ 
+        expo_str = '2x'
+    else:
+        #those grids with building exposure (using similar layer as for the centroid sampler) 
+        expo_str = '1x'
+    
+    asset_schema='expo'
+    tableName=f'bldgs_grid_link_{expo_str}_{country_key}_bwd'
+    
+    return rl_to_post(country_key, asset_schema,tableName, log=log, **kwargs)
         
     
 def run_all(ck='deu',   **kwargs):
@@ -324,13 +338,21 @@ def run_all(ck='deu',   **kwargs):
 if __name__ == '__main__':
     """need to run both of these"""
     
-    #run_bldg_rl_topost('deu', dev=False)
+    run_bldg_rl_topost('deu', dev=True)
     #run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
     
     
     
     
-    run_all(dev=False) #takes a few mins
+    #run_all(dev=False) #takes a few mins
+    
+    
+    
+    
+    
+    
+    
+    print('done')
     
     
     

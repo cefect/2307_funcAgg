@@ -225,7 +225,7 @@ def run_expo_stats_grouped(
     #comment
     cmt_str = f'grids with exposed buildings, building counts, and wet counts per hazard\n'
     cmt_str+=f'table_left={table_left}\ntable_right={table_right}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
             
      

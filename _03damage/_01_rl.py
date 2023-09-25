@@ -149,7 +149,7 @@ def loss_calc_country_assetType(
         out_dir=None,
         conn_str=None,
         #schema='damage', 
-        chunksize=1e5,
+        chunksize=5e5,
         log=None,
         dev=False,
  
@@ -298,8 +298,8 @@ def loss_calc_country_assetType(
         #=======================================================================
         # chunk loop
         #=======================================================================
-        for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize), dtype={haz_coln:np.float32})):
-            log.info(f'{i} on {gdf.shape}')
+        for i, gdf in tqdm(enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize), dtype={haz_coln:np.float32}))):
+            log.debug(f'{i} on {gdf.shape}')
             """
             view(gdf.head(100))
             """
@@ -406,6 +406,7 @@ def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwarg
 
 def run_bldg_loss(country_key, filter_cent_expo=False, **kwargs):
     
+    #select source table  by exposure filter strategy
     if filter_cent_expo:
         #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
  
@@ -425,7 +426,7 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=False)
+    run_bldg_loss('deu', dev=True)
     
  
     #run_agg_loss('deu', dev=False, sample_type='bldg_mean')

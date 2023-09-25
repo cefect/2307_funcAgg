@@ -168,7 +168,7 @@ def run_agg_bldg_full_links(
     pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (country_key, gid, id)')
     
     cmt_str = f'join grid ({table_grid}) i,j to points ({table_left}) \n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
  
@@ -198,7 +198,7 @@ def run_all(country_key='deu', **kwargs):
         
         
 
-def create_view_expo_bldgs_wd(
+def run_merge_expo_bldgs_wd(
         
         country_key='deu', 
 
@@ -279,37 +279,53 @@ def create_view_expo_bldgs_wd(
     #===========================================================================
     # merge all the link tables-----
     #===========================================================================
-    """no need to materlized this as we only query onces"""
-    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
+    """no need to materlized this as we only query onces
     
-    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
-    
-    first = True
-    source_d=dict()
-    for grid_size in grid_size_l:        
-    
-        tableName_i = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'    
-        source_d[grid_size] =   tableName_i       
-            
-        assert pg_table_exists(schema, tableName_i, asset_type='table'), f'missing {schema}.{tableName_i}'        
-                
-        if not first:
-            cmd_str += 'UNION\n'
-        else: 
-            cols = '*'
- 
+    each table has a different length as the larger grids pick up more neighbours:
+        0060: 1479487
+        0240: 2221677
+        1020: 4655823
         
-        cmd_str += f'SELECT {cols}\n'
-        cmd_str += f'FROM {schema}.{tableName_i} \n'
         
+    just take the buildings from the largest grid_size
+    
+        
+    """
+    
+    grid_size = max(grid_size_l)
+    table_left = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}' 
+ #==============================================================================
+ #    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
+ #    
+ #    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
+ #    
+ #    first = True
+ #    source_d=dict()
+ #    for grid_size in grid_size_l:        
+ #    
+ #        tableName_i = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'    
+ #        source_d[grid_size] =   tableName_i       
+ #            
+ #        assert pg_table_exists(schema, tableName_i, asset_type='table'), f'missing {schema}.{tableName_i}'        
+ #                
+ #        if not first:
+ #            cmd_str += 'UNION\n'
+ #        else: 
+ #            cols = '*'
+ # 
+ #        
+ #        cmd_str += f'SELECT {cols}\n'
+ #        cmd_str += f'FROM {schema}.{tableName_i} \n'
+ #        
+ # 
+ #        # filters        
+ #        first = False
+ #    
+ #    cmd_str+=f'ORDER BY grid_size, i, j\n'
+ #    sql(cmd_str)
+ #==============================================================================
  
-        # filters        
-        first = False
-    
-    cmd_str+=f'ORDER BY grid_size, i, j\n'
-    sql(cmd_str)
-    
-    
+ 
  
     #===========================================================================
     # join buidling wd 
@@ -326,36 +342,35 @@ def create_view_expo_bldgs_wd(
     haz_cols = [e for e in pg_get_column_names(schema_bldg, table_bldg) if e.startswith('f')]
     
     """not including geometry here"""
-    cols= ', '.join([f'tleft.{e}' for e in keys_d['bldg'] if not e in keys_d['grid']]) + ', '
-    cols+= ', '.join([f'tleft.{e}' for e in keys_d['grid']]) + ', '    
+    #cols= ', '.join([f'tleft.{e}' for e in keys_d['bldg'] if not e in keys_d['grid']]) + ', '
+    cols= ', '.join([f'tleft.{e}' for e in keys_d['bldg']]) + ', '    
     cols+= ', '.join([f'tright.{e}' for e in haz_cols])
  
     #execute (using a sub-query)
-    sql(f"""
+    cmd_str = f"""
     CREATE TABLE {schema}.{tableName1} AS
         SELECT {cols}
-            FROM {schema}.{tableName} as tleft
+            FROM {schema}.{table_left} as tleft
                 LEFT JOIN {schema_bldg}.{table_bldg} as tright
                     ON {link_cols}
     
-    """) 
+    """
+    #print(cmd_str)
+    sql(cmd_str) 
     #===========================================================================
     # post
     #===========================================================================    
-    keys_str = ', '.join(keys_d['bldg']+['grid_size'])
+    keys_str = ', '.join(keys_d['bldg'])
     sql(f'ALTER TABLE {schema}.{tableName1} ADD PRIMARY KEY ({keys_str})')
     
-    assert pg_get_nullcount(schema, tableName1, 'i')==0, f'bad link?'
+    assert pg_get_nullcount(schema, tableName1, 'id')==0, f'bad link?'
  
     #add comment 
-    source_d = dict(tableName=tableName, table_bldg=table_bldg)
-    
-    cmt_str = f'merge of full links \n from tables: {source_d}\n'
-    cmt_str += f'joined to buidling depths \'{table_bldg}\'\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str = f'joined buidling depths from \'{table_bldg}\' to \'{table_left}\' \n'
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName1, cmt_str)
     
-    log.info(f'cleaning {tableName} ')
+    log.info(f'cleaning {tableName1} ')
     
     try:
         pg_vacuum(schema, tableName1)
@@ -371,16 +386,16 @@ def create_view_expo_bldgs_wd(
     if add_geom:
         create_view_join_bldg_geom(schema, tableName1, log=log, dev=dev, country_key=country_key)
  
-        
+       
         
 if __name__ == '__main__':
     
     #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
-    create_view_expo_bldgs_wd(dev=False, add_geom=False)
+    run_merge_expo_bldgs_wd(dev=True, add_geom=False,)
     #run_all('deu', dev=True)
     
-    
+    print('done')
     
     
     

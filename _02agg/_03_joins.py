@@ -180,7 +180,7 @@ def _build_grid_inters_join(
     log.info(f'cleaning')
     
     cmt_str = f'join grid ({tableName_grid}) i,j to points ({tableName_inters}) pts.{haz_key} > 0 \n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(out_schema, tableName, cmt_str)
     
     #set keys
