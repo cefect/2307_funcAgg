@@ -392,7 +392,7 @@ if __name__ == '__main__':
     
     #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
-    run_merge_expo_bldgs_wd(dev=True, add_geom=False,)
+    run_merge_expo_bldgs_wd(dev=False, add_geom=False,)
     #run_all('deu', dev=True)
     
     print('done')

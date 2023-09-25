@@ -224,7 +224,7 @@ def run_bldg_rl_mean_bins(
  
      
     #get a slice with clean index
-    serx3 = serx2['bldg_mean'].reset_index(keys_l+['grid_wd']).reset_index(drop=True).set_index(keys_l+['grid_wd'])
+    serx3 = serx2['bldg'].reset_index(keys_l+['grid_wd']).reset_index(drop=True).set_index(keys_l+['grid_wd'])
      
     #get the meanned bins
     compute_binned_mean(serx3, log=log, use_cache=use_cache)
@@ -251,8 +251,8 @@ def filter_rl_dx_minWetFrac(dx1, min_wet_frac=0.95, log=None):
     assert mdf['wet_cnt'].max() > 0, 'something is wrong with the building stats'
     mdf['wet_frac'] = mdf['wet_cnt'] / mdf['bldg_cnt']
     assert np.all(mdf['wet_frac'].max() <= 1.0)
-    bx = (mdf['wet_frac'] > min_wet_frac).values
-    assert bx.any()
+    bx = (mdf['wet_frac'] >= min_wet_frac).values
+    assert bx.any(), f'nothing wet enough?'
     log.info(f'selected {bx.sum()}/{len(bx)} w/ min_wet_frac={min_wet_frac}')
  
     return dx1.loc[bx, :] #.droplevel(['bldg_expo_cnt', 'wet_cnt', 'bldg_cnt'])

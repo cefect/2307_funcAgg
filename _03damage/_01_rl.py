@@ -412,7 +412,8 @@ def run_bldg_loss(country_key, filter_cent_expo=False, **kwargs):
  
         expo_str = '2x'
     else:
-        #those grids with building exposure (using similar layer as for the centroid sampler) 
+        #those grids with building exposure (using similar layer as for the centroid sampler)
+        """selection is based on 1020 grid size""" 
         expo_str = '1x'
     
     asset_schema='expo'
@@ -426,7 +427,7 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=True)
+    run_bldg_loss('deu', dev=False)
     
  
     #run_agg_loss('deu', dev=False, sample_type='bldg_mean')

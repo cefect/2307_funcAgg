@@ -94,7 +94,7 @@ def create_view_join_grid_geom(schema, table_left, country_key,
  
     pg_register(schema, tableName)
     
-    log.info(f'finished on {tableName}')
+    log.info(f'finished on {schema}.{tableName}')
     
     return tableName
 

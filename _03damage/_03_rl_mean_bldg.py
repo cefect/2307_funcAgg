@@ -28,7 +28,7 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment, pg_table_exists
+    pg_comment, pg_table_exists, pg_get_nullcount
     )
  
 
@@ -76,7 +76,7 @@ def run_bldg_rl_means(
     sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     
     #===========================================================================
-    # talbe params-------
+    # talbe params 
     #===========================================================================
     #source table keys
     keys_d = { 
@@ -123,19 +123,25 @@ def run_bldg_rl_means(
     assert pg_table_exists(schema_link, table_link)
     assert pg_table_exists(schema_grid, table_grid)
     #===========================================================================
-    # join buidling losses to grid links
+    # join buidling losses to grid links------
     #===========================================================================
+    #building losses table contains all buidlings selected by 1020 grid exposure
+    #join onto the link tables, which should shorten the list (for all but the 1020)
+    #want to include all the zeros however
+    
     #setup
     table_link1 = f'{table_bldg}_linkd'
     sql(f'DROP TABLE IF EXISTS temp.{table_link1} CASCADE')
     
     #execute
-    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['bldg']])    
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['bldg']])
+    
+    #using an inner join as the nulls are stilli n teh link table    
     sql(f"""
     CREATE TABLE temp.{table_link1} AS
-        SELECT tleft.*, tright.grid_size, tright.i, tright.j
-            FROM {schema_bldg}.{table_bldg} as tleft
-                LEFT JOIN {schema_link}.{table_link} as tright
+        SELECT tleft.grid_size, tleft.i, tleft.j, tright.* 
+            FROM {schema_link}.{table_link} as tleft
+                INNER JOIN {schema_bldg}.{table_bldg} as tright
                     ON {link_cols}
     
     """)
@@ -143,8 +149,10 @@ def run_bldg_rl_means(
     keys_str = ', '.join(keys_d['bldg'] + ['haz_key'])
     sql(f'ALTER TABLE temp.{table_link1} ADD PRIMARY KEY ({keys_str})')
     
+    #check
+    #assert pg_get_nullcount('temp', table_link1, )
     #===========================================================================
-    # join average building loss to the grid losses
+    # join average building loss to the grid losses------
     #===========================================================================
     sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE')
 

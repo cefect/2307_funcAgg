@@ -300,7 +300,7 @@ def plot_rl_agg_v_bldg(
         haz_key='f500_fluvial',
         out_dir=None,
         figsize=None,
-        min_wet_frac=0.95,
+        min_wet_frac=1.0,
         dfid_l = [942,  944, 945, 946], 
         samp_frac=0.0001, #
         dev=False,
@@ -405,14 +405,20 @@ def plot_rl_agg_v_bldg(
     
     tdx = dx2.xs(946, level='df_id').round(1)
     
-    tdx['bias'] = tdx['bldg_mean']/tdx['grid_cent']
-    tdx['mae'] = abs(tdx['bldg_mean']-tdx['grid_cent'])
+    tdx['bias'] = tdx['bldg']/tdx['grid']
+    tdx['mae'] = abs(tdx['bldg']-tdx['grid'])
     view(tdx.sort_values('mae', ascending=False).head(100))
     
-    bx = tdx['bldg_mean'].round(3)==tdx['grid_cent'].round(3)
+    bx = tdx['bldg'].round(3)==tdx['grid'].round(3)
     print(bx.sum())
     print(np.invert(bx).sum())
     view(tdx[~bx].head(100))
+    
+    mdf = tdx.index.to_frame().reset_index(drop=True)
+    bx = np.logical_and(mdf['i']==19666, mdf['j']==90844)
+    tdx[bx.values].to_csv(r'l:\02_WORK\NRC\2307_funcAgg\04_CALC\bad.csv')
+        
+    
     
     """
     
@@ -421,7 +427,7 @@ def plot_rl_agg_v_bldg(
     keys_l =  ['grid_size', 'haz_key', 'df_id', 'grid_wd'] #only keys we preserve   
  
     #get a slice with clean index
-    sx1 = dx2['bldg_mean'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
+    sx1 = dx2['bldg'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
      
     mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=use_cache)
     
@@ -514,7 +520,7 @@ def plot_rl_agg_v_bldg(
             # prep
             #===================================================================
             #c=color_d[color_key]
-            c='black'
+ 
             
             #prep data
             df= gdx1.droplevel(kl[2]).reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
@@ -530,9 +536,9 @@ def plot_rl_agg_v_bldg(
             
             log.info(f'    w/ {df.size} and sample {df_sample.size}')
             
-            #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
+            #ax.plot(df['bldg'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
             #as density
-            x,y = df_sample.index.values, df_sample['bldg_mean'].values
+            x,y = df_sample.index.values, df_sample['bldg'].values
             xy = np.vstack([x,y])
             
             """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
@@ -565,7 +571,7 @@ def plot_rl_agg_v_bldg(
             # #plot grid cent
             #===================================================================
             #===================================================================
-            # ax.plot(df['grid_cent'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
+            # ax.plot(df['grid'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
             #         label='grid')
             #===================================================================
             
@@ -578,7 +584,7 @@ def plot_rl_agg_v_bldg(
         tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
         tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
         
-        rmse = np.sqrt(np.mean((gdx0['bldg_mean'] - gdx0['grid_cent'])**2))
+        rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
         tstr+='\nRMSE: %.2f'%rmse
         
         bias = gmean/bmean
@@ -935,9 +941,9 @@ def plot_TL_agg_v_bldg(
             #===================================================================
             # plot scatter------
             #===================================================================
-            #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
+            #ax.plot(df['bldg'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
             #as density
-            x,y = df_sample['grid_cent'].values, df_sample['bldg_mean'].values
+            x,y = df_sample['grid'].values, df_sample['bldg'].values
             xy = np.vstack([np.log(x),np.log(y)]) #log transformed
             
             pdf = gaussian_kde(xy)
@@ -960,7 +966,7 @@ def plot_TL_agg_v_bldg(
  #==============================================================================
  #            this doesnt work well with the log plot
  #            #get data
- #            x,y = df['grid_cent'].values, df['bldg_mean'].values
+ #            x,y = df['grid'].values, df['bldg'].values
  #            xar = np.array([0, 10e5])
  #            
  # 
@@ -976,7 +982,7 @@ def plot_TL_agg_v_bldg(
             # #plot grid cent
             #===================================================================
             #===================================================================
-            # ax.plot(df['grid_cent'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
+            # ax.plot(df['grid'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
             #         label='grid')
             #===================================================================
             
@@ -989,10 +995,10 @@ def plot_TL_agg_v_bldg(
         tstr ='$\sum{\overline{RL_{bldg,j}}}*B_{j}}$: %.2e\n'%bsum
         tstr+='$\sum{RL_{grid,j}*B_{j}}$: %.2e\n'%gsum
         
-        rmse = np.sqrt(np.mean((gdx0['bldg_mean'] - gdx0['grid_cent'])**2))
+        rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
         tstr+='RMSE: %.2f\n'%rmse
         
-        bias =gdx0['grid_cent'].sum()/gdx0['bldg_mean'].sum()
+        bias =gdx0['grid'].sum()/gdx0['bldg'].sum()
         tstr+='bias: %.2f'%bias
          
         coords = (0.7, 0.05)
@@ -1137,7 +1143,7 @@ if __name__=='__main__':
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01, use_cache=True)
+    plot_rl_agg_v_bldg(dev=False, samp_frac=0.001, use_cache=True)
 
     
  

@@ -304,6 +304,11 @@ def run_agg_rl_topost(country_key, grid_size_l=None,
 
         
 def run_bldg_rl_topost(country_key, filter_cent_expo=False, log=None, **kwargs):
+    """port all the rl pickles to one table 'damage.rl_deu_bldgs'
+    this now contains many zeros
+    smaller grid sizes have many unlinked neighbours (as our selection was from the 1020)
+    
+    """
     if log is None: log = init_log(name=f'rlBldg')
     
     #select source table  by exposure filter strategy
@@ -338,7 +343,7 @@ def run_all(ck='deu',   **kwargs):
 if __name__ == '__main__':
     """need to run both of these"""
     
-    run_bldg_rl_topost('deu', dev=True)
+    run_bldg_rl_topost('deu', dev=False)
     #run_agg_rl_topost('deu', dev=False, sample_type='bldg_mean')
     
     

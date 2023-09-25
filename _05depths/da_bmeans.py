@@ -142,7 +142,7 @@ from _05depths._02_views import get_grid_wd_dx
  
  
 
-def plot_rlMean_v_gCentroid(
+def plot_bMean_v_gCentroid(
         dx_raw=None,
          
         country_key='deu',
@@ -477,7 +477,7 @@ def plot_rlMean_v_gCentroid(
 if __name__=='__main__':
     
  
-    plot_rlMean_v_gCentroid(dev=False, samp_frac=0.01)
+    plot_bMean_v_gCentroid(dev=False, samp_frac=0.01)
 
     
  

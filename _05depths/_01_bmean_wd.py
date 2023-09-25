@@ -42,11 +42,11 @@ from _02agg._07_views import create_view_join_grid_geom
 
 
 
-def run_bldg_wd_means(
+def run_bldg_wd_group_stats(
         
         country_key, grid_size,
-    
-        out_dir=None,
+        agg_func='AVG',
+ 
         conn_str=None,
  
          log=None,
@@ -92,9 +92,14 @@ def run_bldg_wd_means(
         'bldg':['country_key', 'gid', 'id'],
         'grid':['country_key', 'grid_size', 'i', 'j']        
     }
+    
+    if agg_func=='AVG':
+        col_sfx='bmean'
+    else:
+        col_sfx = agg_func.replace('_', '').lower() 
         
         
-    tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}' #output
+    tableName=f'agg_wd_{col_sfx}_{country_key}_{grid_size:04d}' #output
  
     table_bldg = f'{country_key}' #building dephts
     
@@ -135,10 +140,15 @@ def run_bldg_wd_means(
     
     
     cols2 = ', '.join(keys_d['grid'])+', '
-    cols2+= ', '.join([f'CAST(AVG({e}) AS real) AS {e}_bmean' for e in haz_cols])
+    
+
+    
+    cols2+= ', '.join([f'CAST({agg_func}({e}) AS real) AS {e}_{col_sfx}' for e in haz_cols])
     
     
     #execute (using a sub-query)
+    #the subquery is similar to _04expo._01_full_links.run_merge_expo_bldgs_wd()
+    #but here we select only buildings with exposure to the particular grid size
     sql(f"""
     CREATE TABLE {schema}.{tableName} AS
         SELECT {cols2}
@@ -157,7 +167,7 @@ def run_bldg_wd_means(
     keys_str = ', '.join(keys_d['grid'])
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
     
-    assert pg_get_nullcount(schema, tableName, haz_cols[0]+'_bmean')==0, f'bad link?'
+    assert pg_get_nullcount(schema, tableName, haz_cols[0]+f'_{col_sfx}')==0, f'bad link?'
  
     #add comment 
     source_d = dict(tableName=tableName, table_bldg=table_bldg, table_link=table_link )
@@ -182,7 +192,7 @@ def run_bldg_wd_means(
     """would be useful for comparing centroid to bmean depths"""
     #params
     table_left = f'agg_samps_{country_key}_{grid_size:04d}'
-    viewName = table_left+'_jbmean'
+    viewName = table_left+f'_j{col_sfx}'
     
     if dev:
         schema_left='dev'
@@ -194,7 +204,7 @@ def run_bldg_wd_means(
     
     #build query
     cols = 'tleft.*, '
-    cols+= ', '.join([f'tright.{e}_bmean' for e in haz_cols])
+    cols+= ', '.join([f'tright.{e}_{col_sfx}' for e in haz_cols])
     link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['grid']]) 
     
     #execute
@@ -233,7 +243,7 @@ def run_all(country_key='deu', grid_size_l=None, **kwargs):
     
     res_d = dict()
     for grid_size in grid_size_l: 
-        res_d[grid_size] = run_bldg_wd_means(country_key, grid_size, log=log, **kwargs)
+        res_d[grid_size] = run_bldg_wd_group_stats(country_key, grid_size, log=log, **kwargs)
         
     log.info(f'finished w/ \n{dstr(res_d)}')
     
@@ -346,8 +356,8 @@ def get_grid_wd_dx(
      
         
         dx = pd.concat({
-            'bldg_mean':bldg_dx, 
-            'grid_cent':grid_dx, 
+            'bldg':bldg_dx, 
+            'grid':grid_dx, 
             #'expo':df.loc[:, expo_colns].fillna(0.0)
             }, 
             names = ['rl_type', 'df_id'], axis=1).dropna(how='all') 
@@ -375,8 +385,8 @@ def get_grid_wd_dx(
         
         
 if __name__ == '__main__':
-    run_all( dev=False)
-    #run_bldg_wd_means('deu', 1020, dev=True, add_geom=True)
+    #run_all( dev=False)
+    run_bldg_wd_group_stats('deu', 1020, dev=True, add_geom=True, agg_func='stddev_pop')
     
  
     
