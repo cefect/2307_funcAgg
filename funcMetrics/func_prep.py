@@ -614,11 +614,7 @@ def _04build_hills(
         
     df = pd.concat(res_d.values(), axis=1)
     
-    #===========================================================================
-    # add a linear one as well
-    #===========================================================================
-    f = lambda x:(100/max(df.index))*x
-    df['line'] = np.array(map(f, df.index))
+ 
     
     #===========================================================================
     # write
@@ -635,7 +631,7 @@ def _04build_hills(
         
         
 def _05join_hill(
-        func_fp=r'l:\10_IO\2307_funcAgg\outs\func\hill\20230923\hill_funcs_5_20230923.pkl',
+        func_fp=r'l:\10_IO\2307_funcAgg\outs\func\hill\20230925\hill_funcs_4_20230925.pkl',
         out_dir=None,   
         lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
  
@@ -665,12 +661,7 @@ def _05join_hill(
     #===========================================================================
     df_raw = pd.read_pickle(func_fp)
  
-    
-    """
-    view(func_raw)
-    """
  
-        
     lib_serx = pd.read_pickle(lib_fp)
     mdex =lib_serx.index
     
@@ -744,10 +735,101 @@ def _05join_hill(
     print(f'wrote to \n    {ofp}')
     
     return ofp
-"""
-lib_serx_new.index.unique('abbreviation')
-view(lib_serx_new)
-"""
+
+
+def _06join_linear(
+        lib_fp,
+        out_dir=None,  
+         ymax=100,
+        ):
+    """join a linear function
+ 
+    
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'funcs', 'join_hill')
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    #===========================================================================
+    # load
+    #===========================================================================
+ 
+    lib_serx = pd.read_pickle(lib_fp)
+    mdex =lib_serx.index
+    
+    """
+    view(lib_serx.head(100))
+    """
+ 
+    
+    model_id = mdex.to_frame()['model_id'].max()
+    df_id = mdex.to_frame()['df_id'].max()
+    
+    #===========================================================================
+    # build linear------
+    #===========================================================================
+    xar = np.linspace(0, 1000, 3)
+ 
+    ser = pd.Series(xar*ymax/xar.max(), index=pd.Index(xar, name='wd'))
+    
+    #=======================================================================
+    # advance
+    #=======================================================================
+    model_id+=1
+    df_id+=1
+    #===========================================================================
+    # #prep the new function
+    #===========================================================================
+    ser1 = ser.rename(lib_serx.name)
+    #rename
+    
+    
+    #add some meta
+    meta_d = {
+        'abbreviation':'line',
+        'figueriredo2018':False,
+        'damage_formate_attribute':'relative',
+        'function_formate_attribute':'discrete',
+        'coverage_attribute':'building',
+        'sector_attribute':'residential',
+        'country_attribute':'DEU',        
+        'df_id':df_id,
+        'model_id':model_id}
+    
+    ser1.index = pd_mdex_append_level(ser1.index, meta_d)
+    
+    #fill in blanks
+    meta_d2 = dict()
+    for k in mdex.names:
+        if not k in ser1.index.names:
+            meta_d2[k] = np.nan
+            
+    ser1.index = pd_mdex_append_level(ser1.index, meta_d2)
+    
+    ser1 = ser1.reorder_levels(mdex.names)
+    #===========================================================================
+    # append
+    #===========================================================================
+ 
+    lib_serx_new = pd.concat([lib_serx, ser1], axis=0).astype(float)
+ 
+    
+    #===========================================================================
+    # write
+    #===========================================================================
+    dfid_cnt, mod_cnt = len(lib_serx_new.index.unique('df_id')), len(lib_serx_new.index.unique('model_id'))
+    ofp = os.path.join(out_dir, f'dfuncLib_{mod_cnt}_{dfid_cnt}_{today_str}.pkl')
+    
+    lib_serx_new.to_pickle(ofp)
+    
+    print(f'wrote to \n    {ofp}')
+    
+    return ofp
 
 
 
@@ -898,7 +980,7 @@ def slice_lib(
 
 def get_funcLib(
         #lib_fp=r'l:\10_IO\2307_funcAgg\outs\funcs\join\dfuncLib_19_694_20230922.pkl',
-        lib_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_24_699_20230923.pkl', #with hill funcs
+        lib_fp = r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_24_699_20230925.pkl', #with hill funcs
         out_dir=None,
         use_cache=True,
         **kwargs):
@@ -965,11 +1047,13 @@ if __name__ == '__main__':
     
     #_04build_hills()
     #_05join_hill()
+    
+    _06join_linear(r'l:\10_IO\2307_funcAgg\outs\funcs\join_hill\dfuncLib_23_698_20230925.pkl')
  
      
     #slice_lib()
     
-    get_funcLib(use_cache=False)
+    #get_funcLib(use_cache=False)
 
 
 
