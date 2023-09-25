@@ -36,7 +36,7 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment, pg_table_exists, pg_get_nullcount
+    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_meta
     )
  
 from _02agg._07_views import create_view_join_grid_geom
@@ -250,7 +250,7 @@ def create_table_aggregate(tableName, table_big, agg_func_l,  dev=False, conn_st
     log.info(f'finished building {schema}.{tableName}')
     return schema,  tableName
 
-def run_pg_build_stats(
+def run_pg_build_gstats(
         
         country_key='deu', 
         grid_size_l=None,
@@ -361,17 +361,17 @@ def run_pg_build_stats(
     
  
 
-def get_grid_wd_dx(
-        country_key, haz_key,
- 
+def get_a03_gstats_1x(
+        country_key='deu', 
+        expo_str='1x',
         log=None,conn_str=None,dev=False,use_cache=True,out_dir=None,
         limit=None,
  
         ):
     
-    """helper to retrieve results from run_view_join_depths() as a dx
+    """helper to retrieve results from run_pg_build_gstats() as a dx
     
-     WARNING: this relies on _04expo.create_view_join_stats_to_rl()
+ 
     """ 
     
     #===========================================================================
@@ -380,38 +380,44 @@ def get_grid_wd_dx(
     start=datetime.now()
     
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'damage','05_means', country_key, haz_key)
+        out_dir = os.path.join(wrk_dir, 'outs', 'depths','03_gstats', country_key)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
     if conn_str is None: conn_str=get_conn_str(postgres_d)
     
     if log is None:
-        log = init_log(name=f'grid_rl')
+        log = init_log(name=f'dl')
     
     if dev: use_cache=False
+    
+    #===========================================================================
+    # talbe params
+    #===========================================================================
+    #see _04expo._03_views.create_view_join_stats_to_rl()
+    tableName = f'a03_gstats_{expo_str}_{country_key}'
+    
+    if dev:
+        schema = 'dev'
+
+    else:
+        schema = 'wd_bstats' 
+        
+    #load meta
+    assert pg_table_exists(schema, tableName, asset_type='table'), f'missing table dependency \'{schema}.{tableName}\''
+    meta_df = pg_get_meta(schema, tableName)
     #===========================================================================
     # cache
     #===========================================================================
-    fnstr = f'grid_rl_{country_key}_{haz_key}'
-    uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
+
+    
+    
+    fnstr = f'gstats_{country_key}'
+    uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}_{meta_df}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
     
     if (not os.path.exists(ofp)) or (not use_cache):
-        
-        #===========================================================================
-        # talbe params
-        #===========================================================================
-        #see _04expo._03_views.create_view_join_stats_to_rl()
-        tableName = f'grid_rl_wd_bstats_{country_key}_{haz_key}' 
-        
-        if dev:
-            schema = 'dev'
-    
-        else:
-            schema = 'damage' 
-            
-        assert pg_table_exists(schema, tableName, asset_type='matview'), f'missing table dependency \'{tableName}\'\n    see _04expo._03_views.create_view_join_stats_to_rl()'
-        keys_l = ['country_key', 'grid_size','haz_key', 'i', 'j']
+ 
+        keys_l = ['country_key', 'grid_size', 'i', 'j']
         
         #===========================================================================
         # download
@@ -437,46 +443,41 @@ def get_grid_wd_dx(
         engine.dispose()
         conn.close()
         
-        log.info(f'finished w/ {len(df_raw)} total rows')
+        log.info(f'loaded {df_raw.shape} from {tableName}')
         
         #===========================================================================
         # clean up
         #===========================================================================
         #exposure meta
-        expo_colns = ['bldg_expo_cnt', 'grid_wd', 'bldg_cnt', 'wet_cnt']
+        expo_colns = ['bldg_cnt', 'null_cnt']
         df1 = df_raw.copy()
         df1.loc[:, expo_colns] = df1.loc[:, expo_colns].fillna(0.0)        
         df1=df1.set_index(expo_colns, append=True)
         
-        #split bldg and grid losses
-        col_bx = df1.columns.str.contains('_mean') 
+        #multi-index the columns
+        #split by aggregate function
+
+        col_df = df1.columns.str.split('_', expand=True).to_frame().reset_index(drop=True)
         
-        grid_dx = df1.loc[:, ~col_bx]
-        rnm_d = {k:int(k.split('_')[1]) for k in grid_dx.columns.values}
-        grid_dx = grid_dx.rename(columns=rnm_d).sort_index(axis=1)
-        grid_dx.columns = grid_dx.columns.astype(int)
+        col_mdex = pd.MultiIndex.from_frame(pd.concat({
+            'haz_key':col_df.iloc[:,0].str.cat(others= col_df.iloc[:,1], sep='_'),
+            'agg_func':col_df.iloc[:,2]
+            }, axis=1))
         
+        dx = pd.DataFrame(df1.values, index=df1.index, columns=col_mdex).rename(columns={'wetcnt':'wet_cnt'})
+ 
+        """
+        col_mdex.to_frame().reset_index(drop=True).join(pd.Series(df1.columns.values, name='og'))
         
-        bldg_dx = df1.loc[:, col_bx]
-        rnm_d = {k:int(k.split('_')[1]) for k in bldg_dx.columns.values}
-        bldg_dx = bldg_dx.rename(columns=rnm_d).sort_index(axis=1)
-        bldg_dx.columns = bldg_dx.columns.astype(int)
-        
-        assert np.array_equal(grid_dx.columns, bldg_dx.columns)
-     
-        
-        dx = pd.concat({
-            'bldg':bldg_dx, 
-            'grid':grid_dx, 
-            #'expo':df.loc[:, expo_colns].fillna(0.0)
-            }, 
-            names = ['rl_type', 'df_id'], axis=1).dropna(how='all') 
+ 
+        """
+ 
         
         #===========================================================================
         # write
         #===========================================================================
         """
-        view(dx.head(100))
+        view(dx2.head(100))
         """
         
  
@@ -496,7 +497,9 @@ def get_grid_wd_dx(
         
 if __name__ == '__main__':
     #run_all( dev=False)
-    run_pg_build_stats(dev=False, haz_key_l=['f500_fluvial'], add_geom=False)
+    #run_pg_build_gstats(dev=False, haz_key_l=['f500_fluvial'], add_geom=False)
+    
+    get_a03_gstats_1x(dev=True)
     
  
     

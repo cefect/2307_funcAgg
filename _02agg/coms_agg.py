@@ -192,6 +192,27 @@ def pg_table_exists(schema_name, table_name, conn_str=None, asset_type='table'):
     return result
             
             
+def pg_get_meta(schema, tableName, asset_type='table', conn_str=None):
+    if conn_str is None:conn_str = get_conn_str(postgres_d)
+    with psycopg2.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            if 'table' in asset_type:
+                cur.execute(
+                    f"""SELECT column_name, data_type 
+                        FROM information_schema.columns 
+                        WHERE table_schema = %s AND table_name = %s
+                        """,
+                    (schema, tableName))
+                
+                meta_l = cur.fetchall()
+                meta_df = pd.DataFrame(meta_l).set_index(0).T
+                
+                #add row count
+                meta_df.loc['row_cnt', :] = pg_getcount(schema, tableName, conn_str=conn_str)
+                
+                return meta_df
+    
+            
 
             
             

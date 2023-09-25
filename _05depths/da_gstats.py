@@ -3,7 +3,7 @@ Created on Mar. 28, 2023
 
 @author: cefect
 
-plot building mean depths vs. grid centroids
+plot building grouped stats
 '''
 
 #===============================================================================
@@ -107,7 +107,7 @@ print('loaded matplotlib %s'%matplotlib.__version__)
 #===============================================================================
 # imports---------
 #===============================================================================
-import os, math
+import os, math, hashlib
 import pandas as pd
 idx = pd.IndexSlice
 import numpy as np
@@ -134,27 +134,28 @@ from funcMetrics.coms_fm import (
 from palettable.colorbrewer.sequential import PuBu_9, RdPu_3
 
 from _03damage._05_mean_bins import filter_rl_dx_minWetFrac
-from _05depths._02_views import get_grid_wd_dx 
+from _05depths._03_gstats import get_a03_gstats_1x
 
 #===============================================================================
 # data
 #===============================================================================
  
- 
-
-def plot_bMean_v_gCentroid(
+def plot_gstats(
         dx_raw=None,
          
         country_key='deu',
-        haz_key='f500_fluvial',
+        xcoln='avg', ycoln='stddevpop',
+        #haz_key='f500_fluvial',
         out_dir=None,
         figsize=None,
         min_wet_frac=0.95,
+        min_bldg_cnt=5,
  
         samp_frac=0.0001, #
         dev=False,
-        ylab_d = clean_names_d,
-        cmap='PuRd_r',
+ 
+        cmap='viridis',
+        
         ):
     
  
@@ -173,7 +174,7 @@ def plot_bMean_v_gCentroid(
         relative to size of complete data set (not the gruops)
  
     """
- 
+    raise IOError('lets add other hazard scenarios, binned mean line, and side distributions?')
     #===========================================================================
     # defaults
     #===========================================================================
@@ -196,7 +197,7 @@ def plot_bMean_v_gCentroid(
     #===========================================================================
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
-        dx_raw = get_grid_wd_dx(country_key=country_key, haz_key=haz_key, log=log, use_cache=True, dev=dev)
+        dx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=True, dev=dev)
     
     """no.. better to just sample the kde
     if not dev:
@@ -210,11 +211,10 @@ def plot_bMean_v_gCentroid(
     
     """
     
-    dx1 = dx_raw.droplevel('country_key')
-    mdex = dx1.index
+    dx1 = dx_raw.xs(country_key, level='country_key')#.xs(haz_key, level='haz_key', axis=1)
     
-    assert len(mdex.unique('haz_key'))==1
-    assert haz_key in mdex.unique('haz_key')
+    
+ 
     
     #===========================================================================
     # filter data
@@ -226,12 +226,25 @@ def plot_bMean_v_gCentroid(
     mdex.unique('df_id')
  
     """
+    #building count
+    bx = dx1.index.get_level_values('bldg_cnt')>=min_bldg_cnt
+    log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
  
     
-    dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log)
+    #wet count
+    #take wet count from f500
     
+    dx1.index = pd.MultiIndex.from_frame(
+                    dx1.index.to_frame().join(
+                        dx1.xs('f500_fluvial', level='haz_key', axis=1)['wet_cnt'].astype(int)
+                        ))
  
- 
+    
+    dx2 = filter_rl_dx_minWetFrac(dx1[bx], min_wet_frac=min_wet_frac, log=log)
+    
+    #stack
+    dx2 = dx2.stack(level='haz_key').drop('wet_cnt', axis=1)
+    mdex = dx2.index
     #===========================================================================
     # setup indexers
     #===========================================================================        
@@ -274,7 +287,7 @@ def plot_bMean_v_gCentroid(
         #assert (gdx0==0).sum().sum()==0
         
  
-        xar, yar = gdx0['bmean_wd'], gdx0['grid_wd']
+        xar, yar = gdx0[xcoln], gdx0[ycoln]
         #===================================================================
         # #plot bldg_mean scatter
         #===================================================================
@@ -286,7 +299,7 @@ def plot_bMean_v_gCentroid(
         
         #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
         #as density
-        x,y = df_sample['bmean_wd'].values, df_sample['grid_wd'].values
+        x,y = df_sample[xcoln].values, df_sample[ycoln].values
         xy = np.vstack([x,y])
         
         """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
@@ -298,61 +311,43 @@ def plot_bMean_v_gCentroid(
         x, y, z = x[indexer], y[indexer], z[indexer]
         cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
         
-                #===================================================================
-        # plot 1:1
-        #===================================================================
-        c = [0,gdx0.max().max()]
-        ax.plot(c,c, color='black', linestyle='dashed', linewidth=0.5)
-        
  
-        #=======================================================================
-        # linear regression
-        #=======================================================================
- 
-        
-        #regression
-        lm = scipy.stats.linregress(xar, yar)
-         
-        predict = lambda x:np.array([lm.slope*xi + lm.intercept for xi in x])            
-        ax.plot(np.array(c), predict(np.array(c)), color='red', linestyle='solid', label='regression', marker=None)
-         
-        print({'rvalue':lm.rvalue, 'slope':lm.slope, 'intercept':lm.intercept})
- 
-            
         #===================================================================
         # text-------
         #===================================================================
  
-        bmean, gmean = gdx0.mean()
-        #tstr = f'count: {len(gdx0)}\n'
-        tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
-        tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
-        
-        rmse = np.sqrt(np.mean((xar - yar)**2))
-        tstr+='\nRMSE: %.2f'%rmse
-        
-        bias = gmean/bmean
-        tstr+='\nbias: %.2f'%(bias)
-        
-        tstr+='\nr: %.2f'%(lm.rvalue)
-        
-        
-        #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
-        
-        coords = (0.8, 0.05)
- 
- 
-        
-        ax.text(*coords, tstr, size=6,
-                            transform=ax.transAxes, va='bottom', ha='center', 
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
-        
-        #=======================================================================
-        # meta
-        #=======================================================================
-        if not row_key in meta_lib: meta_lib[row_key] = dict()
-        meta_lib[row_key][col_key] = {'bldg_pop_mean':bmean, 'grid_pop_mean':gmean, 'bias':bias}
+ #==============================================================================
+ #        bmean, gmean = gdx0.mean()
+ #        #tstr = f'count: {len(gdx0)}\n'
+ #        tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
+ #        tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
+ #        
+ #        rmse = np.sqrt(np.mean((xar - yar)**2))
+ #        tstr+='\nRMSE: %.2f'%rmse
+ #        
+ #        bias = gmean/bmean
+ #        tstr+='\nbias: %.2f'%(bias)
+ #        
+ #        tstr+='\nr: %.2f'%(lm.rvalue)
+ #        
+ #        
+ #        #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
+ #        
+ #        coords = (0.8, 0.05)
+ # 
+ # 
+ #        
+ #        ax.text(*coords, tstr, size=6,
+ #                            transform=ax.transAxes, va='bottom', ha='center', 
+ #                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+ #                            )
+ #        
+ #        #=======================================================================
+ #        # meta
+ #        #=======================================================================
+ #        if not row_key in meta_lib: meta_lib[row_key] = dict()
+ #        meta_lib[row_key][col_key] = {'bldg_pop_mean':bmean, 'grid_pop_mean':gmean, 'bias':bias}
+ #==============================================================================
         
  
         
@@ -398,8 +393,8 @@ def plot_bMean_v_gCentroid(
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel(f'grid centroid water depth in cm', labelpad=20)
-    macro_ax.set_xlabel(f'child depth mean in cm')
+    macro_ax.set_ylabel(ycoln, labelpad=20)
+    macro_ax.set_xlabel(xcoln)
     
     """doesnt help
     fig.tight_layout()"""
@@ -435,24 +430,21 @@ def plot_bMean_v_gCentroid(
     #===========================================================================
     # meta
     #===========================================================================
-    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
-                        names=['df_id', 'stat'])
-    
-    mdf1 = meta_df.stack().unstack(level='stat')
-    
-    #mdf1['bias'] = mdf1['grid_rl_pop_mean']/mdf1['bldg_rl_pop_mean']
-    
-    
-    
-    
-    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
+ #==============================================================================
+ #    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
+ #                        names=['df_id', 'stat'])
+ #    
+ #    mdf1 = meta_df.stack().unstack(level='stat')
+ # 
+ #    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
+ #==============================================================================
         
     #===========================================================================
     # write-------
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'wd_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
     
     plt.close('all')
@@ -477,7 +469,7 @@ def plot_bMean_v_gCentroid(
 if __name__=='__main__':
     
  
-    plot_bMean_v_gCentroid(dev=False, samp_frac=0.01)
+    plot_gstats(dev=False, samp_frac=0.01)
 
     
  
