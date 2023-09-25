@@ -89,6 +89,8 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
         #=======================================================================
         d = dict()
         for df_id, dd_ar in func_d.items():
+            
+ 
  
             log.debug(df_id)
             #get loss
@@ -110,7 +112,31 @@ def write_loss_haz_chunk(ser, func_d, wd_scale, out_dir, fnstr, log=None, use_ca
         #===================================================================
         loss_df = pd.concat(d, axis=1)
         """
+        import matplotlib.pyplot as plt
+        plt.plot(dd_ar[0], dd_ar[1], marker='x')
+        pd.DataFrame(dd_ar).T\
+        
+        plt.plot(wd_ar, 
+        np.interp(wd_ar,
+                                dd_ar[0], #depths (xcoords)
+                                dd_ar[1], #damages (ycoords)
+                                left=0, #depth below range
+                                right=max(dd_ar[1]), #depth above range
+                                ),
+                                marker='o', color='red')
+        
+        len(loss_df)
+        wd_ar.mean()
         view(loss_df)
+        loss_df['wd']=wd_ar
+        loss_df.mean()
+        
+        np.interp(loss_df['wd'].mean(),
+                                dd_ar[0], #depths (xcoords)
+                                dd_ar[1], #damages (ycoords)
+                                left=0, #depth below range
+                                right=max(dd_ar[1]), #depth above range
+                                )
         """
         
         #add indexer
@@ -152,6 +178,7 @@ def loss_calc_country_assetType(
         chunksize=5e5,
         log=None,
         dev=False,
+        dfid_l=None,
  
         ):
     """use asset wd to compute losses for each function and each hazard
@@ -234,6 +261,10 @@ def loss_calc_country_assetType(
     # """using full index as we are changing the index (not just adding values"""
     # fserx_extend = force_max_depth(fserx, max_depth, log).rename('rl')
     #===========================================================================
+    if not dfid_l is None:
+        bx = fserx.index.to_frame()['df_id'].isin(dfid_l).values
+        log.info(f'selected {bx.sum()} func entries')
+        fserx = fserx.loc[bx]
  
     #drop meta and add zero-zero
     fserx_s = force_monotonic(
@@ -283,6 +314,11 @@ def loss_calc_country_assetType(
         
         #this is tricky... should probably have filtered these from the beginnig
         cmd_str += f'\nWHERE {haz_coln} IS NOT NULL' #exclude empties
+        
+        #debug
+        #cmd_str += f'\nAND i=19666 AND j=90844'
+        cmd_str+=f'\nAND gid = 12'
+        cmd_str+=f'\nAND id in (68258, 68261, 68262, 68263, 36427, 94206, 94211, 94212, 384050, 384051)'
         
         cmd_str +=f'\nORDER BY '+ ', '.join(index_col) #needed to get consistent pulls?
         #=======================================================================
@@ -365,7 +401,7 @@ def loss_calc_country_assetType(
     return 
 
 
-def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwargs):
+def run_agg_loss(country_key, grid_size_l=None, haz_coln_l=None, sample_type='grid_cent', **kwargs):
     """compute losses from agg grid centroid samples"""
     if grid_size_l is None: grid_size_l=gridsize_default_l
     log = init_log(name=f'rlAgg')
@@ -384,13 +420,14 @@ def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwarg
         if sample_type=='grid_cent':
             asset_schema='inters_grid'
             tableName=f'agg_samps_{country_key}_{grid_size:04d}'
-            haz_coln_l=None
+ 
             
         elif sample_type=='bldg_mean':
             #see _05depths._01_bmean_wd.run_bldg_wd_means()
             asset_schema = 'inters_agg'
             tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
-            haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
+            if haz_coln_l is None:
+                haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
  
         #=======================================================================
         # run
@@ -427,10 +464,10 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=False)
+    run_bldg_loss('deu', dev=False, haz_coln_l=['f500_fluvial'], dfid_l=[946])
     
  
-    #run_agg_loss('deu', dev=False, sample_type='bldg_mean')
+    #run_agg_loss('deu', dev=False, sample_type='bldg_mean', grid_size_l=[60], haz_coln_l=['f500_fluvial_bmean'], dfid_l=[946])
     
     
     print('done')
