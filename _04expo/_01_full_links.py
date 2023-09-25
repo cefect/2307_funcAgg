@@ -149,6 +149,7 @@ def run_agg_bldg_full_links(
     cols = 'LOWER(pts.country_key) as country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
     if with_geo: cols+=', pts.geometry as geom'
     
+    raise IOError('need to drop any null entries from the bldgs table')
 
     cmd_str=f"""
     CREATE TABLE {schema}.{tableName} AS
@@ -376,7 +377,7 @@ if __name__ == '__main__':
     
     #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
-    create_view_expo_bldgs_wd(dev=True, add_geom=True)
+    create_view_expo_bldgs_wd(dev=False, add_geom=False)
     #run_all('deu', dev=True)
     
     

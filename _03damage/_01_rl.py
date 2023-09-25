@@ -276,8 +276,14 @@ def loss_calc_country_assetType(
             raise IOError(asset_schema)
         
         cmd_str = f'SELECT ' + ', '.join(index_col) +f', {haz_coln}'        
-        cmd_str +=f'\nFROM {asset_schema}.{tableName}'         
-        cmd_str += f'\nWHERE {haz_coln} >0 AND {haz_coln} IS NOT NULL' #exclude empties
+        cmd_str +=f'\nFROM {asset_schema}.{tableName}' 
+        
+        #need to include empties to compare means        
+        #cmd_str += f'\nWHERE {haz_coln} >0 AND {haz_coln} IS NOT NULL' #exclude empties
+        
+        #this is tricky... should probably have filtered these from the beginnig
+        cmd_str += f'\nWHERE {haz_coln} IS NOT NULL' #exclude empties
+        
         cmd_str +=f'\nORDER BY '+ ', '.join(index_col) #needed to get consistent pulls?
         #=======================================================================
         # #loop through chunks of the table
@@ -297,16 +303,23 @@ def loss_calc_country_assetType(
             """
             view(gdf.head(100))
             """
+            #set params
+            fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
+            #precheck
             if len(gdf)==0:
                 log.warning(f'for chunk {i} got no rows... skipping') #not sure why this would happen
                 continue
             assert len(gdf.columns)==1
-            fnstr = f'rl_{country_key}_{haz_coln}_{i:03d}'
             
+
+            #clean
             ser = gdf.iloc[:,0].astype(np.float32)
             ser = ser.rename(ser.name.replace('_bmean', ''))
+            assert not ser.isna().any()
+ 
             
+            #execute
             res_d[i] = write_loss_haz_chunk(ser, copy.deepcopy(func_d), wd_scale, out_dir, fnstr,log=log, dev=dev)
  
             cnt+=1
@@ -374,6 +387,7 @@ def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwarg
             haz_coln_l=None
             
         elif sample_type=='bldg_mean':
+            #see _05depths._01_bmean_wd.run_bldg_wd_means()
             asset_schema = 'inters_agg'
             tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
             haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
@@ -411,7 +425,7 @@ if __name__ == '__main__':
  
     
     
-    run_bldg_loss('deu', dev=True)
+    run_bldg_loss('deu', dev=False)
     
  
     #run_agg_loss('deu', dev=False, sample_type='bldg_mean')
