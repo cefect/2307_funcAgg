@@ -386,7 +386,7 @@ def get_grid_wd_dx(
         
 if __name__ == '__main__':
     #run_all( dev=False)
-    run_bldg_wd_group_stats('deu', 1020, dev=True, add_geom=True, agg_func='stddev_pop')
+    run_bldg_wd_group_stats('deu', 1020, dev=True, add_geom=False)
     
  
     
