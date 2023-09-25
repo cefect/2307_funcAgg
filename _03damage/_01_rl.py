@@ -55,7 +55,7 @@ from _03damage.coms_dmg import get_rloss
 from funcMetrics.func_prep import get_funcLib
 from funcMetrics.coms_fm import slice_serx, force_max_depth, force_zero_zero, force_monotonic
 
-from _02agg.coms_agg import get_conn_str, pg_getCRS, pg_exe
+from _02agg.coms_agg import get_conn_str, pg_getCRS, pg_exe, pg_table_exists
 
 
 
@@ -189,15 +189,10 @@ def loss_calc_country_assetType(
     
     country_key=country_key.lower()
     
-    #asset data
-    if tableName is None:
-        #only the buildings have simple table names
-        if  asset_schema=='inters':
-            tableName=country_key
-            
+    #asset data            
     assert isinstance(tableName, str)
     
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid'}[asset_schema]
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid', 'expo':'bldgs'}[asset_schema]
     
     if dev:
         asset_schema='dev'
@@ -223,8 +218,9 @@ def loss_calc_country_assetType(
         from funcMetrics.coms_fm import max_depth
         
     
+    assert pg_table_exists(asset_schema, tableName), f'missing depths table %s.%s'%(asset_schema, tableName)
     
-    log.info(f'on {country_key}') 
+    log.info(f'on {country_key} from {asset_schema}.{tableName}') 
     
     
     #===========================================================================
@@ -298,6 +294,9 @@ def loss_calc_country_assetType(
         #=======================================================================
         for i, gdf in enumerate(pd.read_sql(cmd_str, engine, index_col=index_col, chunksize=int(chunksize), dtype={haz_coln:np.float32})):
             log.info(f'{i} on {gdf.shape}')
+            """
+            view(gdf.head(100))
+            """
             
             if len(gdf)==0:
                 log.warning(f'for chunk {i} got no rows... skipping') #not sure why this would happen
@@ -391,18 +390,31 @@ def run_agg_loss(country_key, grid_size_l=None, sample_type='grid_cent', **kwarg
     
     return d
 
-def run_bldg_loss(*args, **kwargs):
-    return loss_calc_country_assetType(*args, log = init_log(name=f'rlBldg'), **kwargs)
+def run_bldg_loss(country_key, filter_cent_expo=False, **kwargs):
+    
+    if filter_cent_expo:
+        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
+ 
+        expo_str = '2x'
+    else:
+        #those grids with building exposure (using similar layer as for the centroid sampler) 
+        expo_str = '1x'
+    
+    asset_schema='expo'
+    tableName=f'bldgs_grid_link_{expo_str}_{country_key}_bwd'
+            
+    return loss_calc_country_assetType(country_key,tableName=tableName, asset_schema=asset_schema, 
+                                   log = init_log(name=f'rlBldg'), **kwargs)
 
 
 if __name__ == '__main__':
  
     
     
-    #run_bldg_loss('deu', dev=False)
+    run_bldg_loss('deu', dev=True)
     
  
-    run_agg_loss('deu', dev=False, sample_type='bldg_mean')
+    #run_agg_loss('deu', dev=False, sample_type='bldg_mean')
     
     
     print('done')
