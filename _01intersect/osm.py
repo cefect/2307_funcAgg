@@ -338,7 +338,7 @@ def retrieve_osm_buildings(
     # wrap
     #===========================================================================
     meta_d = {
-                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
                     'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     'file_GB':os.path.getsize(osm_filter_fp)/(1024**3),
                     'use_cache':use_cache,

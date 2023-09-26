@@ -460,7 +460,7 @@ def plot_bMean_v_gCentroid(
     
  
     meta_d = {
-                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
                     #'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     #'file_GB':get_directory_size(out_dir),
                     'output_MB':os.path.getsize(ofp)/(1024**2)

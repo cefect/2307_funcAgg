@@ -234,7 +234,7 @@ def run_to_postgres(
     log.info(f'finished on\n{dstr(tab_d)}')
     
     meta_d = {
-                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
                     'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     #'file_GB':get_directory_size(out_dir),
                     #'output_MB':os.path.getsize(ofp)/(1024**2)
@@ -323,7 +323,7 @@ def xxxrun_grids_to_postgres(
     log.info(f'finished on {len(index_d)}')
     
     meta_d = {
-                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
                     'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     #'file_GB':get_directory_size(out_dir),
                     #'output_MB':os.path.getsize(ofp)/(1024**2)
