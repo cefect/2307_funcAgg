@@ -238,7 +238,7 @@ def plot_rl_raw(
         
         ar = gdx0.droplevel(kl[:2]).reset_index(drop=True).values
         
-        #ax.set_xlim((0, 500))
+ 
         #=======================================================================
         # post hist
         #=======================================================================
@@ -298,8 +298,8 @@ def plot_rl_agg_v_bldg(
         haz_key='f500_fluvial',
         out_dir=None,
         figsize=None,
-        min_wet_frac=1.0,
-        min_bldg_cnt=5,
+        #min_wet_frac=1.0,
+        min_bldg_cnt=2,
         dfid_l = None, 
         samp_frac=0.0001, #
         dev=False,
@@ -399,19 +399,28 @@ def plot_rl_agg_v_bldg(
     log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
     dx2 = dx1.loc[bx, :]
     
+    #null count (not in our data)
+    raise IOError('something is wrong with the 240m grid data... shouldnt have points opposite the concavity')
+    dx2
  
     #filter to wet fraction
-    dx3 = filter_rl_dx_minWetFrac(dx2, min_wet_frac=min_wet_frac, log=log).round(1)
+    #dx3 = filter_rl_dx_minWetFrac(dx2, min_wet_frac=min_wet_frac, log=log).round(1)
+    dx3=dx2.round(1)
     
-    #check
+    #filter both zeros
     bx = (dx3==0).any(axis=1)
     if bx.any():
-        log.warning(f'got {bx.sum():,}/{len(bx):,} w/ zero loss')
+        log.info(f'got {bx.sum():.2e}/{len(bx):.2e} w/ zero loss...dropping')
+        log.info(dx3.loc[bx, :].index.to_frame().reset_index(drop=True)['df_id'].value_counts().to_dict())
+        
+    dx3b = dx3.loc[~bx, :]
+ 
         
         #assert set(dx3.loc[bx, :].index.unique('df_id')).difference([402])==set(), 'only func 402 should have zeros'
     """
-    
+    view(dx4.sort_index(level='grid_wd', ascending=True).head(100))
     bx.sum()
+    view(dx2.head(100))
     
     
     
@@ -438,10 +447,10 @@ def plot_rl_agg_v_bldg(
         """
  
         #identify overlap
-        bx_aoi = dx3.index.to_frame().reset_index(drop=True).set_index(sel_mdex.names).index.isin(sel_mdex)
+        bx_aoi = dx3b.index.to_frame().reset_index(drop=True).set_index(sel_mdex.names).index.isin(sel_mdex)
         
         #slice
-        dx4 = dx3.loc[bx_aoi, :]
+        dx4 = dx3b.loc[bx_aoi, :]
         
         #check
         check_mdex = dx4.unstack([c for c in dx4.index.names if not c in ['grid_size', 'i', 'j']]).index
@@ -450,7 +459,7 @@ def plot_rl_agg_v_bldg(
         log.info(f'w/ use_aoi={use_aoi} selected {len(check_mdex)} aggregate assets (from the aois {len(sel_mdex)})')
         
     else:
-        dx4=dx3
+        dx4=dx3b
  
  
     #wrap
@@ -584,7 +593,8 @@ def plot_rl_agg_v_bldg(
             x,y = df_sample.index.values, df_sample['bldg'].values
             
             if not len(df_sample) < 3:
-                xy = np.vstack([x,y])
+                #xy = np.vstack([x,y])
+                xy = np.vstack([np.log(x),np.log(y)]) #log transformed
                 
                 """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
                 try:
@@ -611,20 +621,7 @@ def plot_rl_agg_v_bldg(
                     markersize=2, linewidth=1.0,
                     label='$\overline{RL_{bldg,j}}(WSH)$')
             
-            """need gridspec for this
-            #===================================================================
-            # violin
-            #===================================================================
-            ax.violin([df_sample.index.values.ravel()], positions=[1000])"""
-
-            
-            #===================================================================
-            # #plot grid cent
-            #===================================================================
-            #===================================================================
-            # ax.plot(df['grid'], color=c, alpha=0.1, marker='.', linestyle='none', markersize=1, fillstyle='none',
-            #         label='grid')
-            #===================================================================
+ 
             
         #===================================================================
         # text-------
@@ -720,14 +717,14 @@ def plot_rl_agg_v_bldg(
         
         # first row
         if row_key == row_keys[0]:
-            ax.set_xlim(0,1000)
+            ax.set_xlim(-10,1010)
             ax.set_title(f'{col_key}m grid')
             
         #second row
         if row_key==row_keys[1]:
 
             if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='upper right', frameon=False)
+                ax.legend(ncol=1, loc='lower left', frameon=False)
                 
         
         # last row
@@ -771,7 +768,7 @@ def plot_rl_agg_v_bldg(
                      ax=leg_ax,  # steal space from here (couldnt get cax to work)
                      extend='both', #pointed ends
                      format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                     label='gaussian kernel-density estimate of $\overline{RL_{bldg,j}}$', 
+                     label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
                      orientation='horizontal',
                      fraction=.99,
                      aspect=50, #make skinny
@@ -782,12 +779,7 @@ def plot_rl_agg_v_bldg(
     # tighten up
     #===========================================================================
     fig.subplots_adjust(top=0.95, right=0.95)
-    
-    """
-    plt.show()
-    
-    """
-    
+ 
     #===========================================================================
     # meta
     #===========================================================================
@@ -795,19 +787,14 @@ def plot_rl_agg_v_bldg(
                         names=['df_id', 'stat'])
     
     mdf1 = meta_df.stack().unstack(level='stat')
-    
-    #mdf1['bias'] = mdf1['grid_rl_pop_mean']/mdf1['bldg_rl_pop_mean']
-    
-    
-    
-    
+ 
     log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
         
     #===========================================================================
     # write-------
     #===========================================================================
     uuid = hashlib.shake_256(f'{dfid_l}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(6)
-    fnstr=f'{env_type}_{len(col_keys)}x{len(row_keys)}_MWF{int(min_wet_frac*100):03d}'
+    fnstr=f'{env_type}_{len(col_keys)}x{len(row_keys)}'
     if use_aoi:fnstr+='_aoi'
     ofp = os.path.join(out_dir, f'rl_{fnstr}_{today_str}_{uuid}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
@@ -1124,8 +1111,10 @@ def plot_TL_agg_v_bldg(
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel('grid relative loss ($RL_{grid,j}$) * child building count ($B_{j}$)', labelpad=20)
-    macro_ax.set_xlabel('child relative loss mean ($\overline{RL_{bldg,j}}$) * child building count ($B_{j}$)')
+    macro_ax.set_ylabel('grid relative loss ($RL_{grid,j}$) * child building count ($B_{j}$)', 
+                        labelpad=20, size=font_size+2)
+    macro_ax.set_xlabel('child relative loss mean ($\overline{RL_{bldg,j}}$) * child building count ($B_{j}$)', 
+                        size=font_size+2)
     
     """doesnt help
     fig.tight_layout()"""
@@ -1202,9 +1191,9 @@ if __name__=='__main__':
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
     plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
-                       samp_frac=0.01,
+                       samp_frac=0.001,
                        dfid_l=dfunc_curve_l,
-                       min_wet_frac=0.0,
+ 
                        use_aoi=False,                       
                        )
 
