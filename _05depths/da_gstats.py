@@ -13,7 +13,7 @@ plot building grouped stats
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'journal'
+env_type = 'draft'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -140,13 +140,14 @@ def plot_gstats(
         dx_raw=None,
          
         country_key='deu',
-        xcoln='avg', ycoln='stddevpop',
+        xcoln='avg', 
+        ycoln='stddevpop',
         #haz_key='f500_fluvial',
         out_dir=None,
         #figsize=None,
         figsize_scaler=2,
-        min_wet_frac=0.95,
-        min_bldg_cnt=5,
+        #min_wet_frac=0.95,
+        min_bldg_cnt=2,
  
         samp_frac=0.0001, #
         dev=False,
@@ -202,57 +203,79 @@ def plot_gstats(
         """
     
  
-    dx1 = dx_raw.xs(country_key, level='country_key')#.xs(haz_key, level='haz_key', axis=1)
-    
- 
     #===========================================================================
     # filter data
     #===========================================================================
+    dx1 = dx_raw.xs(country_key, level='country_key')#.xs(haz_key, level='haz_key', axis=1).
+    
+    #===========================================================================
+    # NO.... wet_cnt is based on the 500-year
+    # #need some wets
+    # bx = dx1.index.get_level_values('wet_cnt')>0
+    # log.info(f'selected {bx.sum()}/{len(bx)} w/ some exposed buildings')
+    # dx2 = dx1.loc[bx, :]
+    #===========================================================================
+    
+    
  
     #building count
     bx = dx1.index.get_level_values('bldg_cnt')>=min_bldg_cnt
     log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
+    dx2=dx1[bx]
+    
+    #by wet_frac. No... this is specific to each hazard scenario 
+ #==============================================================================
+ #    dx1.index = pd.MultiIndex.from_frame(
+ #                    dx1.index.to_frame().join(
+ #                        dx1.xs('f500_fluvial', level='haz_key', axis=1)['wet_cnt'].astype(int)
+ #                        ))
+ # 
+ #    #mdf['wet_frac'] = mdf['wet_cnt'] / mdf['bldg_cnt']
+ #    
+ #    dx2 = filter_rl_dx_minWetFrac(dx1[bx], min_wet_frac=min_wet_frac, log=log)
+ #==============================================================================
  
-    
-    #wet count
-    #take wet count from f500
-    
-    dx1.index = pd.MultiIndex.from_frame(
-                    dx1.index.to_frame().join(
-                        dx1.xs('f500_fluvial', level='haz_key', axis=1)['wet_cnt'].astype(int)
-                        ))
- 
-    
-    dx2 = filter_rl_dx_minWetFrac(dx1[bx], min_wet_frac=min_wet_frac, log=log)
-    
     #stack
-    dx2 = dx2.stack(level='haz_key').drop('wet_cnt', axis=1)
-    mdex = dx2.index
+    dx3 = dx2.stack(level='haz_key')#.drop('wet_cnt', axis=1)
+    
+    #drop zeros
+    bx = dx3['wet_cnt']>0
+    log.info(f'selected {bx.sum()}/{len(bx)} w/ some exposed buildings')
+    dx4 = dx3.loc[bx, :].copy()
+    
+    #add wet frac
+    dx4.loc[:, 'wet_frac'] = dx4['wet_cnt']/dx4.index.get_level_values('bldg_cnt')
+    
+    """
+    view(dx.head(100))
+    view
+    """
+ 
+    dx=dx4.reorder_levels(['haz_key', 'grid_size', 'i', 'j', 'bldg_cnt', 'null_cnt']).sort_index(sort_remaining=True)
+    mdex = dx.index
+    log.info(f' filtered to {dx.shape}')
     #===========================================================================
     # setup indexers
     #===========================================================================
-    xlims = (0, 1000)
-    ylims = (0, max(dx2[ycoln]))
+    if xcoln=='avg':
+        xlims = (0, 1000)
+    else:
+        xlims = (0, max(dx[xcoln])*1.05)
+    ylims = (0, max(dx[ycoln]))
             
     keys_d = {'row':'haz_key',  'col':'grid_size'}
     kl = list(keys_d.values())     
-    log.info(f' loaded {len(dx1)}')
+ 
     
  
-    binx = np.linspace(0, 1000, 21)
+    binx = np.linspace(0, xlims[1], 21)
     biny = np.linspace(0, ylims[1], 21)
     #===========================================================================
     # setup figure-------
     #===========================================================================
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
  
-    
-    #===========================================================================
-    # fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
-    #                            constrained_layout=False, #needs to be unconstrainted for over label to work
-    #                            figsize_scaler=3,
-    #                            sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
-    #===========================================================================
+ 
     nc, nr = len(col_keys), len(row_keys)+1
     
     fig = plt.figure(
@@ -261,13 +284,7 @@ def plot_gstats(
                      #figsize=(nc*figsize_scaler, nr*figsize_scaler),
                      )
     
-    #===========================================================================
-    # #this doesn't work very well... no linking of axis.. .difficult to control spacing
-    # #using sub-figures
-    # subfigs_ll = fig.subfigures(len(row_keys), len(col_keys), wspace=0.0)
-    # subfig_d = {row_key: {col_key: subfig for col_key, subfig in zip(col_keys, row)} for row_key, row in zip(row_keys, subfigs_ll)}
-    #===========================================================================
-    #rc_sf_iter = [(row_key, col_key, d) for row_key in row_keys for col_key in col_keys]
+ 
     
     
     gsM = gridspec.GridSpec(nr, nc , 
@@ -288,14 +305,15 @@ def plot_gstats(
     #===========================================================================
     # loop and plot-----
     #===========================================================================
-    #letter=list(string.ascii_lowercase)[j]
+ 
     meta_lib=dict()
     ax_main_previous=None
-    first=True
-
-    for (row_key, col_key), gdx0 in dx2.groupby(kl[:2]):
-        log.info(f'df_id:{row_key} x grid_size:{col_key}')
+ 
+    for (row_key, col_key), gdx0 in dx.loc[:, (xcoln, ycoln)].groupby(kl[:2]):
+        
         i, j = i_d[row_key], j_d[col_key]
+        
+        log.info(f'%s:{row_key} ({i}) x %s:{col_key} ({j})'%(keys_d['row'], keys_d['col']))
          
         #=======================================================================
         # setup subfigure
@@ -307,13 +325,9 @@ def plot_gstats(
                                                 height_ratios=[1,4], width_ratios=[4,1],
                                                 wspace=0.0, hspace=0.0                                                
                                                 )
- 
         
-        # Scatter plot (lower left)
- 
-        ax_main = fig.add_subplot(gs_i[1, 0], sharex=ax_main_previous, sharey=ax_main_previous)
- 
-        
+        # Scatter plot (lower left) 
+        ax_main = fig.add_subplot(gs_i[1, 0], sharex=ax_main_previous, sharey=ax_main_previous)        
         #=======================================================================
         # prep data
         #=======================================================================
@@ -321,11 +335,11 @@ def plot_gstats(
  
         xar, yar = gdx0[xcoln], gdx0[ycoln]
         #===================================================================
-        # #plot density scatter
+        # #plot density scatter-------
         #===================================================================
         
         #geet a sample of hte data
-        df_sample = gdx0.sample(min(int(len(dx2)*samp_frac), len(gdx0)))
+        df_sample = gdx0.sample(min(int(len(dx)*samp_frac), len(gdx0)))
         
         log.info(f'    w/ {gdx0.size} and sample {df_sample.size}')
     
@@ -345,7 +359,7 @@ def plot_gstats(
         # Sort the points by density, so that the densest points are plotted last
         indexer = z.argsort()
         x, y, z = x[indexer], y[indexer], z[indexer]
-        cax = ax_main.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        cax = ax_main.scatter(x, y, c=z, s=5, cmap=cmap, alpha=1.0, marker='.', edgecolors='none', rasterized=True)
         
         #ax_main.set_aspect('equal')
         ax_main.set_xlim(xlims)
@@ -374,9 +388,6 @@ def plot_gstats(
         
         ax_top.axis('off')
  
-        
-        
- 
         #===================================================================
         # text-------
         #===================================================================
@@ -390,6 +401,10 @@ def plot_gstats(
         xq, yq = gdx0.quantile(0.75)
         tstr+='\n$Q_{0.75}[\sigma]$: %.2f'%yq
         #tstr+='\n$Q_{0.99}[\mu]$: %.2f'%xq
+        
+        tstr+='\nn: %.2e'%len(gdx0)
+        
+        #tstr+=f'\n{row_key}.{col_key}'
  
          
         coords = (0.9, 0.9)         
@@ -434,14 +449,7 @@ def plot_gstats(
         if row_key == row_keys[0]:
  
             ax.set_title(f'{col_key}m grid')
-             
-        #second row
- #==============================================================================
- #        if row_key==row_keys[1]:
- # 
- #            if col_key==col_keys[0]:
- #                ax.legend(ncol=1, loc='upper right', frameon=False)
- #==============================================================================
+ 
                  
          
         # last row
@@ -457,13 +465,17 @@ def plot_gstats(
     #===========================================================================
     # #macro labelling
     #===========================================================================
+    lab_d = {
+        'stddevpop':r'standard deviation of child depths in cm ($\sigma$)',         #($\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}$)
+        'avg':r'child depths mean in cm ($\mu$)',
+        'wet_frac':'fraction of child buildings flooded'
+        }
+    
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(gsM[:nr-1, :], frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel(
-        r'standard deviation of child depths in cm ($\sigma$)', #($\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}$)
-        labelpad=20, size=font_size+2)
-    macro_ax.set_xlabel(r'child depths mean in cm ($\mu$)', size=font_size+2) # ($\mu = \frac{1}{N} \sum_{i=1}^{N} x_i$
+    macro_ax.set_ylabel(lab_d[ycoln],labelpad=20, size=font_size+2)
+    macro_ax.set_xlabel(lab_d[xcoln], size=font_size+2) # ($\mu = \frac{1}{N} \sum_{i=1}^{N} x_i$
     
     """doesnt help
     fig.tight_layout()"""
@@ -506,24 +518,13 @@ def plot_gstats(
     # fig.patch.set_edgecolor('cornflowerblue')  # set the color of the frame
     #===========================================================================
  
-    #===========================================================================
-    # meta
-    #===========================================================================
- #==============================================================================
- #    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
- #                        names=['df_id', 'stat'])
- #    
- #    mdf1 = meta_df.stack().unstack(level='stat')
- # 
- #    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
- #==============================================================================
         
     #===========================================================================
     # write-------
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_MWF{int(min_wet_frac*100):03d}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True, 
                 #edgecolor=fig.get_edgecolor(),
                 )
@@ -551,8 +552,8 @@ if __name__=='__main__':
     
  
     plot_gstats(dev=False, 
-                min_wet_frac=0.0,
-                samp_frac=0.01,
+                samp_frac=0.05,
+                #xcoln='wet_frac', #not a strong relation
                 #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
                 )
 
