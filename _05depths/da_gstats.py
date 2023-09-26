@@ -386,8 +386,9 @@ def plot_gstats(
         tstr ='$\overline{\sigma}$: %.2f'%ymean
         #tstr+='\n$\overline{\mu}$: %.2f'%xmean
         
-        xq, yq = gdx0.quantile(0.99)
-        tstr+='\n$Q_{0.99}[\sigma]$: %.2f'%yq
+ 
+        xq, yq = gdx0.quantile(0.75)
+        tstr+='\n$Q_{0.75}[\sigma]$: %.2f'%yq
         #tstr+='\n$Q_{0.99}[\mu]$: %.2f'%xq
  
          
@@ -522,7 +523,7 @@ def plot_gstats(
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_MWF{int(min_wet_frac*100):03d}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True, 
                 #edgecolor=fig.get_edgecolor(),
                 )
@@ -549,7 +550,9 @@ def plot_gstats(
 if __name__=='__main__':
     
  
-    plot_gstats(dev=False, samp_frac=0.01,
+    plot_gstats(dev=False, 
+                min_wet_frac=0.0,
+                samp_frac=0.01,
                 #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
                 )
 

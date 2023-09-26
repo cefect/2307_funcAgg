@@ -13,11 +13,11 @@ plot relative loss of bldgs vs. agg
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'draft'
+env_type = 'journal'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
-    usetex = True
+    usetex = False
 elif env_type == 'draft':
     usetex = False
 elif env_type == 'present':
@@ -62,18 +62,14 @@ def set_doc_style():
 if env_type=='journal':
     set_doc_style() 
     dpi=1000
-    env_kwargs=dict(
-        output_format='pdf',add_stamp=False,add_subfigLabel=True,transparent=True
-        )            
+           
 #===============================================================================
 # draft
 #===============================================================================
 elif env_type=='draft':
     set_doc_style() 
  
-    env_kwargs=dict(
-        output_format='svg',add_stamp=True,add_subfigLabel=True,transparent=True
-        )          
+       
 #===============================================================================
 # presentation style    
 #===============================================================================
@@ -140,6 +136,8 @@ from _02agg.coms_agg import (
 from _03damage._05_mean_bins import get_grid_rl_dx, compute_binned_mean, filter_rl_dx_minWetFrac
  
 from _03damage._06_total import get_total_losses
+
+from _05depths._03_gstats import get_a03_gstats_1x
 
 
 #===============================================================================
@@ -301,12 +299,14 @@ def plot_rl_agg_v_bldg(
         out_dir=None,
         figsize=None,
         min_wet_frac=1.0,
+        min_bldg_cnt=5,
         dfid_l = None, 
         samp_frac=0.0001, #
         dev=False,
         ylab_d = clean_names_d,
         cmap='PuRd_r',
         use_cache=True,
+        use_aoi=False,
         ):
     
 
@@ -324,6 +324,8 @@ def plot_rl_agg_v_bldg(
         for reducing the data sent to gaussian_kde
         relative to size of complete data set (not the gruops)
  
+     use_aoi: bool
+         load the spatially sliced grid ids and only include these
     """
  
     #===========================================================================
@@ -354,17 +356,7 @@ def plot_rl_agg_v_bldg(
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
         dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=use_cache, dev=dev)
     
-    """no.. better to just sample the kde
-    if not dev:
-        dx_raw=dx_raw.sample(int(len(dx_raw)*samp_frac))"""
  
- 
-    """
-    view(dx_raw.head(100))
-    view(dx1.head(100))
- 
-    
-    """
     
     dx1 = dx_raw.stack().droplevel('country_key')
     mdex = dx1.index
@@ -375,13 +367,7 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # filter data
     #===========================================================================
-    """want to exclude partials
-    
-    view(dx1.head(100))
-    
-    mdex.unique('df_id')
  
-    """
     
     #drop bad cells
     mdf = dx1.index.to_frame().reset_index(drop=True)
@@ -406,29 +392,88 @@ def plot_rl_agg_v_bldg(
         log.info(f'w/ {len(dfid_l)} df_ids selected {bx.sum()}/{len(bx)}')
         dx1 = dx1.loc[bx, :]
         mdex = dx1.index
-    
-    #filter to this wet fraction
-    dx2 = filter_rl_dx_minWetFrac(dx1, min_wet_frac=min_wet_frac, log=log).round(1)
-    
-    #dx2 = dx2.round(1)
-    
-     
-
- 
+        
+        
+    #building count
+    bx = dx1.index.get_level_values('bldg_cnt')>=min_bldg_cnt
+    log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
+    dx2 = dx1.loc[bx, :]
     
  
+    #filter to wet fraction
+    dx3 = filter_rl_dx_minWetFrac(dx2, min_wet_frac=min_wet_frac, log=log).round(1)
+    
+    #check
+    bx = (dx3==0).any(axis=1)
+    if bx.any():
+        log.warning(f'got {bx.sum():,}/{len(bx):,} w/ zero loss')
+        
+        #assert set(dx3.loc[bx, :].index.unique('df_id')).difference([402])==set(), 'only func 402 should have zeros'
+    """
+    
+    bx.sum()
+    
+    
+    
+    view(dx3.sort_values('grid').head(1000))
+    """
+    
+        
+       
+    #aoi selection 
+    if use_aoi:
+ 
+        #just those in the aoi
+        assert not dev
+        assert samp_frac==1.0
+        
+        #this function loads all the data.. but we only need the indexers
+        sel_mdex = get_a03_gstats_1x(country_key=country_key, log=log,  use_aoi=use_aoi
+                                     ).droplevel(['country_key', 'bldg_cnt', 'null_cnt']).index
+        """
+        len(sel_mdex)
+        dx1.index
+        view(sel_dx.head(100))
+        view(dx3.head(100))
+        """
+ 
+        #identify overlap
+        bx_aoi = dx3.index.to_frame().reset_index(drop=True).set_index(sel_mdex.names).index.isin(sel_mdex)
+        
+        #slice
+        dx4 = dx3.loc[bx_aoi, :]
+        
+        #check
+        check_mdex = dx4.unstack([c for c in dx4.index.names if not c in ['grid_size', 'i', 'j']]).index
+        """I guess the selection is shorter because of the filters above"""
+        
+        log.info(f'w/ use_aoi={use_aoi} selected {len(check_mdex)} aggregate assets (from the aois {len(sel_mdex)})')
+        
+    else:
+        dx4=dx3
+ 
+ 
+    #wrap
+    dx = dx4
+    log.info(f'finished data prep w/ {dx.shape}')
+    """
+    dx2 = dx.copy()
+    dx.min()
+    view(dx.sort_values('grid').head(1000))
+    """
     #===========================================================================
     # # get binned means    
     #===========================================================================
+    
     keys_l =  ['grid_size', 'haz_key', 'df_id', 'grid_wd'] #only keys we preserve   
  
     #get a slice with clean index
-    sx1 = dx2['bldg'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
+    sx1 = dx['bldg'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
      
     mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=use_cache)
     
     """
-    view(dx2.head(100))
+    view(dx.head(100))
     """
  
  
@@ -485,13 +530,14 @@ def plot_rl_agg_v_bldg(
     #letter=list(string.ascii_lowercase)[j]
     meta_lib=dict()
  
-    for (row_key, col_key), gdx0 in dx2.groupby(kl[:2]):
+    for (row_key, col_key), gdx0 in dx.groupby(kl[:2]):
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
         ax = ax_d[row_key][col_key]
         
         gdx0 = gdx0.droplevel(kl[:2])
         
-        assert (gdx0==0).sum().sum()==0
+        """possible for 402 w/ basement damages
+        assert (gdx0==0).sum().sum()==0"""
         
         #ax.set_ylim(0,45) #the function plots shoudl be teh same... but the hist plot will it's own
         
@@ -528,7 +574,7 @@ def plot_rl_agg_v_bldg(
             #===================================================================
             
             #geet a sample of hte data
-            df_sample = df.copy().sample(min(int(len(dx2)*samp_frac), len(df)))
+            df_sample = df.copy().sample(min(int(len(dx)*samp_frac), len(df)))
             assert len(df_sample)>0
             
             log.info(f'    w/ {df.size} and sample {df_sample.size}')
@@ -536,16 +582,24 @@ def plot_rl_agg_v_bldg(
             #ax.plot(df['bldg'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
             #as density
             x,y = df_sample.index.values, df_sample['bldg'].values
-            xy = np.vstack([x,y])
             
-            """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
-            pdf = gaussian_kde(xy)
-            z = pdf(xy) #Evaluate the estimated pdf on a set of points.
-            
-            # Sort the points by density, so that the densest points are plotted last
-            indexer = z.argsort()
-            x, y, z = x[indexer], y[indexer], z[indexer]
-            cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+            if not len(df_sample) < 3:
+                xy = np.vstack([x,y])
+                
+                """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
+                try:
+                    pdf = gaussian_kde(xy)
+                except Exception as e:
+                    raise IOError(f'failed to build gaussian on\n    {xy} w/\n    w/ {e}')
+                z = pdf(xy) #Evaluate the estimated pdf on a set of points.
+                
+                # Sort the points by density, so that the densest points are plotted last
+                indexer = z.argsort()
+                x, y, z = x[indexer], y[indexer], z[indexer]
+            else:
+                #just use dummy values
+                z = np.full(x.shape, 1.0)
+            cax = ax.scatter(x, y, c=z, s=10, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
  
             #===================================================================
             # plot binned bldg_mean lines
@@ -553,7 +607,7 @@ def plot_rl_agg_v_bldg(
             bin_serx = mean_bin_dx.loc[idx[col_key, color_key, row_key, :], :].reset_index(drop=True
                                            ).set_index('grid_wd_bin').iloc[:,0]
                                
-            ax.plot(bin_serx, color='red', alpha=1.0, marker=None, linestyle='dashed', 
+            ax.plot(bin_serx, color='blue', alpha=1.0, marker=None, linestyle='dashed', 
                     markersize=2, linewidth=1.0,
                     label='$\overline{RL_{bldg,j}}(WSH)$')
             
@@ -590,8 +644,10 @@ def plot_rl_agg_v_bldg(
         #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
         
         coords = (0.8, 0.05)
-        if row_key==402:
-            coords = (coords[0], 0.5) #move it up
+        #=======================================================================
+        # if row_key==402:
+        #     coords = (coords[0], 0.5) #move it up
+        #=======================================================================
  
         
         ax.text(*coords, tstr, size=6,
@@ -613,7 +669,7 @@ def plot_rl_agg_v_bldg(
     """
     plt.show()
     """
-    wd_df = dx2.unstack(level='df_id').index.to_frame().reset_index(drop=True).drop(['i', 'j'], axis=1)
+    wd_df = dx.unstack(level='df_id').index.to_frame().reset_index(drop=True).drop(['i', 'j'], axis=1)
     for grid_size, gdf in wd_df.groupby('grid_size'):
         ax = ax_d['hist'][grid_size]
         
@@ -751,8 +807,9 @@ def plot_rl_agg_v_bldg(
     # write-------
     #===========================================================================
     uuid = hashlib.shake_256(f'{dfid_l}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(6)
-    
-    ofp = os.path.join(out_dir, f'rl_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}_{uuid}.svg')
+    fnstr=f'{env_type}_{len(col_keys)}x{len(row_keys)}_MWF{int(min_wet_frac*100):03d}'
+    if use_aoi:fnstr+='_aoi'
+    ofp = os.path.join(out_dir, f'rl_{fnstr}_{today_str}_{uuid}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
     
     plt.close('all')
@@ -1112,7 +1169,7 @@ def plot_TL_agg_v_bldg(
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'TL_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'TL_{env_type}_{len(col_keys)}x{len(row_keys)}_MWF{min_wet_frac*100:0d}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True)
     
     plt.close('all')
@@ -1144,7 +1201,12 @@ if __name__=='__main__':
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False, samp_frac=0.01, use_cache=True,  dfid_l=dfunc_curve_l)
+    plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
+                       samp_frac=0.01,
+                       dfid_l=dfunc_curve_l,
+                       min_wet_frac=0.0,
+                       use_aoi=False,                       
+                       )
 
     
  

@@ -36,7 +36,7 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_meta
+    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_meta, pg_getCRS
     )
  
 from _02agg._07_views import create_view_join_grid_geom
@@ -250,6 +250,190 @@ def create_table_aggregate(tableName, table_big, agg_func_l,  dev=False, conn_st
     log.info(f'finished building {schema}.{tableName}')
     return schema,  tableName
 
+
+def create_view_wgeo_slice(
+
+        country_key='deu',
+        grid_size=1020,  
+        expo_str='1x',
+                           dev=False, conn_str=None, log=None):
+    """create a view of the aggregated stats with some slicing"""
+    
+    
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()
+    
+    if log is None:
+        log = init_log(name=f'stats')
+        
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    
+    
+    #===========================================================================
+    # table params
+    #===========================================================================
+    table_right =  f'agg_{country_key}_{grid_size:07d}'
+    table_left=f'a03_gstats_{expo_str}_{country_key}'
+    tableName = table_left+f'_{grid_size:04d}_wgeo'
+    
+        
+    if dev:
+        schema='dev'
+        schema_right = 'dev'
+    else:
+        schema_right = 'grids'
+        schema='wd_bstats'
+    #assert pg_table_exists(schema_right, table_right, asset_type='view'), f'{schema_right}.{table_right} view must exist'
+    
+    keys_l = ['country_key', 'grid_size', 'i', 'j']
+    #=======================================================================
+    # setup
+    #=======================================================================
+ 
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE')
+    #=======================================================================
+    # build query
+    #=======================================================================
+    cmd_str = f'CREATE TABLE {schema}.{tableName} AS'
+    
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l])
+    
+    #add an arbitrary indexer for QGIS viewing
+    cols =f'ROW_NUMBER() OVER (ORDER BY tleft.i, tleft.j) as fid, ' 
+    cols +=f'tleft.*, tright.geom' 
+    cmd_str+= f"""
+        SELECT {cols}
+            FROM {schema}.{table_left} AS tleft
+                LEFT JOIN {schema_right}.{table_right} AS tright
+                    ON {link_cols}
+                        WHERE tleft.grid_size={grid_size}
+            """
+            
+    sql(cmd_str)
+ 
+    #===========================================================================
+    # post
+    #===========================================================================
+    keys_str = ', '.join(keys_l)
+    sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+        #add comment
+    cmt_str = f'join {table_right} to {table_left} grid geometry \n'
+    cmt_str += f'built with {os.path.realpath(__file__)} in %.1f secs at %s '%(
+        (datetime.now()-start).total_seconds(), datetime.now().strftime("%Y.%m.%d.%H.%M.%S"))
+    pg_comment(schema, tableName, cmt_str)
+    log.info(f'cleaning {tableName} ')
+    
+    pg_register(schema, tableName)
+    pg_spatialIndex(schema, tableName)
+    pg_vacuum(schema, tableName)
+    
+    log.info(f'finished on {schema}.{tableName}')
+    
+    return tableName
+         
+def create_table_aoi_select(
+        #L:\02_WORK\NRC\2307_funcAgg\04_CALC\aoi\aoi02_20230926.gpkg
+        aoi_str = 'ST_GeomFromText(\'POLYGON((668789.8125 5610018, 760321.6875 5610018, 760321.6875 5646507, 668789.8125 5646507, 668789.8125 5610018))\', 6933)',
+        
+        country_key='deu',
+
+        expo_str='1x',
+         conn_str=None, log=None):
+    """slice to aoi"""
+    
+    
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()
+    
+    if log is None:
+        log = init_log(name=f'stats')
+        
+    sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    
+    #===========================================================================
+    # table params
+    #===========================================================================
+    #merge of grid geometries... see _02agg._07_views.run_view_grid_geom_union()
+    table_right =  f'agg_{country_key}'
+    
+    #depth child stats. see create_table_aggregate()
+    table_left=f'a03_gstats_{expo_str}_{country_key}'
+    tableName = table_left+f'_aoi'
+    
+    
+    #===========================================================================
+    # no... these have only one grid size
+    #     #group stats for 1 grid size w/ geometry. see create_view_wgeo_slice()
+    # table_big = f'a03_gstats_{expo_str}_{country_key}_{grid_size:04d}_wgeo'
+    # tableName =  f'a03_gstats_{expo_str}_{country_key}_{grid_size:04d}_aoi01'
+    #===========================================================================
+    
+ 
+    schema_right = 'grids'
+    schema='wd_bstats'
+    #assert pg_table_exists(schema_right, table_right, asset_type='view'), f'{schema_right}.{table_right} view must exist'
+    
+    keys_l = ['country_key', 'grid_size', 'i', 'j']
+    #=======================================================================
+    # setup
+    #=======================================================================
+    epsg_id = pg_getCRS(schema_right, table_right)
+    
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE')
+    #=======================================================================
+    # build query
+    #=======================================================================
+    cmd_str = f'CREATE TABLE {schema}.{tableName} AS'
+    
+    link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l])
+    
+    #add an arbitrary indexer for QGIS viewing
+    cols =f'ROW_NUMBER() OVER (ORDER BY tleft.i, tleft.j) as fid, ' 
+    cols +=f'tleft.*, tright.geom' 
+    cmd_str+= f"""
+        SELECT {cols}
+            FROM {schema}.{table_left} AS tleft
+                LEFT JOIN {schema_right}.{table_right} AS tright
+                    ON {link_cols}
+                        WHERE ST_Intersects(ST_Centroid(geom),ST_Transform({aoi_str}, {epsg_id}));
+            """
+            
+    sql(cmd_str)
+    
+    
+ 
+    #===========================================================================
+    # post
+    #===========================================================================
+    keys_str = ', '.join(keys_l)
+    sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+        #add comment
+    cmt_str = f'aoi select using geometry from {table_right} left join to {table_left} with: \n{aoi_str}'
+    cmt_str += f'built with {os.path.realpath(__file__)} in %.1f secs at %s '%(
+        (datetime.now()-start).total_seconds(), datetime.now().strftime("%Y.%m.%d.%H.%M.%S"))
+    pg_comment(schema, tableName, cmt_str)
+    log.info(f'cleaning {tableName} ')
+    
+    pg_register(schema, tableName)
+    pg_spatialIndex(schema, tableName)
+    pg_vacuum(schema, tableName)
+    
+    log.info(f'finished on {schema}.{tableName}')
+    
+    return tableName
+         
+ 
+
 def run_pg_build_gstats(
         
         country_key='deu', 
@@ -357,16 +541,14 @@ def run_pg_build_gstats(
     return tableName
 
 
- 
-    
- 
+
 
 def get_a03_gstats_1x(
         country_key='deu', 
         expo_str='1x',
         log=None,conn_str=None,dev=False,use_cache=True,out_dir=None,
         limit=None,
- 
+        use_aoi=False,
         ):
     
     """helper to retrieve results from run_pg_build_gstats() as a dx
@@ -393,8 +575,14 @@ def get_a03_gstats_1x(
     #===========================================================================
     # talbe params
     #===========================================================================
+    fnstr = f'gstats_{country_key}'
     #see _04expo._03_views.create_view_join_stats_to_rl()
-    tableName = f'a03_gstats_{expo_str}_{country_key}'
+    if use_aoi:
+        assert not dev
+        tableName=f'a03_gstats_{expo_str}_{country_key}_aoi'
+        fnstr+='_aoi'
+    else:
+        tableName = f'a03_gstats_{expo_str}_{country_key}'
     
     if dev:
         schema = 'dev'
@@ -411,7 +599,8 @@ def get_a03_gstats_1x(
 
     
     
-    fnstr = f'gstats_{country_key}'
+    
+    
     uuid = hashlib.shake_256(f'{fnstr}_{dev}_{limit}_{meta_df}'.encode("utf-8"), usedforsecurity=False).hexdigest(8)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
     
@@ -494,16 +683,25 @@ def get_a03_gstats_1x(
  
 
         
-        
 if __name__ == '__main__':
     #run_all( dev=False)
-    run_pg_build_gstats(dev=False, haz_key_l=['f500_fluvial'], add_geom=False)
+    #run_pg_build_gstats(dev=False, haz_key_l=['f500_fluvial'], add_geom=False)
     
-    #get_a03_gstats_1x(dev=True)
+    
     
  
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
+    
+    
+    #add grid geo
+    #create_view_wgeo_slice(dev=False)
+    
+    #create_table_aoi_select()
+    
+    get_a03_gstats_1x(dev=False, use_aoi=True)
+    
+    print('done')
     
         
     

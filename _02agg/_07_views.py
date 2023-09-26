@@ -65,7 +65,7 @@ def create_view_join_grid_geom(schema, table_left, country_key,
         schema_right = 'dev'
     else:
         schema_right = 'grids'
-    assert pg_table_exists(schema_right, table_right, asset_type='matview'), f'{schema_right}.{table_right} view must exist'
+    #assert pg_table_exists(schema_right, table_right, asset_type='view'), f'{schema_right}.{table_right} view must exist'
     
     keys_l = ['country_key', 'grid_size', 'i', 'j']
     #=======================================================================

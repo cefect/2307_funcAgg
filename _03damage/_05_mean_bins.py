@@ -74,7 +74,12 @@ def get_grid_rl_dx(
     #===========================================================================
     # cache
     #===========================================================================
- 
+    #===========================================================================
+    # safer but slower
+    # #load meta
+    # assert pg_table_exists(schema, tableName, asset_type='table'), f'missing table dependency \'{schema}.{tableName}\''
+    # meta_df = pg_get_meta(schema, tableName)
+    #===========================================================================
     
     
     fnstr = f'grid_rl_{country_key}_{haz_key}'
