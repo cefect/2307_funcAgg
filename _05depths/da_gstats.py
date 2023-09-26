@@ -13,11 +13,11 @@ plot building grouped stats
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'draft'
+env_type = 'journal'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
-    usetex = True
+    usetex = False #need to use word anyway
 elif env_type == 'draft':
     usetex = False
 elif env_type == 'present':
@@ -38,6 +38,8 @@ from matplotlib import gridspec
 plt.style.use('default')
 font_size=6
 dpi=300
+transparent=True
+
 def set_doc_style():
  
     
@@ -62,28 +64,21 @@ def set_doc_style():
 #===============================================================================
 if env_type=='journal':
     set_doc_style() 
+    
     dpi=1000
-    env_kwargs=dict(
-        output_format='pdf',add_stamp=False,add_subfigLabel=True,transparent=True
-        )            
+           
 #===============================================================================
 # draft
 #===============================================================================
 elif env_type=='draft':
     set_doc_style() 
  
-    env_kwargs=dict(
-        output_format='svg',add_stamp=True,add_subfigLabel=True,transparent=True
-        )          
+         
 #===============================================================================
 # presentation style    
 #===============================================================================
 elif env_type=='present': 
- 
-    env_kwargs=dict(
-        output_format='svg',add_stamp=True,add_subfigLabel=False,transparent=False
-        )   
- 
+    transparent=False 
     font_size=12
  
     matplotlib.rc('font', **{'family' : 'sans-serif','sans-serif':'Tahoma','weight' : 'normal','size':font_size})
@@ -108,7 +103,7 @@ print('loaded matplotlib %s'%matplotlib.__version__)
 #===============================================================================
 # imports---------
 #===============================================================================
-import os, math, hashlib
+import os, math, hashlib, string
 import pandas as pd
 idx = pd.IndexSlice
 import numpy as np
@@ -148,7 +143,8 @@ def plot_gstats(
         xcoln='avg', ycoln='stddevpop',
         #haz_key='f500_fluvial',
         out_dir=None,
-        figsize=None,
+        #figsize=None,
+        figsize_scaler=2,
         min_wet_frac=0.95,
         min_bldg_cnt=5,
  
@@ -160,7 +156,7 @@ def plot_gstats(
         ):
     
  
-    raise IOError('best not to use subfigures... and use a gridspect with child gridspecs')
+ 
     """grid centroids vs. child building means 
     
     not sure we need thsi for hte paper... but a nice check
@@ -185,46 +181,34 @@ def plot_gstats(
         out_dir=os.path.join(wrk_dir, 'outs', 'depths', 'da', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
      
-    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='bmeans')
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='gstats')
     
-    if figsize is None:
-        if env_type=='present':
-            figsize=(34*cm,10*cm)
-            
  
+    if dev:
+        samp_frac=1.0
+        
+    ylab_d = haz_label_d.copy()
     
+ 
     #===========================================================================
     # load data--------
     #===========================================================================
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
         dx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=True, dev=dev)
+        """
+        samp_size = int(1e4)
+        dx_raw.groupby(['grid_size']).sample(samp_size).to_pickle(os.path.join(out_dir, f'dev_dx_raw_{samp_size}_{today_str}.pkl'))
+        """
     
-    """no.. better to just sample the kde
-    if not dev:
-        dx_raw=dx_raw.sample(int(len(dx_raw)*samp_frac))"""
  
- 
-    """
-    view(dx_raw.head(100))
-    view(dx1.head(100))
- 
-    
-    """
-    
     dx1 = dx_raw.xs(country_key, level='country_key')#.xs(haz_key, level='haz_key', axis=1)
     
  
     #===========================================================================
     # filter data
     #===========================================================================
-    """want to exclude partials
-    
-    view(dx1.head(100))
-    
-    mdex.unique('df_id')
  
-    """
     #building count
     bx = dx1.index.get_level_values('bldg_cnt')>=min_bldg_cnt
     log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
@@ -247,7 +231,7 @@ def plot_gstats(
     #===========================================================================
     # setup indexers
     #===========================================================================
-    xlims = (0, max(dx2[xcoln]))
+    xlims = (0, 1000)
     ylims = (0, max(dx2[ycoln]))
             
     keys_d = {'row':'haz_key',  'col':'grid_size'}
@@ -255,9 +239,10 @@ def plot_gstats(
     log.info(f' loaded {len(dx1)}')
     
  
-    
+    binx = np.linspace(0, 1000, 21)
+    biny = np.linspace(0, ylims[1], 21)
     #===========================================================================
-    # setup figure
+    # setup figure-------
     #===========================================================================
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
  
@@ -268,16 +253,32 @@ def plot_gstats(
     #                            figsize_scaler=3,
     #                            sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
     #===========================================================================
-    #using sub-figures
-    fig = plt.figure(constrained_layout=False, figsize=(len(row_keys)*3, len(col_keys)*3))
-    subfigs_ll = fig.subfigures(len(row_keys), len(col_keys), wspace=0.0)
+    nc, nr = len(col_keys), len(row_keys)+1
     
-    #only have 1 haz_key for now
-    #subfigs_ll=[subfigs_ll]
-    subfig_d = {row_key: {col_key: subfig for col_key, subfig in zip(col_keys, row)} for row_key, row in zip(row_keys, subfigs_ll)}
+    fig = plt.figure(
+            #layout='tight' #no effect
+            #layout='constrained', #breaks the histograms for some reason
+                     #figsize=(nc*figsize_scaler, nr*figsize_scaler),
+                     )
+    
+    #===========================================================================
+    # #this doesn't work very well... no linking of axis.. .difficult to control spacing
+    # #using sub-figures
+    # subfigs_ll = fig.subfigures(len(row_keys), len(col_keys), wspace=0.0)
+    # subfig_d = {row_key: {col_key: subfig for col_key, subfig in zip(col_keys, row)} for row_key, row in zip(row_keys, subfigs_ll)}
+    #===========================================================================
+    #rc_sf_iter = [(row_key, col_key, d) for row_key in row_keys for col_key in col_keys]
     
     
-    rc_sf_iter = [(row_key, col_key, ax) for row_key, ax_di in subfig_d.items() for col_key, ax in ax_di.items()]
+    gsM = gridspec.GridSpec(nr, nc , 
+                               height_ratios=[1 for _ in range(nr-1)]+[0.2], #even then the color bar
+                               #width_ratios=[4,1],
+                               figure=fig,
+                               wspace=0.1, hspace=0.2)
+            
+    ax_d = {r:dict() for r in row_keys} #container for axis
+    i_d = {e:i for i, e in enumerate(row_keys)}
+    j_d = {e:i for i, e in enumerate(col_keys)}
     
     #color_d = _get_cmap(color_keys, name='viridis')
     
@@ -289,23 +290,28 @@ def plot_gstats(
     #===========================================================================
     #letter=list(string.ascii_lowercase)[j]
     meta_lib=dict()
- 
+    ax_main_previous=None
+    first=True
+
     for (row_key, col_key), gdx0 in dx2.groupby(kl[:2]):
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
-        
+        i, j = i_d[row_key], j_d[col_key]
+         
         #=======================================================================
         # setup subfigure
         #=======================================================================
-        subfig = subfig_d[row_key][col_key]
+        #subfig = subfig_d[row_key][col_key]
         
         # Define the gridspec (2x2)
-        gs = gridspec.GridSpec(2, 2, 
-                               height_ratios=[1,4], width_ratios=[4,1],
-                               figure=subfig,
-                               wspace=0.0, hspace=0.0)
+        gs_i = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=gsM[i,j],
+                                                height_ratios=[1,4], width_ratios=[4,1],
+                                                wspace=0.0, hspace=0.0                                                
+                                                )
+ 
         
         # Scatter plot (lower left)
-        ax_main = subfig.add_subplot(gs[1, 0])
+ 
+        ax_main = fig.add_subplot(gs_i[1, 0], sharex=ax_main_previous, sharey=ax_main_previous)
  
         
         #=======================================================================
@@ -322,10 +328,14 @@ def plot_gstats(
         df_sample = gdx0.sample(min(int(len(dx2)*samp_frac), len(gdx0)))
         
         log.info(f'    w/ {gdx0.size} and sample {df_sample.size}')
+    
         
         #ax.plot(df['bldg_mean'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
         #as density
         x,y = df_sample[xcoln].values, df_sample[ycoln].values
+        
+        """cant log transform zeros?"""
+        #xy = np.vstack([np.log(x),np.log(y)]) #log transformed
         xy = np.vstack([x,y])
         
         """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
@@ -343,36 +353,27 @@ def plot_gstats(
         #=======================================================================
         # right (y) histogram
         #=======================================================================
-        hist_kwargs = dict(color='black', alpha=0.5, bins=20)
+        hist_kwargs = dict(color='black', alpha=0.5)
         # Histogram of y values (lower right)
-        ax_right = subfig.add_subplot(gs[1,1], 
+        ax_right = fig.add_subplot(gs_i[1,1], 
                                       sharey=ax_main, #cant use this with turning off/on the histograms
                                       )
-        ax_right.hist(yar, orientation='horizontal', **hist_kwargs)
+        
+        ax_right.hist(yar, orientation='horizontal',bins=biny, **hist_kwargs)
+        
         ax_right.axis('off')
-        #=======================================================================
-        # ax_right.spines['left'].set_visible(False)
-        # ax_right.spines['right'].set_visible(False)
-        # ax_right.spines['top'].set_visible(False)
-        # ax_right.set_yticks([])
-        #=======================================================================
+ 
         
         #=======================================================================
         # top (x) histogram
         #=======================================================================
         # Histogram of x values (top)
-        ax_top = subfig.add_subplot(gs[0,0], 
-                            sharex=ax_main
-                            )
-        ax_top.hist(xar, **hist_kwargs)
+        ax_top = fig.add_subplot(gs_i[0,0],sharex=ax_main)
+        
+        ax_top.hist(xar, bins=binx, **hist_kwargs)
         
         ax_top.axis('off')
-        #=======================================================================
-        # ax_top.spines['bottom'].set_visible(False)
-        # ax_top.spines['top'].set_visible(False)
-        # ax_top.spines['right'].set_visible(False)
-        # ax_top.set_xticks([])
-        #=======================================================================
+ 
         
         
  
@@ -380,89 +381,88 @@ def plot_gstats(
         # text-------
         #===================================================================
  
- #==============================================================================
- #        bmean, gmean = gdx0.mean()
- #        #tstr = f'count: {len(gdx0)}\n'
- #        tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
- #        tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
- #        
- #        rmse = np.sqrt(np.mean((xar - yar)**2))
- #        tstr+='\nRMSE: %.2f'%rmse
- #        
- #        bias = gmean/bmean
- #        tstr+='\nbias: %.2f'%(bias)
- #        
- #        tstr+='\nr: %.2f'%(lm.rvalue)
- #        
- #        
- #        #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
- #        
- #        coords = (0.8, 0.05)
- # 
- # 
- #        
- #        ax.text(*coords, tstr, size=6,
- #                            transform=ax.transAxes, va='bottom', ha='center', 
- #                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
- #                            )
- #        
- #        #=======================================================================
- #        # meta
- #        #=======================================================================
- #        if not row_key in meta_lib: meta_lib[row_key] = dict()
- #        meta_lib[row_key][col_key] = {'bldg_pop_mean':bmean, 'grid_pop_mean':gmean, 'bias':bias}
- #==============================================================================
+        xmean, ymean= gdx0.mean()
+        #tstr = f'count: {len(gdx0)}\n'
+        tstr ='$\overline{\sigma}$: %.2f'%ymean
+        #tstr+='\n$\overline{\mu}$: %.2f'%xmean
+        
+        xq, yq = gdx0.quantile(0.99)
+        tstr+='\n$Q_{0.99}[\sigma]$: %.2f'%yq
+        #tstr+='\n$Q_{0.99}[\mu]$: %.2f'%xq
+ 
+         
+        coords = (0.9, 0.9)         
+        ax_main.text(*coords, tstr, size=6,
+                            transform=ax_main.transAxes, va='top', ha='right', 
+                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                            )
+         
+        #=======================================================================
+        # panel label
+        #=======================================================================
+        letter=list(string.ascii_lowercase)[j]
+        ax_main.text(0.05, 0.95, 
+                '(%s%s)'%(letter, i), 
+                transform=ax_main.transAxes, va='top', ha='left',
+                size=matplotlib.rcParams['axes.titlesize'],
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                )
+ 
+ 
+        #=======================================================================
+        # wrap
+        #=======================================================================
+        ax_d[row_key][col_key]=ax_main
+        ax_main_previous=ax_main
+
         
  
     """
     plt.show()
     """
  
- 
+    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     #===========================================================================
     # post----
     #===========================================================================    
-    for row_key, col_key, ax in rc_sf_iter:
+    for row_key, col_key, ax in rc_ax_iter:
         pass
         #ax.grid()
         
         # first row
-#===============================================================================
-#         if row_key == row_keys[0]:
-#             ax.set_xlim(0,1000)
-#             ax.set_title(f'{col_key}m grid')
-#             
-#         #second row
-#         if row_key==row_keys[1]:
-# 
-#             if col_key==col_keys[0]:
-#                 ax.legend(ncol=1, loc='upper right', frameon=False)
-#                 
-#         
-#         # last row
-#         if row_key == row_keys[-1]: 
-#             pass 
-#             # ax.set_xlabel(f'WSH (cm)')
-#              
-#         # first col
-#         if col_key == col_keys[0]: 
-#             if not row_key=='hist':
-#                 ax.set_ylabel(ylab_d1[row_key])
-#             else:
-#                 ax.set_ylabel(f'density of WSH')
-#===============================================================================
+        if row_key == row_keys[0]:
+ 
+            ax.set_title(f'{col_key}m grid')
+             
+        #second row
+ #==============================================================================
+ #        if row_key==row_keys[1]:
+ # 
+ #            if col_key==col_keys[0]:
+ #                ax.legend(ncol=1, loc='upper right', frameon=False)
+ #==============================================================================
+                 
+         
+        # last row
+        if row_key == row_keys[-1]: 
+            pass 
+            # ax.set_xlabel(f'WSH (cm)')
+              
+        # first col
+        if col_key == col_keys[0]: 
+            ax.set_ylabel(ylab_d[row_key])
  
             
     #===========================================================================
     # #macro labelling
     #===========================================================================
     #plt.subplots_adjust(left=1.0)
-    #===========================================================================
-    # macro_ax = fig.add_subplot(111, frame_on=False)
-    # _hide_ax(macro_ax) 
-    # macro_ax.set_ylabel(ycoln, labelpad=20)
-    # macro_ax.set_xlabel(xcoln)
-    #===========================================================================
+    macro_ax = fig.add_subplot(gsM[:nr-1, :], frame_on=False)
+    _hide_ax(macro_ax) 
+    macro_ax.set_ylabel(
+        r'standard deviation of child depths in cm ($\sigma$)', #($\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}$)
+        labelpad=20, size=font_size+2)
+    macro_ax.set_xlabel(r'child depths mean in cm ($\mu$)', size=font_size+2) # ($\mu = \frac{1}{N} \sum_{i=1}^{N} x_i$
     
     """doesnt help
     fig.tight_layout()"""
@@ -471,8 +471,9 @@ def plot_gstats(
     # #add colorbar
     #===========================================================================
     #create the axis
-    fig.subplots_adjust(bottom=0.25)
-    leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
+    #fig.subplots_adjust(bottom=0.25)
+    #leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
+    leg_ax = fig.add_subplot(gsM[nr-1, :]) #span bottom
     leg_ax.set_visible(False)    
     
     #color scaling from density values
@@ -480,20 +481,29 @@ def plot_gstats(
     
     #add the colorbar
     cbar = fig.colorbar(sm,
+                        #cax=leg_ax,
                      ax=leg_ax,  # steal space from here (couldnt get cax to work)
                      extend='both', #pointed ends
                      format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                     label='gaussian kernel-density estimate of $\overline{RL_{bldg,j}}$', 
+                     label='gaussian kernel-density estimate', 
                      orientation='horizontal',
-                     fraction=.99,
-                     aspect=50, #make skinny
+                     location='bottom',
+                     #pad=0.4,
+                     fraction=0.3,
+                     aspect=60, #make skinny
+                     #shrink=0.5,makes narrower
  
                      )
  
     #===========================================================================
     # tighten up
     #===========================================================================
-    #fig.subplots_adjust(top=0.95, right=0.95)
+    fig.subplots_adjust(top=0.99, right=0.99, left=0.1, bottom=0.07)
+    
+    #===========================================================================
+    # fig.patch.set_linewidth(10)  # set the line width of the frame
+    # fig.patch.set_edgecolor('cornflowerblue')  # set the color of the frame
+    #===========================================================================
  
     #===========================================================================
     # meta
@@ -513,14 +523,16 @@ def plot_gstats(
     
     
     ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
-    fig.savefig(ofp, dpi = dpi,   transparent=True)
+    fig.savefig(ofp, dpi = dpi,   transparent=True, 
+                #edgecolor=fig.get_edgecolor(),
+                )
     
     plt.close('all')
     
     
  
     meta_d = {
-                    'tdelta':(datetime.now()-start).total_seconds(),
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
                     #'RAM_GB':psutil.virtual_memory () [3]/1000000000,
                     #'file_GB':get_directory_size(out_dir),
                     'output_MB':os.path.getsize(ofp)/(1024**2)
@@ -537,7 +549,9 @@ def plot_gstats(
 if __name__=='__main__':
     
  
-    plot_gstats(dev=False, samp_frac=0.001)
+    plot_gstats(dev=False, samp_frac=0.01,
+                #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
+                )
 
     
  
