@@ -700,14 +700,16 @@ def get_a03_gstats_1x(
         
 if __name__ == '__main__':
  
-    run_pg_build_gstats(dev=False, 
-                        #haz_key_l=['f500_fluvial'], 
-                        add_geom=False)
+    #===========================================================================
+    # run_pg_build_gstats(dev=False, 
+    #                     #haz_key_l=['f500_fluvial'], 
+    #                     add_geom=False)
+    #===========================================================================
     
     
  
     
-    #get_a03_gstats_1x(dev=False, use_aoi=False)
+    get_a03_gstats_1x(dev=False, use_aoi=False)
     
     print('done')
     winsound.Beep(440, 500)
