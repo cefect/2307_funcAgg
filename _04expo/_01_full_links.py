@@ -170,7 +170,7 @@ def run_agg_bldg_full_links(
     pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (country_key, gid, id)')
     
     cmt_str = f'join grid ({table_grid}) i,j to points ({table_left}) \n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
  
@@ -340,7 +340,7 @@ def run_merge_expo_bldgs_wd(
  
     #add comment 
     cmt_str = f'joined buidling depths from \'{table_bldg}\' to \'{table_left}\' \n'
-    cmt_str += f'built with {os.path.realpath(__file__)} run_merge_expo_bldgs_wd() at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} run_merge_expo_bldgs_wd() at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(schema, tableName1, cmt_str)
     
     log.info(f'cleaning {tableName1} ')

@@ -194,7 +194,7 @@ def run_grids_occupied(
     
     #comment
     cmt_str = f'grids with exposed buildings, building counts, and wet counts per hazard\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(out_schema, new_tableName, cmt_str)
     
     #spatisl

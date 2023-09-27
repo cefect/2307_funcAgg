@@ -202,7 +202,7 @@ def run_bldg_rl_means(
     source_d = dict(tableName=tableName,table_grid=table_grid, table_bldg=table_bldg, table_link=table_link )
     
     cmt_str = f'join mean building losses (grouped by grids) to the grid losses (sample_type={sample_type}) \n from tables: {source_d}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} ')

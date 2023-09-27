@@ -241,7 +241,7 @@ def rl_to_post(
     pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
     
     cmt_str = f'port of {cnt} .pkl rl results for \'{asset_type}\' loaded from {base_dir}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} w/ {pg_getcount(schema, tableName)} rows')

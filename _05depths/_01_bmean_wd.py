@@ -173,7 +173,7 @@ def run_bldg_wd_group_stats(
     source_d = dict(tableName=tableName, table_bldg=table_bldg, table_link=table_link )
     
     cmt_str = f'compute mean building depths (grouped by grids) \n from tables: {source_d}\n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d: %H.%M.%S")
     pg_comment(schema, tableName, cmt_str)
     
     log.info(f'cleaning {tableName} ')
