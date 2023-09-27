@@ -194,6 +194,7 @@ def create_table_joinL_bldg_wd(tableName, table_left, country_key, dev, keys_l,
 
 
 def create_table_aggregate(tableName, table_big, agg_func_l,  dev=False, conn_str=None, log=None):
+    """calc aggregate stats from group columns"""
     
     #===========================================================================
     # defaults

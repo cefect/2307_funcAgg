@@ -125,14 +125,15 @@ def rl_to_post(
     assert isinstance(haz_coln_l, list)
     
     #asset type
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid_bmean', 'expo':'bldgs'}[asset_schema]
+    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 
+                  'inters_agg':'grid_bmean', 'expo':'bldgs', 'wd_bstats':'grid'}[asset_schema]
     
     keys_d=dict(country_key=country_key, asset_type=asset_type)
     log.info(f'on {keys_d}')
     
     if 'grid' in asset_type:
-        grid_size=int(asset_tableName.split('_')[-1])
-        keys_d['grid_size'] = grid_size
+        #grid_size=int(asset_tableName.split('_')[-1])
+        #keys_d['grid_size'] = grid_size
         keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
     #===========================================================================
     # elif asset_type=='grid_bmean':
@@ -173,8 +174,10 @@ def rl_to_post(
     #===========================================================================
     tableName=f'rl_{country_key}_{asset_type}'
     
-    if 'grid' in asset_type:
-        tableName+=f'_{grid_size:04d}'
+    #===========================================================================
+    # if 'grid' in asset_type:
+    #     tableName+=f'_{grid_size:04d}'
+    #===========================================================================
 
     
     """writing all hazard keys to one table"""
@@ -206,14 +209,12 @@ def rl_to_post(
             #===================================================================
             # #clean up
             #===================================================================
-            df1 = df_raw.copy().round(1).astype(np.float32)
+            df1 = df_raw.astype(np.float32)
             df1 = df1.rename(columns={e:f'dfid_{e:04d}' for e in df1.columns})
             df1.columns.name=None
             
-            df2 = df1.reset_index()
-            
-            if 'id' in df2.columns:
-                df2 = df2.sort_values('id')
+            df2 = df1.reset_index()            
+ 
             
             df2.loc[:, 'country_key'] = df2['country_key'].str.lower()
  
@@ -268,42 +269,20 @@ def rl_to_post(
     log.info(meta_d)
     return  tableName
     
-def run_agg_rl_topost(country_key, grid_size_l=None, 
-                      sample_type='bldg_mean', log=None,
+def run_agg_rl_topost(country_key,  
+                       log=None,
                       **kwargs):
     
-    if grid_size_l is None: grid_size_l=gridsize_default_l
+ 
     if log is None: log = init_log(name=f'rlAgg')
     
+    schema='wd_bstats'
+    tableName = f'a03_gstats_1x_{country_key}'
  
-    d=dict()
-    log.info(f'on {len(grid_size_l)} grids')
-    for grid_size in grid_size_l:
-        #=======================================================================
-        # get params forthis type
-        #=======================================================================
-        if sample_type=='grid_cent':
-            asset_schema='inters_grid'
-            tableName=f'agg_samps_{country_key}_{grid_size:04d}'
-            
-        elif sample_type=='bldg_mean':
-            asset_schema = 'inters_agg'
-            tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
-        else:
-            raise IOError(sample_type)
-    
-        #=======================================================================
-        # run
-        #=======================================================================
-        d[grid_size] = rl_to_post(country_key, asset_schema, tableName, 
-                   log=log.getChild(str(grid_size)), **kwargs)
-        
-    log.info(f'finished w/ \n    {d}')
-    
-    return d
+    return rl_to_post(country_key, schema,tableName, log=log, **kwargs)
 
         
-def run_bldg_rl_topost(country_key, filter_cent_expo=False, log=None, **kwargs):
+def run_bldg_rl_topost(country_key,   log=None, **kwargs):
     """port all the rl pickles to one table 'damage.rl_deu_bldgs'
     this now contains many zeros
     smaller grid sizes have many unlinked neighbours (as our selection was from the 1020)
@@ -311,17 +290,10 @@ def run_bldg_rl_topost(country_key, filter_cent_expo=False, log=None, **kwargs):
     """
     if log is None: log = init_log(name=f'rlBldg')
     
-    #select source table  by exposure filter strategy
-    if filter_cent_expo:
-        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
  
-        expo_str = '2x'
-    else:
-        #those grids with building exposure (using similar layer as for the centroid sampler) 
-        expo_str = '1x'
     
     asset_schema='expo'
-    tableName=f'bldgs_grid_link_{expo_str}_{country_key}_bwd'
+    tableName=f'bldg_expo_wd_{country_key}'
     
     return rl_to_post(country_key, asset_schema,tableName, log=log, **kwargs)
         
@@ -349,7 +321,7 @@ if __name__ == '__main__':
     
     
     
-    run_all(dev=True) #takes a few mins
+    #run_all(dev=True) #takes a few mins
     
     
     

@@ -219,7 +219,9 @@ def loss_calc_country_assetType(
     #asset data            
     assert isinstance(tableName, str)
     
-    asset_type = {'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid', 'expo':'bldgs'}[asset_schema]
+    asset_type = {
+        'inters':'bldgs', 'inters_grid':'grid', 'inters_agg':'grid', 'expo':'bldgs', 'wd_bstats':'grid'
+    }[asset_schema]
     
     if dev:
         asset_schema='dev'
@@ -352,7 +354,7 @@ def loss_calc_country_assetType(
 
             #clean
             ser = gdf.iloc[:,0].astype(np.float32)
-            ser = ser.rename(ser.name.replace('_bmean', ''))
+            ser = ser.rename(ser.name.replace('_avg', ''))
             assert not ser.isna().any()
  
             
@@ -402,60 +404,33 @@ def loss_calc_country_assetType(
     return 
 
 
-def run_agg_loss(country_key='deu', grid_size_l=None, haz_coln_l=None, sample_type='bldg_mean',   **kwargs):
+def run_agg_loss(country_key='deu',   haz_coln_l=None,    **kwargs):
     """compute losses from agg grid centroid samples"""
-    if grid_size_l is None: grid_size_l=gridsize_default_l
+ 
     log = init_log(name=f'rlAgg')
     
     
+    asset_schema='wd_bstats'
+    tableName=f'a03_gstats_1x_{country_key}'
+    
+    if haz_coln_l is None:
+        haz_coln_l=['f010_fluvial_avg', 'f050_fluvial_avg', 'f100_fluvial_avg', 'f500_fluvial_avg']
+    
+    #=======================================================================
+    # run
+    #=======================================================================
+    return loss_calc_country_assetType(country_key,asset_schema=asset_schema, 
+                                           tableName=tableName, log=log,
+                                           haz_coln_l=haz_coln_l,
+                                           **kwargs)
+    
+ 
 
+def run_bldg_loss(country_key='deu',    **kwargs):
     
-    d=dict()
-    log.info(f'on {len(grid_size_l)} grids')
-    for grid_size in grid_size_l:
-        
-        
-        #===========================================================================
-        # set source table based on sampling type
-        #===========================================================================
-        if sample_type=='grid_cent':
-            asset_schema='inters_grid'
-            tableName=f'agg_samps_{country_key}_{grid_size:04d}'
  
-            
-        elif sample_type=='bldg_mean':
-            #see _05depths._01_bmean_wd.run_bldg_wd_means()
-            asset_schema = 'inters_agg'
-            tableName=f'agg_wd_bmean_{country_key}_{grid_size:04d}'
-            if haz_coln_l is None:
-                haz_coln_l=['f010_fluvial_bmean', 'f050_fluvial_bmean', 'f100_fluvial_bmean', 'f500_fluvial_bmean']
- 
-        #=======================================================================
-        # run
-        #=======================================================================
-        d[grid_size] = loss_calc_country_assetType(country_key,asset_schema=asset_schema, 
-                                                   tableName=tableName, log=log,
-                                                   haz_coln_l=haz_coln_l,
-                                                   **kwargs)
-        
-    log.info(f'finished on {len(d)}')
-    
-    return d
-
-def run_bldg_loss(country_key='deu', filter_cent_expo=False,   **kwargs):
-    
-    #select source table  by exposure filter strategy
-    if filter_cent_expo:
-        #wd for doubly exposed grids w/ polygon geometry. see _02agg._07_views.run_view_grid_wd_wgeo()
- 
-        expo_str = '2x'
-    else:
-        #those grids with building exposure (using similar layer as for the centroid sampler)
-        """selection is based on 1020 grid size""" 
-        expo_str = '1x'
-    
     asset_schema='expo'
-    tableName=f'bldgs_grid_link_{expo_str}_{country_key}_bwd'
+    tableName=f'bldg_expo_wd_{country_key}'
             
     return loss_calc_country_assetType(country_key,tableName=tableName, asset_schema=asset_schema, 
                                    log = init_log(name=f'rlBldg'), **kwargs)
@@ -463,7 +438,7 @@ def run_bldg_loss(country_key='deu', filter_cent_expo=False,   **kwargs):
 
 if __name__ == '__main__':
  
-    run_bldg_loss( dev=False)
+    run_bldg_loss( dev=True)
     
     #run_agg_loss(dev=True)
     
