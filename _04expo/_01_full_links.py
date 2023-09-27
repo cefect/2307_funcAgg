@@ -296,36 +296,7 @@ def run_merge_expo_bldgs_wd(
     
     grid_size = max(grid_size_l)
     table_left = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}' 
- #==============================================================================
- #    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
- #    
- #    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
- #    
- #    first = True
- #    source_d=dict()
- #    for grid_size in grid_size_l:        
- #    
- #        tableName_i = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'    
- #        source_d[grid_size] =   tableName_i       
- #            
- #        assert pg_table_exists(schema, tableName_i, asset_type='table'), f'missing {schema}.{tableName_i}'        
- #                
- #        if not first:
- #            cmd_str += 'UNION\n'
- #        else: 
- #            cols = '*'
- # 
- #        
- #        cmd_str += f'SELECT {cols}\n'
- #        cmd_str += f'FROM {schema}.{tableName_i} \n'
- #        
- # 
- #        # filters        
- #        first = False
- #    
- #    cmd_str+=f'ORDER BY grid_size, i, j\n'
- #    sql(cmd_str)
- #==============================================================================
+ 
  
  
  
@@ -369,7 +340,7 @@ def run_merge_expo_bldgs_wd(
  
     #add comment 
     cmt_str = f'joined buidling depths from \'{table_bldg}\' to \'{table_left}\' \n'
-    cmt_str += f'built with {os.path.realpath(__file__)} at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    cmt_str += f'built with {os.path.realpath(__file__)} run_merge_expo_bldgs_wd() at '+datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
     pg_comment(schema, tableName1, cmt_str)
     
     log.info(f'cleaning {tableName1} ')
