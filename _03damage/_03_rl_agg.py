@@ -28,7 +28,7 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_nullcount_all
+    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_nullcount_all, pg_to_df, pg_get_meta
     )
  
 
@@ -265,7 +265,10 @@ def run_join_agg_rl(
          dev=False,
  
         ):
-    """join mean building losses (grouped by grids) to the grid losses
+    """join mean building losses (grouped by grids) to the grid losses via aggregation
+    
+    
+    for a similar routine against the depths, see _05depths._03_gstats
     
 
     
@@ -348,14 +351,125 @@ def run_join_agg_rl(
     return tableName
 
 
+def load_rl_dx(
+        country_key='deu', 
  
+        log=None,conn_str=None,dev=False,use_cache=True,out_dir=None,
+ 
+        use_aoi=False,
+        
+        ):
+    """load the relative loss dx
+    
+ 
+    """
+    
+    #===========================================================================
+    # defaults
+    #===========================================================================    
+    country_key = country_key.lower() 
+ 
+    if conn_str is None: conn_str = get_conn_str(postgres_d)
+    if log is None:
+        log = init_log(name=f'rl_mean')
+    
+    #sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
+    
+    if out_dir is None:
+        out_dir = os.path.join(wrk_dir, 'outs', 'damage','03_rl_agg', country_key)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    
+    
+    keys_l = ['country_key', 'haz_key', 'grid_size', 'i', 'j']
+ 
+    #===========================================================================
+    # #table params
+    #===========================================================================
+    if dev:
+        schema='dev'
+    else:
+        schema='damage'
+        
+    tableName=f'rl_{country_key}_agg'
+    
+    #===========================================================================
+    # cache
+    #===========================================================================
+    meta = pg_get_meta(schema, tableName)
+    
+        
+    fnstr = f'rl_agg_{country_key}'
+    uuid = hashlib.shake_256(f'{fnstr}_{dev}_{meta}'.encode("utf-8"), usedforsecurity=False).hexdigest(12)
+    ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
+    
+    if (not os.path.exists(ofp)) or (not use_cache):
+        #===========================================================================
+        # #load
+        #===========================================================================
+        dx_raw = pg_to_df(f"""SELECT * FROM {schema}.{tableName}""", conn_str=conn_str, index_col=keys_l)
+        
+        """
+        rl_dx.columns
+        """
+        #===========================================================================
+        # clean up
+        #===========================================================================
+        dx1 = dx_raw.drop('bldg_expo_cnt', axis=1) #not needed anymore
+     
+     
+        
+        #split bldg and grid losses
+        col_bx = dx1.columns.str.contains('_mean') 
+        
+        #grid losses
+        grid_dx = dx1.loc[:, ~col_bx]
+        rnm_d = {k:int(k.split('_')[1]) for k in grid_dx.columns.values}
+        grid_dx = grid_dx.rename(columns=rnm_d).sort_index(axis=1)
+        grid_dx.columns = grid_dx.columns.astype(int)
+        
+        
+        bldg_dx = dx1.loc[:, col_bx]
+        rnm_d = {k:int(k.split('_')[1]) for k in bldg_dx.columns.values}
+        bldg_dx = bldg_dx.rename(columns=rnm_d).sort_index(axis=1)
+        bldg_dx.columns = bldg_dx.columns.astype(int)
+        
+        assert np.array_equal(grid_dx.columns, bldg_dx.columns)
+        
+        
+        dx2 = pd.concat({
+            'bldg':bldg_dx, 
+            'grid':grid_dx, 
+            #'expo':df.loc[:, expo_colns].fillna(0.0)
+            }, 
+            names = ['rl_type', 'df_id'], axis=1).dropna(how='all') 
+        
+        #===========================================================================
+        # wrap
+        #===========================================================================
+     
+        res_dx = dx2.sort_index(sort_remaining=True).sort_index(sort_remaining=True, axis=1)
+        log.info(f'finished on {res_dx.shape}')
+        
+    else:
+        log.info(f'loading from cache:\n    {ofp}')
+        res_dx = pd.read_pickle(ofp)
+    
+    return res_dx 
+    
+    """
+    view(rl_dx.head(100))
+    """
+    
+
     
         
         
         
 if __name__ == '__main__':
     #run_all('deu', dev=True)
-    run_join_agg_rl(dev=False)
+    #run_join_agg_rl(dev=False)
+    
+    load_rl_dx(dev=True)
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)
     

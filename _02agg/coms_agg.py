@@ -101,7 +101,7 @@ def pg_get_nullcount_all(schema, tableName, **kwargs):
     return pg_to_df(cmd_str, **kwargs).iloc[0, :].rename('null_counts')
     
 
-def pg_to_df(cmd_str, conn_str=None):
+def pg_to_df(cmd_str, conn_str=None, **kwargs):
     """load a query with pandas"""
     
     if conn_str is None: conn_str=get_conn_str(postgres_d)
@@ -110,7 +110,7 @@ def pg_to_df(cmd_str, conn_str=None):
     #set engine for geopandas
     engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
     try:
-        result = pd.read_sql(cmd_str, engine)
+        result = pd.read_sql(cmd_str, engine, **kwargs)
         
     except Exception as e:
         raise IOError(f'failed query w/ \n    {e}')
