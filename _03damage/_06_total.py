@@ -38,7 +38,9 @@ from _02agg.coms_agg import (
     pg_vacuum, pg_comment, pg_register, pg_table_exists
     )
 
-from _02agg._07_views import create_view_join_grid_geom
+#from _02agg._07_views import create_view_join_grid_geom
+from _03damage._03_rl_agg import load_rl_dx
+from _05depths._03_gstats import get_a03_gstats_1x
 
 from coms import (
     init_log, today_str,  dstr, view
@@ -49,9 +51,9 @@ from coms import (
 
 def get_total_losses(
         country_key='deu', 
-        haz_key='f500_fluvial',
+
         dx_raw=None,
-        log=None,dev=False,use_cache=True,out_dir=None,
+        log=None,dev=False,use_cache=True,out_dir=None, use_aoi=False,
         ):
     """total losses (building weighted)"""
      
@@ -62,7 +64,7 @@ def get_total_losses(
     start=datetime.now()
      
     if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'damage','06_total', country_key, haz_key)
+        out_dir = os.path.join(wrk_dir, 'outs', 'damage','06_total', country_key)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
     
  
@@ -75,20 +77,37 @@ def get_total_losses(
     # load
     #===========================================================================
     if dx_raw is None:     
-        dx_raw = get_grid_rl_dx(country_key, haz_key, log=log, use_cache=use_cache, dev=dev)
+        dx_raw = load_rl_dx(country_key=country_key, log=log, use_cache=use_cache, dev=dev, use_aoi=use_aoi)
             
     #===========================================================================
     # cache
     #===========================================================================
-    fnstr = f'grid_TL_{country_key}_{haz_key}'
+    fnstr = f'grid_TL_{country_key}'
     uuid = hashlib.shake_256(f'{fnstr}_{dev}_{dx_raw.shape}_{dx_raw.head()}'.encode("utf-8"), usedforsecurity=False).hexdigest(16)
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
 
     if (not os.path.exists(ofp)) or (not use_cache):
-
-            
-        dx1 = dx_raw.droplevel('country_key')
+        dx1 = dx_raw
+        #===========================================================================
+        # load depth group stats and add some to the index
+        #===========================================================================
+        """joining some stats from here"""
+        wdx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=use_cache)
         
+        
+        
+        wdx1 = wdx_raw.stack(level='haz_key').reset_index(['bldg_cnt', 'null_cnt'])
+        wdx1.columns.name=None
+        
+        #rename
+        wdx1 = wdx1.rename(columns={'avg':'grid_wd'})
+        
+        col_l = ['grid_wd', 'bldg_cnt', 'wet_cnt'] #data to join
+        
+        #join to index
+        dx1.index = pd.MultiIndex.from_frame(dx1.index.to_frame().join(wdx1.loc[:, col_l]))
+        
+ 
         #===========================================================================
         # compute
         #===========================================================================
@@ -116,7 +135,7 @@ def get_total_losses(
 if __name__=='__main__':
     
     
-    get_total_losses(dev=False, use_cache=False)
+    get_total_losses(dev=False, use_cache=True)
     
     
     

@@ -13,7 +13,7 @@ plot relative loss of bldgs vs. agg
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'journal'
+env_type = 'draft'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -310,7 +310,7 @@ def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,
     #===========================================================================
     # cache
     #===========================================================================
-    fnstr=f'rl_dx_filter_{country_key}_{haz_key}_{len(dfid_l)}'
+    fnstr=f'tl_dx_filter_{country_key}_{haz_key}_{len(dfid_l)}'
     uuid = hashlib.shake_256(
         ' '.join([str(e) for e in [fnstr,  min_bldg_cnt, dfid_l,use_cache, dev, use_aoi]]).encode("utf-8"), 
         usedforsecurity=False).hexdigest(8)
@@ -320,9 +320,13 @@ def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,
         #===========================================================================
         # load loss data
         #===========================================================================
+        
         if dx_raw is None:
-            #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
-            dx_raw = load_rl_dx(country_key=country_key, log=log, use_cache=use_cache, dev=dev)
+            
+            dx_raw = get_total_losses(country_key=country_key,
+                                      log=log,dev=dev,use_cache=use_cache,
+                                       use_aoi=use_aoi,)
+ 
             
         """
         view(dx_raw.head(100))
@@ -334,26 +338,7 @@ def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,
         dx1 = dx_raw.xs(haz_key, level='haz_key').xs(country_key, level='country_key')
         log.info(f'sliced to get {dx1.shape}')
         
-        #===========================================================================
-        # load depth group stats and add some to the index
-        #===========================================================================
-        """joining some stats from here"""
-        wdx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=use_cache)
-        
-        wdx1 = wdx_raw.xs(haz_key, level='haz_key', axis=1).xs(country_key, level='country_key').reset_index(['bldg_cnt', 'null_cnt'])
-        wdx1.columns.name=None
-        
-        #rename
-        wdx1 = wdx1.rename(columns={'avg':'grid_wd'})
-        
-        col_l = ['grid_wd', 'bldg_cnt', 'wet_cnt'] #data to join
-        
-        #join to index
-        dx1.index = pd.MultiIndex.from_frame(dx1.index.to_frame().join(wdx1.loc[:, col_l]))
-        
  
-     
-        log.info(f'joined cols from depth stats\n    {col_l}')
         #===========================================================================
         # filter data------
         #===========================================================================
@@ -447,26 +432,26 @@ def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,
     log.info(f'finished data prep w/ {dx.shape}')
     return dx 
 
-def plot_rl_agg_v_bldg(
+    
+
+def plot_TL_agg_v_bldg(
         dx_raw=None,fserx_raw=None,
         country_key='deu',
         haz_key='f500_fluvial',
-        out_dir=None,
+        dfid_l=None,
+ 
         figsize=None,
-        #min_wet_frac=1.0,
-        min_bldg_cnt=2,
-        dfid_l = None, 
-        samp_frac=0.0001, #
-        dev=False,
-        ylab_d = clean_names_d,
-        cmap='PuRd_r',
-        use_cache=True,
+ 
+        samp_frac=0.008, #
         use_aoi=False,
+        dev=False,
+        min_bldg_cnt=2,
+ 
+        use_cache=True,
+        out_dir=None,
         ):
     
-
-    
-    """plot relative loss agg vs. bldg
+    """plot TOTAL loss from grid centroids and building means    
     
     
     
@@ -479,10 +464,9 @@ def plot_rl_agg_v_bldg(
         for reducing the data sent to gaussian_kde
         relative to size of complete data set (not the gruops)
  
-     use_aoi: bool
-         load the spatially sliced grid ids and only include these
     """
- 
+    #raise IOError('looks pretty good. need to filter partials, add running-mean for buildings, add colorscale')
+    
     #===========================================================================
     # defaults
     #===========================================================================
@@ -492,39 +476,31 @@ def plot_rl_agg_v_bldg(
         out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
     if not os.path.exists(out_dir):os.makedirs(out_dir)
      
-    log = init_log(fp=os.path.join(out_dir, today_str + '.log'), name='rl_agg')
-            
-    if dev: 
-        samp_frac = 1.0
+    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='tl_agg')
     
+ 
+    ylab_d = clean_names_d.copy()
+    cmap = 'viridis'
+    
+    if dev: samp_frac=1.0
     #===========================================================================
     # load data--------
     #===========================================================================
     dx = _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,   dev, use_aoi, log, use_cache=use_cache)
     mdex=dx.index 
-
-    #===========================================================================
-    # # get binned means    
-    #===========================================================================
-    
-    keys_l =  ['grid_size',   'df_id', 'grid_wd'] #only keys we preserve   
- 
-    #get a slice with clean index
-    sx1 = dx['bldg'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
-     
-    mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=use_cache)
     
     """
     view(dx.head(100))
     """
- 
- 
+    
+    
+
     #===========================================================================
     # setup indexers
     #===========================================================================        
     keys_d = {'row':'df_id',  'col':'grid_size'}
     kl = list(keys_d.values())     
-    log.info(f' loaded {len(dx)}')
+    log.info(f' loaded {dx.shape}')
     
     
     #===========================================================================
@@ -535,176 +511,126 @@ def plot_rl_agg_v_bldg(
  
  
     #drop meta and add zero-zero
-    fserx = force_and_slice(fserx_raw, log=log)
+    #fserx = force_monotonic(force_zero_zero(slice_serx(fserx_raw, xs_d=None), log=log),log=log)
     
     #===========================================================================
     # setup figure
     #===========================================================================
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+    
  
     
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
                                constrained_layout=False, #needs to be unconstrainted for over label to work
-                               sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
+                               sharex=True, sharey=True, add_subfigLabel=True, figsize=figsize)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
+    #color_d = _get_cmap(color_keys, name='viridis')
  
     #===========================================================================
     # loop and plot-----
     #===========================================================================
- 
-    meta_lib=dict()
+    #letter=list(string.ascii_lowercase)[j]
+    
  
     for (row_key, col_key), gdx0 in dx.groupby(kl[:2]):
         log.info(f'df_id:{row_key} x grid_size:{col_key}')
         ax = ax_d[row_key][col_key]
         
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        
         gdx0 = gdx0.droplevel(kl[:2])
         
+        assert (gdx0==0).sum().sum()==0
  
-        
-        
-        #=======================================================================
-        # plot function 
-        #=======================================================================
-        wd_rl_df = fserx.xs(row_key, level='df_id').reset_index('wd').reset_index(drop=True)
-        xar, yar = wd_rl_df['wd']*100, wd_rl_df['rl']
-         
-        ax.plot(xar, yar, color='black', marker='o', linestyle='solid', alpha=0.8, 
-                markersize=3,fillstyle='none', linewidth=0.5, label=f'$f(WSH)$')
-        
  
+        #===================================================================
+        # prep
+        #===================================================================
+        #c=color_d[color_key]
+        gdx1=gdx0
         
         
         #prep data
-        gdx1 = gdx0
         df= gdx1.reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
-        
-        #===================================================================
-        # scatter -------
-        #===================================================================
         
         #geet a sample of hte data
         df_sample = df.copy().sample(min(int(len(dx)*samp_frac), len(df)))
-        assert len(df_sample)>0
         
         log.info(f'    w/ {df.size} and sample {df_sample.size}')
         
+        #===================================================================
+        # plot scatter------
+        #===================================================================
         #ax.plot(df['bldg'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
         #as density
-        x,y = df_sample.index.values, df_sample['bldg'].values
+        x,y = df_sample['grid'].values, df_sample['bldg'].values
+        xy = np.vstack([np.log(x),np.log(y)]) #log transformed
         
-        if not len(df_sample) < 3:
-            #xy = np.vstack([x,y])
-            xy = np.vstack([np.log(x),np.log(y)]) #log transformed
-            
-            """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
-            try:
-                pdf = gaussian_kde(xy)
-            except Exception as e:
-                raise IOError(f'failed to build gaussian on\n    {xy} w/\n    w/ {e}')
-            z = pdf(xy) #Evaluate the estimated pdf on a set of points.
-            
-            # Sort the points by density, so that the densest points are plotted last
-            indexer = z.argsort()
-            x, y, z = x[indexer], y[indexer], z[indexer]
-        else:
-            #just use dummy values
-            z = np.full(x.shape, 1.0)
-        cax = ax.scatter(x, y, c=z, s=10, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        pdf = gaussian_kde(xy)
+        z = pdf(xy) #Evaluate the estimated pdf on a set of points.
+        
+        # Sort the points by density, so that the densest points are plotted last
+        indexer = z.argsort()
+        x, y, z = x[indexer], y[indexer], z[indexer]
+        cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.9, marker='.', edgecolors='none', rasterized=True)
         
         #===================================================================
-        # plot binned bldg_mean lines
+        # plot 1:1
         #===================================================================
-        bin_serx = mean_bin_dx.loc[idx[col_key, row_key, :], :].reset_index(drop=True
-                                       ).set_index('grid_wd_bin').iloc[:,0]
-                           
-        ax.plot(bin_serx, color='blue', alpha=1.0, marker=None, linestyle='dashed', 
-                markersize=2, linewidth=1.0,
-                label='$\overline{RL_{bldg,j}}(WSH)$')
+        c = [0,10e5]
+        ax.plot(c,c, color='black', linestyle='dashed', linewidth=0.5)
         
         #===================================================================
-        # plot grid-----
+        # plot interp----
         #===================================================================
-        #usaeful for debugging
-        #ax.plot(df.index.values, df['grid'], color='green', marker='.', alpha=0.3, markersize=1, fillstyle='none', linestyle='none')
-        """
-        plt.show()
-        """
+        #==============================================================================
+        #            this doesnt work well with the log plot
+        #            #get data
+        #            x,y = df['grid'].values, df['bldg'].values
+        #            xar = np.array([0, 10e5])
+        #            
+        # 
+        #            #regression
+        #            lm = scipy.stats.linregress(x, y)
+        #            
+        #            predict = lambda x:np.array([lm.slope*xi + lm.intercept for xi in x])            
+        #            ax.plot(xar, predict(xar), color='red', linestyle='solid', label='regression', marker='x')
+        #            
+        #            print({'rvalue':lm.rvalue, 'slope':lm.slope, 'intercept':lm.intercept})
+        #==============================================================================
  
             
         #===================================================================
-        # text-------
+        # text--------
         #===================================================================
- 
-        bmean, gmean = gdx0.mean()
+        
+        bsum, gsum = gdx0.sum()
         #tstr = f'count: {len(gdx0)}\n'
-        tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
-        tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
+        tstr ='$\sum{\overline{RL_{bldg,j}}}*B_{j}}$: %.2e\n'%bsum
+        tstr+='$\sum{RL_{grid,j}*B_{j}}$: %.2e\n'%gsum
         
         rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
-        tstr+='\nRMSE: %.2f'%rmse
+        tstr+='RMSE: %.2f\n'%rmse
         
-        bias = gmean/bmean
-        tstr+='\nbias: %.2f'%(bias)
-        
-        #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
-        
-        coords = (0.8, 0.05)
-        #=======================================================================
-        # if row_key==402:
-        #     coords = (coords[0], 0.5) #move it up
-        #=======================================================================
+        bias =gdx0['grid'].sum()/gdx0['bldg'].sum()
+        tstr+='bias: %.2f'%bias
+         
+        coords = (0.7, 0.05)
  
-        
-        ax.text(*coords, tstr, size=6,
+         
+        ax.text(*coords, tstr, 
                             transform=ax.transAxes, va='bottom', ha='center', 
                             bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
                             )
         
-        #=======================================================================
-        # meta
-        #=======================================================================
-        if not row_key in meta_lib: meta_lib[row_key] = dict()
-        meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean, 'bias':bias}
+        #ax.set_aspect('equal')
         
+        ax.set_xlim(1,10e4)
+        ax.set_ylim(1,10e4)
  
-        
-    #===========================================================================
-    # plot histograms---------
-    #===========================================================================
- 
- #==============================================================================
- #    wd_df = dx.unstack(level='df_id').index.to_frame().reset_index(drop=True).drop(['i', 'j'], axis=1)
- #    for grid_size, gdf in wd_df.groupby('grid_size'):
- #        ax = ax_d['hist'][grid_size]
- #        
- #        ax.hist(gdf['grid_wd'], bins = np.linspace(0, 1000, 31 ), color='black', alpha=0.5, density =True)
- #        
- #        #turn off some spines
- #        ax.spines['top'].set_visible(False)
- #        ax.spines['right'].set_visible(False)
- #        ax.spines['left'].set_visible(False)
- #        
- #        #===================================================================
- #        # text
- #        #===================================================================
- # 
- #        tstr = f'n= {len(gdf):.2e}\n'
- #        tstr +='$\overline{WSH}$= %.2f'%gdf['grid_wd'].mean()
- #        #tstr +='\n$\sigma^2$= %.2f'%gdf['grid_wd'].var() #no... we want the asset variance
- #        ax.text(0.6, 0.5, tstr, 
- #                            transform=ax.transAxes, va='bottom', ha='left', 
- #                            #bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
- #                            )
- #        
- #        raise IOError('add building counts')
- #==============================================================================
- 
-        
-        
-            
     #===========================================================================
     # get some function meta
     #===========================================================================
@@ -728,25 +654,18 @@ def plot_rl_agg_v_bldg(
  
         # first row
         if row_key == row_keys[0]:
-            ax.set_xlim(0, 1010)
+            ax.set_title(f'{col_key}m grid')
  
-            ax.set_title(f'{col_key}m grid') 
-
-            if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='center right', frameon=False)
-                
-        
         # last row
         if row_key == row_keys[-1]: 
             pass 
             # ax.set_xlabel(f'WSH (cm)')
-             
+              
         # first col
         if col_key == col_keys[0]: 
             if not row_key=='hist':
                 ax.set_ylabel(ylab_d1[row_key])
-            else:
-                ax.set_ylabel(f'density of WSH')
+ 
  
             
     #===========================================================================
@@ -755,71 +674,50 @@ def plot_rl_agg_v_bldg(
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
-    macro_ax.set_ylabel(f'relative loss in % (RL)', labelpad=20, size=font_size+2)
-    macro_ax.set_xlabel(f'water depth in cm (WSH)', size=font_size+2)
- 
+    macro_ax.set_ylabel('grid relative loss ($RL_{grid,j}$) * child building count ($B_{j}$)', 
+                        labelpad=20, size=font_size+2)
+    macro_ax.set_xlabel('child relative loss mean ($\overline{RL_{bldg,j}}$) * child building count ($B_{j}$)', 
+                        size=font_size+2)
+    
+    """doesnt help
+    fig.tight_layout()"""
+    
     #===========================================================================
     # #add colorbar
     #===========================================================================
     #create the axis
-    if len(row_keys)==3:
-        fig.subplots_adjust(bottom=0.15, top=0.95, right=0.98)
-        leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
- 
- 
+    fig.subplots_adjust(bottom=0.15, top=0.95, right=0.95)
+    leg_ax = fig.add_axes([0.05, 0.00, 0.9, 0.08], frameon=True) #left, bottom, width, height
+    leg_ax.set_visible(False)    
     
-        leg_ax.set_visible(False)
-                
-        
-        #color scaling from density values
-        sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
-        
-        #add the colorbar
-        cbar = fig.colorbar(sm,
-                         ax=leg_ax,  # steal space from here (couldnt get cax to work)
-                         extend='both', #pointed ends
-                         format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                         label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
-                         orientation='horizontal',
-                         fraction=.99,
-                         aspect=50, #make skinny
-     
-                         )
-
-    else:
-        fig.subplots_adjust(right=0.98, bottom=0.18)
+    #color scaling from density values
+    sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
+    
+    #add the colorbar
+    cbar = fig.colorbar(sm,
+                     ax=leg_ax,  # steal space from here (couldnt get cax to work)
+                     extend='both', #pointed ends
+                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
+                     label='log-transformed gaussian kernel-density estimate of relative losses (RL) * child building count ($B_{j}$)', 
+                     orientation='horizontal',
+                     fraction=.99,
+                     aspect=50, #make skinny
+ 
+                     )
  
  
  
     #===========================================================================
-    # meta
+    # write----------
     #===========================================================================
-    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
-                        names=['df_id', 'stat'])
-    
-    mdf1 = meta_df.stack().unstack(level='stat')
- 
-    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
-        
-    #===========================================================================
-    # write-------
-    #===========================================================================
-    fig.patch.set_linewidth(10)  # set the line width of the frame
-    fig.patch.set_edgecolor('cornflowerblue')  # set the color of the frame
     
     
-    
-    uuid = hashlib.shake_256(f'{dfid_l}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(6)
-    fnstr=f'{env_type}_{len(col_keys)}x{len(row_keys)}'
-    if use_aoi:fnstr+='_aoi'
-    ofp = os.path.join(out_dir, f'rl_{fnstr}_{today_str}_{uuid}.svg')
+    ofp = os.path.join(out_dir, f'TL_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True,
-                #edgecolor='black'
+                edgecolor='black',
                 )
     
-    plt.close('all')
-    
-    
+    plt.close('all')    
  
     meta_d = {
                     'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
@@ -834,7 +732,7 @@ def plot_rl_agg_v_bldg(
      
     return ofp
  
-  
+ 
     
 if __name__=='__main__':
     
@@ -845,17 +743,10 @@ if __name__=='__main__':
     #plot_rl_raw(tableName='rl_deu_grid_bmean_1020')
  
    
-    #plot_TL_agg_v_bldg(samp_frac=0.01)
+    plot_TL_agg_v_bldg(samp_frac=0.01, dfid_l=dfunc_curve_l,
+                       dev=False, use_cache=True)
     #===========================================================================
-    # plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
-    #                    samp_frac=0.01,
-    #                    dfid_l=dfunc_curve_l,                
-    #                    )
-    #===========================================================================
-    
-    #Koblenz focal area
-    plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
-                       figsize=(18*cm,6*cm))
+ 
 
     
  
