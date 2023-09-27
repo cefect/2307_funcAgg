@@ -3,7 +3,7 @@ Created on Aug. 24, 2023
 
 @author: cefect
 '''
-import argparse
+import argparse, winsound
 from _03damage._03_rl_mean_bldg import run_all as func
 
  
@@ -23,3 +23,5 @@ if __name__ == '__main__':
  
  
     )
+    
+    winsound.Beep(440, 500)

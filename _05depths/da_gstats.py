@@ -395,14 +395,17 @@ def plot_gstats(
         xmean, ymean= gdx0.mean()
         #tstr = f'count: {len(gdx0)}\n'
         tstr ='$\overline{\sigma}$: %.2f'%ymean
-        #tstr+='\n$\overline{\mu}$: %.2f'%xmean
+        tstr+='\n$\overline{\mu}$: %.2f'%xmean
         
  
         xq, yq = gdx0.quantile(0.75)
         tstr+='\n$Q_{0.75}[\sigma]$: %.2f'%yq
-        #tstr+='\n$Q_{0.99}[\mu]$: %.2f'%xq
+ 
         
-        tstr+='\nn: %.2e'%len(gdx0)
+        tstr+='\n$n_{i}$: %.2e'%gdx0.index.get_level_values('bldg_cnt').values.sum()
+        tstr+='\n$n_{j}$: %.2e'%len(gdx0)
+ 
+        
         
         #tstr+=f'\n{row_key}.{col_key}'
  
@@ -552,7 +555,7 @@ if __name__=='__main__':
     
  
     plot_gstats(dev=False, 
-                samp_frac=0.05,
+                samp_frac=0.01,
                 #xcoln='wet_frac', #not a strong relation
                 #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
                 )

@@ -88,7 +88,18 @@ def pg_getcount(schema, tableName,  conn_str=None):
             return int(cur.fetchone()[0])
         
 def pg_get_nullcount(schema, tableName, colName, **kwargs):
-    return pg_exe(f"""SELECT COUNT(*) FROM {schema}.{tableName} WHERE {colName} IS NULL""", return_fetch=True, **kwargs)[0][0]  
+    return pg_exe(f"""SELECT COUNT(*) FROM {schema}.{tableName} WHERE {colName} IS NULL""", return_fetch=True, **kwargs)[0][0]
+
+def pg_get_nullcount_all(schema, tableName, **kwargs):
+    """report null counts for every column"""  
+    col_l = pg_get_column_names(schema, tableName)
+    
+    #build query
+    sel_l = ', '.join([f'SUM(CASE WHEN {e} IS NULL THEN 1 ELSE 0 END) as {e}' for e in col_l])
+    cmd_str = f'SELECT {sel_l} FROM {schema}.{tableName}'
+    
+    return pg_to_df(cmd_str, **kwargs).iloc[0, :].rename('null_counts')
+    
 
 def pg_to_df(cmd_str, conn_str=None):
     """load a query with pandas"""

@@ -9,7 +9,7 @@ made this to try and simplify and consolidate as it became too confusing to work
 #===============================================================================
 # IMPORTS-----
 #===============================================================================
-import os, hashlib, sys, subprocess, psutil
+import os, hashlib, sys, subprocess, psutil, winsound
 from datetime import datetime
 from itertools import product
 
@@ -62,6 +62,7 @@ def create_table_links_merge(grid_size_l, country_key, expo_str, keys_l, dev, lo
     tableName = f'a01_links_{expo_str}_{country_key}' # output
     if dev:
         schema = 'dev'
+        source_schema='dev'
     else:
         source_schema='expo'
         schema = 'wd_bstats'
@@ -76,6 +77,10 @@ def create_table_links_merge(grid_size_l, country_key, expo_str, keys_l, dev, lo
     first = True
     source_d = dict()
     for grid_size in grid_size_l:
+        
+        #buidling to grid links
+        #see _04expo._01_full_links.run_agg_bldg_full_links()
+        
         tableName_i = f'bldgs_grid_link_{expo_str}_{country_key}_{grid_size:04d}'
         source_d[grid_size] = tableName_i
         assert pg_table_exists(source_schema, tableName_i, asset_type='table'), f'missing {schema}.{tableName_i}'
@@ -451,7 +456,7 @@ def run_pg_build_gstats(
          add_geom=False,
  
         ):
-    """ build tale with stats for agg groups
+    """ build table with stats for agg groups
     
  
     
@@ -476,7 +481,7 @@ def run_pg_build_gstats(
     
     if conn_str is None: conn_str = get_conn_str(postgres_d)
     if log is None:
-        log = init_log(name=f'stats')
+        log = init_log(name=f'gstats')
     
     sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     
@@ -684,24 +689,20 @@ def get_a03_gstats_1x(
 
         
 if __name__ == '__main__':
-    #run_all( dev=False)
-    #run_pg_build_gstats(dev=False, haz_key_l=['f500_fluvial'], add_geom=False)
-    
+ 
+    #===========================================================================
+    # run_pg_build_gstats(dev=False, 
+    #                     #haz_key_l=['f500_fluvial'], 
+    #                     add_geom=False)
+    #===========================================================================
     
     
  
     
-    #run_extract_haz('deu', 'f500_fluvial', dev=False)
-    
-    
-    #add grid geo
-    #create_view_wgeo_slice(dev=False)
-    
-    #create_table_aoi_select()
-    
-    get_a03_gstats_1x(dev=False, use_aoi=True)
+    get_a03_gstats_1x(dev=False, use_aoi=False)
     
     print('done')
+    winsound.Beep(440, 500)
     
         
     

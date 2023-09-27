@@ -152,7 +152,7 @@ if __name__ == '__main__':
     #get_grid_rl_dx('deu', 'f500_fluvial', dev=False, use_cache=False, limit=None)
     
     
-    run_all(dev=False)
+    run_all(dev=True)
     
     
     

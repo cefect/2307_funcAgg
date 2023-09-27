@@ -97,9 +97,9 @@ def create_view_merge_bmeans(country_key='deu',
     #===========================================================================
     # query
     #===========================================================================
-    sql(f'DROP VIEW IF EXISTS {schema}.{tableName} CASCADE')
+    sql(f'DROP MATERIALIZED VIEW IF EXISTS {schema}.{tableName} CASCADE')
     
-    cmd_str = f'CREATE VIEW {schema}.{tableName} AS \n'
+    cmd_str = f'CREATE MATERIALIZED VIEW {schema}.{tableName} AS \n'
     
     first = True
     for grid_size in grid_size_l:
@@ -160,11 +160,11 @@ def create_view_join_stats_to_bmeans(
         log=None,
         conn_str=None,
         dev=False,
- 
+        include_gcent=False,
  
         with_geom=False,
         ):
-    """building means with expo stats (create_view_merge_stats())"""
+    """join building mean depths with expo stats"""
         
 
     #if grid_size_l is None: grid_size_l = gridsize_default_l
@@ -188,7 +188,10 @@ def create_view_join_stats_to_bmeans(
     #===========================================================================
  
     #grids w/ centroid wd, bmean wd, see create_view_merge_bmeans()
-    table_left=f'agg_samps_{country_key}_jbmean'
+    if include_gcent:
+        table_left=f'agg_samps_{country_key}_jbmean'
+    else:
+        table_left=f'agg_wd_bmean_{country_key}'
     
     #grids w/ bldg_cnt and wet_cnt
     #see _02agg._07_views.create_view_merge_stats()
@@ -226,7 +229,8 @@ def create_view_join_stats_to_bmeans(
     link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_l])
     
     cols = ', '.join([f'tleft.{e}' for e in keys_l])
-    cols +=f', tleft.{haz_key} as grid_wd'
+    if include_gcent:
+        cols +=f', tleft.{haz_key} as grid_wd'
     cols +=f', tleft.{haz_key}_bmean as bmean_wd'
     cols += f', tright.bldg_cnt, tright.wet_cnt' 
     cols += f', \'{haz_key}\' as haz_key'
@@ -407,7 +411,7 @@ if __name__ == '__main__':
     #get_grid_wd_dx(dev=False, use_cache=False)
     
     
-    run_all(dev=True)
+    run_all(dev=False)
     
     
     

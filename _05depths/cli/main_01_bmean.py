@@ -3,8 +3,8 @@ Created on Aug. 24, 2023
 
 @author: cefect
 '''
-import argparse
-from depths._01_bmean_wd import run_all as func
+import argparse, winsound
+from _05depths._01_bmean_wd import run_all as func
 
  
 
@@ -19,3 +19,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     func(country_key=args.country_key)
+    
+    winsound.Beep(440, 500)

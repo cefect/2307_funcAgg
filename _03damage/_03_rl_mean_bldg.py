@@ -125,7 +125,8 @@ def run_bldg_rl_means(
     #===========================================================================
     # join buidling losses to grid links------
     #===========================================================================
-    #building losses table contains all buidlings selected by 1020 grid exposure
+    #building losses table contains all buidlings selected by 1020 grid exposure, 
+    raise IOError('building losses table is missing some entries')
     #join onto the link tables, which should shorten the list (for all but the 1020)
     #want to include all the zeros however
     
@@ -136,12 +137,12 @@ def run_bldg_rl_means(
     #execute
     link_cols = ' AND '.join([f'tleft.{e}=tright.{e}' for e in keys_d['bldg']])
     
-    #using an inner join as the nulls are stilli n teh link table    
+       
     sql(f"""
     CREATE TABLE temp.{table_link1} AS
         SELECT tleft.grid_size, tleft.i, tleft.j, tright.* 
             FROM {schema_link}.{table_link} as tleft
-                INNER JOIN {schema_bldg}.{table_bldg} as tright
+                LEFT JOIN {schema_bldg}.{table_bldg} as tright
                     ON {link_cols}
     
     """)
@@ -150,7 +151,9 @@ def run_bldg_rl_means(
     sql(f'ALTER TABLE temp.{table_link1} ADD PRIMARY KEY ({keys_str})')
     
     #check
-    #assert pg_get_nullcount('temp', table_link1, )
+    null_cnt= pg_get_nullcount('temp', table_link1, 'dfid_0026')
+    if not null_cnt==0:
+        raise AssertionError(f'got {null_cnt} nulls on left join result')
     #===========================================================================
     # join average building loss to the grid losses------
     #===========================================================================
@@ -167,7 +170,7 @@ def run_bldg_rl_means(
     cols = 'tleft.*'
      
     cols+=f', COUNT(tright.id) AS bldg_expo_cnt, '  #we only have exposed buildings so this isnt very useful
-    cols+= ', '.join([f'CAST(AVG(tright.{e}) AS real) AS {e}_mean' for e in func_coln_l])
+    cols+= ', '.join([f'CAST(AVG(COALESCE(tright.{e}, 0)) AS real) AS {e}_mean' for e in func_coln_l])
     
     cols +=f', \'{sample_type}\' as sample_type'
  
@@ -246,7 +249,7 @@ def run_all(ck, grid_size_l=None, **kwargs):
         
         
 if __name__ == '__main__':
-    run_all('deu', dev=False)
+    run_all('deu', dev=True)
     #run_bldg_rl_means('deu', 1020, dev=True, sample_type='bldg_mean')
     
     #run_extract_haz('deu', 'f500_fluvial', dev=False)

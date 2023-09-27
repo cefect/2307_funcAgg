@@ -9,7 +9,7 @@ compute the total buildng counts and wet counts for each grid
 #===============================================================================
 # IMPORTS--------
 #===============================================================================
-import os, hashlib, sys, subprocess
+import os, hashlib, sys, subprocess, winsound
 
  
  
@@ -277,6 +277,8 @@ if __name__ == '__main__':
     #run_expo_stats_grouped('deu', 1020, dev=False)
     
     run_all('deu', dev=False)
+    
+    winsound.Beep(440, 500)
  
     
     

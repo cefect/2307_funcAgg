@@ -10,7 +10,7 @@ compute losses from depths using depth-damage functions
 #===============================================================================
 # IMPORTS--------
 #===============================================================================
-import os, hashlib, sys, subprocess, copy
+import os, hashlib, sys, subprocess, copy, winsound
 
  
  
@@ -313,7 +313,7 @@ def loss_calc_country_assetType(
         #cmd_str += f'\nWHERE {haz_coln} >0 AND {haz_coln} IS NOT NULL' #exclude empties
         
         #this is tricky... should probably have filtered these from the beginnig
-        cmd_str += f'\nWHERE {haz_coln} IS NOT NULL' #exclude empties
+        #cmd_str += f'\nWHERE {haz_coln} IS NOT NULL' #exclude empties
         
         #debug
         #cmd_str += f'\nAND i=19666 AND j=90844'
@@ -347,6 +347,7 @@ def loss_calc_country_assetType(
                 log.warning(f'for chunk {i} got no rows... skipping') #not sure why this would happen
                 continue
             assert len(gdf.columns)==1
+            assert not gdf.isna().any().any()
             
 
             #clean
@@ -462,9 +463,9 @@ def run_bldg_loss(country_key='deu', filter_cent_expo=False,   **kwargs):
 
 if __name__ == '__main__':
  
-    #run_bldg_loss( dev=False)
+    run_bldg_loss( dev=False)
     
-    run_agg_loss(dev=False)
+    #run_agg_loss(dev=True)
     
     #run_bldg_loss('deu', dev=False, haz_coln_l=['f500_fluvial'], dfid_l=[946])
     
@@ -473,6 +474,7 @@ if __name__ == '__main__':
     
     
     print('done')
+    winsound.Beep(440, 500)
  
 
         
