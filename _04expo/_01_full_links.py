@@ -144,12 +144,12 @@ def run_agg_bldg_full_links(
     
     """
     
-    sql(f'DROP TABLE IF EXISTS {schema}.{tableName}') 
+    sql(f'DROP TABLE IF EXISTS {schema}.{tableName} CASCADE') 
     
     cols = 'LOWER(pts.country_key) as country_key, pts.gid, pts.id, polys.grid_size, polys.i, polys.j'
     if with_geo: cols+=', pts.geometry as geom'
     
-    raise IOError('need to drop any null entries from the bldgs table')
+ 
 
     cmd_str=f"""
     CREATE TABLE {schema}.{tableName} AS
@@ -157,6 +157,7 @@ def run_agg_bldg_full_links(
             FROM {schema_left}.{table_left} AS pts
                 JOIN {schema_grid}.{table_grid} AS polys 
                     ON ST_Intersects(polys.geom, ST_Transform(pts.geometry, {epsg_id}))
+                        WHERE pts.f010_fluvial IS NOT NULL
                     """
     
     sql(cmd_str)
@@ -164,6 +165,7 @@ def run_agg_bldg_full_links(
     #===========================================================================
     # #clean up
     #===========================================================================
+    
     log.info(f'cleaning')
     pg_exe(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY (country_key, gid, id)')
     
@@ -392,8 +394,8 @@ if __name__ == '__main__':
     
     #run_agg_bldg_full_links('deu', 1020, dev=True, with_geo=True, filter_cent_expo=False)
  
-    run_merge_expo_bldgs_wd(dev=False, add_geom=False,)
-    #run_all('deu', dev=True)
+    #run_merge_expo_bldgs_wd(dev=False, add_geom=False,)
+    run_all('deu', dev=True)
     
     print('done')
     
