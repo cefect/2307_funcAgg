@@ -129,7 +129,7 @@ from funcMetrics.coms_fm import (
 
 from palettable.colorbrewer.sequential import PuBu_9, RdPu_3
 
-from _03damage._05_mean_bins import filter_rl_dx_minWetFrac
+#from _03damage._05_mean_bins import filter_rl_dx_minWetFrac
 from _05depths._03_gstats import get_a03_gstats_1x
 
 #===============================================================================
@@ -153,6 +153,8 @@ def plot_gstats(
         dev=False,
  
         cmap='viridis',
+        use_aoi=False,
+        use_cache=True,
         
         ):
     
@@ -196,8 +198,9 @@ def plot_gstats(
     #===========================================================================
     if dx_raw is None:
         #load from postgres view damage.rl_mean_grid_{country_key}_{haz_key}_wd and do some cleaning
-        dx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=True, dev=dev)
+        dx_raw = get_a03_gstats_1x(country_key=country_key, log=log, use_cache=use_cache, dev=dev, use_aoi=use_aoi)
         """
+        view(dx_raw.head())
         samp_size = int(1e4)
         dx_raw.groupby(['grid_size']).sample(samp_size).to_pickle(os.path.join(out_dir, f'dev_dx_raw_{samp_size}_{today_str}.pkl'))
         """
@@ -236,6 +239,9 @@ def plot_gstats(
  #==============================================================================
  
     #stack
+    """
+    view(dx2.head(100))
+    """
     dx3 = dx2.stack(level='haz_key')#.drop('wet_cnt', axis=1)
     
     #drop zeros
@@ -553,12 +559,17 @@ def plot_gstats(
     
 if __name__=='__main__':
     
- 
-    plot_gstats(dev=False, 
-                samp_frac=0.01,
-                #xcoln='wet_frac', #not a strong relation
-                #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
-                )
+    #main variance figure
+    #===========================================================================
+    # plot_gstats(dev=False, 
+    #             samp_frac=0.01,
+    #             #xcoln='wet_frac', #not a strong relation
+    #             #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
+    #             )
+    #===========================================================================
+    
+    #aoi variance
+    plot_gstats(samp_frac=1.0,use_aoi=True, use_cache=False)
 
     
  

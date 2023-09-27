@@ -633,7 +633,13 @@ def get_a03_gstats_1x(
         
         """only ~600k rows"""
         
-        cmd_str = f'SELECT * FROM {schema}.{tableName}'
+        if not use_aoi:
+            cmd_str = f'SELECT * FROM {schema}.{tableName}'
+        else:
+            coln_l = pg_get_column_names(schema, tableName)
+            
+            cols = ', '.join([e for e in coln_l if not e in ['geometry', 'geom','fid']]) #remove geometry columns
+            cmd_str = f'SELECT {cols} FROM {schema}.{tableName}'
         
         if not limit is None:
             cmd_str+=f'\n    LIMIT {limit}'
@@ -709,7 +715,7 @@ if __name__ == '__main__':
     
  
     
-    get_a03_gstats_1x(dev=False, use_aoi=True)
+    get_a03_gstats_1x(dev=False, use_aoi=True, use_cache=False)
     
     print('done')
     winsound.Beep(440, 500)
