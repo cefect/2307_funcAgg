@@ -337,7 +337,7 @@ def compute_binned_mean(serx, log=None, out_dir=None, use_cache=False, bin_cnt=2
 
 if __name__=='__main__':
     
-    concat_rl_wd(dev=True)
+ 
     #run_bldg_rl_mean_bins('deu', dev=True, use_cache=False)
     
     

@@ -371,7 +371,7 @@ def load_rl_dx(
  
     if conn_str is None: conn_str = get_conn_str(postgres_d)
     if log is None:
-        log = init_log(name=f'rl_mean')
+        log = init_log(name=f'load_rl')
     
     #sql = lambda x:pg_exe(x, conn_str=conn_str, log=log)
     
@@ -403,10 +403,14 @@ def load_rl_dx(
     ofp = os.path.join(out_dir, f'{fnstr}_{uuid}.pkl')
     
     if (not os.path.exists(ofp)) or (not use_cache):
+        
         #===========================================================================
         # #load
         #===========================================================================
-        dx_raw = pg_to_df(f"""SELECT * FROM {schema}.{tableName}""", conn_str=conn_str, index_col=keys_l)
+        log.info('loading from postgres')
+        cmd_str = f"""SELECT * FROM {schema}.{tableName}"""
+        log.info(cmd_str)
+        dx_raw = pg_to_df(cmd_str, conn_str=conn_str, index_col=keys_l)
         
         """
         rl_dx.columns
@@ -448,7 +452,8 @@ def load_rl_dx(
         #===========================================================================
      
         res_dx = dx2.sort_index(sort_remaining=True).sort_index(sort_remaining=True, axis=1)
-        log.info(f'finished on {res_dx.shape}')
+        res_dx.to_pickle(ofp)
+        log.info(f'finished on {res_dx.shape} and wrote to \n    {ofp}')
         
     else:
         log.info(f'loading from cache:\n    {ofp}')
@@ -466,12 +471,12 @@ def load_rl_dx(
         
         
 if __name__ == '__main__':
-    #run_all('deu', dev=True)
+ 
     #run_join_agg_rl(dev=False)
     
-    load_rl_dx(dev=True)
+    load_rl_dx(dev=False)
     
-    #run_extract_haz('deu', 'f500_fluvial', dev=False)
+ 
     
     print('done')
     winsound.Beep(440, 500)

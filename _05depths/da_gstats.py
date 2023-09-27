@@ -220,7 +220,7 @@ def plot_gstats(
  
     #building count
     bx = dx1.index.get_level_values('bldg_cnt')>=min_bldg_cnt
-    log.info(f'selected {bx.sum():,}/{len(bx):,} w/ min_bldg_cnt={min_bldg_cnt}')
+    log.info(f'selected {bx.sum():.2e}/{len(bx):.2e} w/ min_bldg_cnt={min_bldg_cnt}')
     dx2=dx1[bx]
     
     #by wet_frac. No... this is specific to each hazard scenario 
@@ -240,7 +240,7 @@ def plot_gstats(
     
     #drop zeros
     bx = dx3['wet_cnt']>0
-    log.info(f'selected {bx.sum()}/{len(bx)} w/ some exposed buildings')
+    log.info(f'selected {bx.sum():.2e}/{len(bx):.2e} w/ some exposed buildings')
     dx4 = dx3.loc[bx, :].copy()
     
     #add wet frac
@@ -395,7 +395,7 @@ def plot_gstats(
         xmean, ymean= gdx0.mean()
         #tstr = f'count: {len(gdx0)}\n'
         tstr ='$\overline{\sigma}$: %.2f'%ymean
-        tstr+='\n$\overline{\mu}$: %.2f'%xmean
+        tstr+='\n$\overline{WSH_{j}}$: %.2f'%xmean
         
  
         xq, yq = gdx0.quantile(0.75)
@@ -470,7 +470,7 @@ def plot_gstats(
     #===========================================================================
     lab_d = {
         'stddevpop':r'standard deviation of child depths in cm ($\sigma$)',         #($\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}$)
-        'avg':r'child depths mean in cm ($\mu$)',
+        'avg':r'child depths mean in cm ($WSH_{j}=\overline{WSH_{i}}$)',
         'wet_frac':'fraction of child buildings flooded'
         }
     
