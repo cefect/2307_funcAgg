@@ -359,7 +359,7 @@ def create_table_aoi_select(
 
         expo_str='1x',
          conn_str=None, log=None):
-    """slice to aoi"""
+    """slice the aggregate depth stats (a03_gstats_{expo_str}_{country_key}) using an aoi"""
     
     
     
@@ -591,7 +591,7 @@ def get_a03_gstats_1x(
     # talbe params
     #===========================================================================
     fnstr = f'gstats_{country_key}'
-    #see _04expo._03_views.create_view_join_stats_to_rl()
+ 
     if use_aoi:
         assert not dev
         tableName=f'a03_gstats_{expo_str}_{country_key}_aoi'
@@ -705,11 +705,11 @@ if __name__ == '__main__':
     #                     #haz_key_l=['f500_fluvial'], 
     #                     add_geom=False)
     #===========================================================================
-    
+    #create_table_aoi_select()
     
  
     
-    get_a03_gstats_1x(dev=False, use_aoi=False)
+    get_a03_gstats_1x(dev=False, use_aoi=True)
     
     print('done')
     winsound.Beep(440, 500)

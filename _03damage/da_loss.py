@@ -416,14 +416,15 @@ def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,
             assert not dev
  
             #this function loads all the data.. but we only need the indexers
+            """would make more sense to do the slicing above now... but this still works"""
             sel_mdex = get_a03_gstats_1x(country_key=country_key, log=log, use_aoi=use_aoi).droplevel(['country_key', 'bldg_cnt', 'null_cnt']).index
      
             #identify overlap
-            bx_aoi = dx3b.index.to_frame().reset_index(drop=True).set_index(sel_mdex.names).index.isin(sel_mdex)
+            bx_aoi = dx6.index.to_frame().reset_index(drop=True).set_index(sel_mdex.names).index.isin(sel_mdex)
             #slice
-            dx4 = dx3b.loc[bx_aoi, :]
+            dx7 = dx6.loc[bx_aoi, :]
             #check
-            check_mdex = dx4.unstack([c for c in dx4.index.names if not c in ['grid_size', 'i', 'j']]).index
+            check_mdex = dx7.unstack([c for c in dx7.index.names if not c in ['grid_size', 'i', 'j']]).index
             """I guess the selection is shorter because of the filters above"""
             log.info(f'w/ use_aoi={use_aoi} selected {len(check_mdex)} aggregate assets (from the aois {len(sel_mdex)})')
         else:
@@ -540,9 +541,7 @@ def plot_rl_agg_v_bldg(
     # setup figure
     #===========================================================================
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
-    
-    #add the hist
-    row_keys = row_keys
+ 
     
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
                                constrained_layout=False, #needs to be unconstrainted for over label to work
@@ -734,7 +733,7 @@ def plot_rl_agg_v_bldg(
             ax.set_title(f'{col_key}m grid') 
 
             if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='middle right', frameon=False)
+                ax.legend(ncol=1, loc='center right', frameon=False)
                 
         
         # last row
@@ -763,29 +762,34 @@ def plot_rl_agg_v_bldg(
     # #add colorbar
     #===========================================================================
     #create the axis
-    fig.subplots_adjust(bottom=0.15)
-    leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
-    leg_ax.set_visible(False)    
-    
-    #color scaling from density values
-    sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
-    
-    #add the colorbar
-    cbar = fig.colorbar(sm,
-                     ax=leg_ax,  # steal space from here (couldnt get cax to work)
-                     extend='both', #pointed ends
-                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                     label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
-                     orientation='horizontal',
-                     fraction=.99,
-                     aspect=50, #make skinny
+    if len(row_keys)==3:
+        fig.subplots_adjust(bottom=0.15, top=0.95, right=0.98)
+        leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
  
-                     )
  
-    #===========================================================================
-    # tighten up
-    #===========================================================================
-    fig.subplots_adjust(top=0.95, right=0.98)
+    
+        leg_ax.set_visible(False)
+                
+        
+        #color scaling from density values
+        sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
+        
+        #add the colorbar
+        cbar = fig.colorbar(sm,
+                         ax=leg_ax,  # steal space from here (couldnt get cax to work)
+                         extend='both', #pointed ends
+                         format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
+                         label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
+                         orientation='horizontal',
+                         fraction=.99,
+                         aspect=50, #make skinny
+     
+                         )
+
+    else:
+        fig.subplots_adjust(right=0.98, bottom=0.18)
+ 
+ 
  
     #===========================================================================
     # meta
@@ -1191,12 +1195,16 @@ if __name__=='__main__':
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
-                       samp_frac=0.01,
-                       dfid_l=dfunc_curve_l,
- 
-                       use_aoi=False,                       
-                       )
+    #===========================================================================
+    # plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
+    #                    samp_frac=0.01,
+    #                    dfid_l=dfunc_curve_l,                
+    #                    )
+    #===========================================================================
+    
+    #Koblenz focal area
+    plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
+                       figsize=(18*cm,6*cm))
 
     
  
