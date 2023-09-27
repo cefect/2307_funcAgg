@@ -43,7 +43,7 @@ from coms import (
 
  
 
-
+raise IOError('do we still need this? or is it replaced w/ _05depths._03_gstats?')
 
 #===============================================================================
 # EXECUTORS--------
@@ -53,7 +53,7 @@ def run_expo_stats_grouped(
                         country_key, 
                            #hazard_key,
                                grid_size,
-                           out_dir=None,
+                           #out_dir=None,
                            dev=False,
                            conn_str=None,
                            epsg_id=equal_area_epsg,
@@ -77,13 +77,15 @@ def run_expo_stats_grouped(
     country_key=country_key.lower()
     #assert hazard_key in index_hazard_fp_d, hazard_key
     
-    if out_dir is None:
-        out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_occu', country_key,  f'{grid_size:05d}')
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
+    #===========================================================================
+    # if out_dir is None:
+    #     out_dir = os.path.join(wrk_dir, 'outs', 'agg','04_occu', country_key,  f'{grid_size:05d}')
+    # if not os.path.exists(out_dir):os.makedirs(out_dir)
+    #===========================================================================
     
  
     if log is None:
-        log = init_log(name=f'occu.{country_key}.{grid_size}', fp=os.path.join(out_dir, today_str+'.log'))
+        log = init_log(name=f'gstats')
     
     
     keys_d = {'country_key':country_key, 

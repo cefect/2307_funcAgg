@@ -1,6 +1,6 @@
 """
 
-mean asset loss per grid
+mean child depths
 """
 
 

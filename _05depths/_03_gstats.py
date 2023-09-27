@@ -36,7 +36,8 @@ from coms import (
 
 from _02agg.coms_agg import (
     get_conn_str, pg_vacuum, pg_spatialIndex, pg_exe, pg_get_column_names, pg_register, pg_getcount,
-    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_meta, pg_getCRS
+    pg_comment, pg_table_exists, pg_get_nullcount, pg_get_meta, pg_getCRS, pg_get_nullcount_all,
+    pg_to_df
     )
  
 from _02agg._07_views import create_view_join_grid_geom
@@ -52,7 +53,7 @@ keys_d = {
 
 
 def create_table_links_merge(grid_size_l, country_key, expo_str, keys_l, dev, log, conn_str=None):
-    
+    """merge all the links tables"""
     #===========================================================================
     # defaults
     #===========================================================================
@@ -121,6 +122,7 @@ def create_table_links_merge(grid_size_l, country_key, expo_str, keys_l, dev, lo
 
 def create_table_joinL_bldg_wd(tableName, table_left, country_key, dev, keys_l, 
                                haz_key_l=None, conn_str=None, log=None):
+    """expand building water depths onto the merged link table"""
     
     #===========================================================================
     # defaults
@@ -132,9 +134,12 @@ def create_table_joinL_bldg_wd(tableName, table_left, country_key, dev, keys_l,
         schema_bldg = schema
     else:
         schema = 'wd_bstats'
-        schema_bldg = 'inters'
-#params
-    table_bldg = country_key
+        schema_bldg = 'expo'
+
+    #buildings that occur in any of the link tables (w/ water depths joined
+    #_04expo._01_full_links.run_expo_bldg()
+    table_bldg = f'bldg_expo_wd_{country_key}'
+
     
     if haz_key_l is None: 
         haz_key_l = [e for e in pg_get_column_names(schema_bldg, table_bldg) if e.startswith('f')]
@@ -155,17 +160,11 @@ def create_table_joinL_bldg_wd(tableName, table_left, country_key, dev, keys_l,
 # #execute
 #===========================================================================
     sql(f"""
-
     CREATE TABLE {schema}.{tableName} AS
-
         SELECT {cols}
-
             FROM {schema}.{table_left} as tleft
-
                 LEFT JOIN {schema_bldg}.{table_bldg} as tright
-
                     ON {link_cols}
-
                     """)
     
     #===========================================================================
@@ -173,6 +172,11 @@ def create_table_joinL_bldg_wd(tableName, table_left, country_key, dev, keys_l,
     #===========================================================================
     keys_str = ', '.join(keys_l)
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+    #check for nulls
+    ser = pg_get_nullcount_all(schema, tableName)
+    assert (ser==0).all()
+    
     #add comment
     cmt_str = f'left join water depths {table_bldg} to merge of links {table_left} \n'
     cmt_str += f'built with {os.path.realpath(__file__)} at ' + datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
@@ -240,6 +244,11 @@ def create_table_aggregate(tableName, table_big, agg_func_l,  dev=False, conn_st
  
     keys_str = ', '.join(keys_l)
     sql(f'ALTER TABLE {schema}.{tableName} ADD PRIMARY KEY ({keys_str})')
+    
+    #nulls
+    nc_ser = pg_to_df(f"""SELECT SUM(null_cnt) FROM {schema}.{tableName} GROUP BY grid_size""")
+    assert nc_ser.iloc[:,0].max()==0, 'shouldnt get nulls anymore'    
+    assert pg_get_nullcount_all(schema, tableName, conn_str=conn_str).max()==0
     
     #add comment
     cmt_str = f'group stats on {table_big} w/ functions: {agg_func_l} \n'
@@ -690,16 +699,14 @@ def get_a03_gstats_1x(
         
 if __name__ == '__main__':
  
-    #===========================================================================
-    # run_pg_build_gstats(dev=False, 
-    #                     #haz_key_l=['f500_fluvial'], 
-    #                     add_geom=False)
-    #===========================================================================
+    run_pg_build_gstats(dev=False, 
+                        #haz_key_l=['f500_fluvial'], 
+                        add_geom=False)
     
     
  
     
-    get_a03_gstats_1x(dev=False, use_aoi=False)
+    #get_a03_gstats_1x(dev=False, use_aoi=False)
     
     print('done')
     winsound.Beep(440, 500)
