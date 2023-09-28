@@ -115,8 +115,7 @@ import psycopg2
 from sqlalchemy import create_engine, URL
 
 from scipy.stats import gaussian_kde
-import scipy.stats
-
+ 
 from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d, temp_dir
 
 from coms import init_log, today_str, view
