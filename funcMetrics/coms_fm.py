@@ -244,7 +244,7 @@ def force_monotonic(
     
     return res_serx
 
-def force_and_slice(fserx_raw, max_depth=1000, log=None, **kwargs):
+def force_and_slice(fserx_raw, max_depth=10, log=None, **kwargs):
     
     fserx1 = slice_serx(fserx_raw, xs_d=None)
     

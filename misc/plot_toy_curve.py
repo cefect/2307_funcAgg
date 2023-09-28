@@ -128,6 +128,13 @@ def plot_toy_func(
     
     ax.plot(x, rl(x), label='$f(WSH)$', color='black')
     
+    #===========================================================================
+    # # Add hatching between rl(x) and straight line from (0,0) to (xmax, ymax)
+    #===========================================================================
+    straight_line = np.linspace(0, ymax, len(x))
+    ax.fill_between(x, rl(x), straight_line, where=(rl(x)>=straight_line), 
+                    interpolate=True, hatch=None, alpha=0.1, color='blue', label='envelope', linewidth=0)
+    
     
     #===========================================================================
     # add the house losses
@@ -141,8 +148,6 @@ def plot_toy_func(
     #===========================================================================
     # add the aggregate
     #===========================================================================
-    
-    
     
     ax.plot(xmean, rl(xmean), color='black', linestyle='none', marker='s', markersize=5, label='$asset_{j}$')   
     

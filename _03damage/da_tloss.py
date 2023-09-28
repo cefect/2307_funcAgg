@@ -121,7 +121,7 @@ from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d, temp_di
 
 from coms import init_log, today_str, view
 from coms_da import get_matrix_fig, _get_cmap, _hide_ax
-from funcMetrics.func_prep import get_funcLib
+from misc.func_prep import get_funcLib
 from funcMetrics.coms_fm import (
     slice_serx, force_max_depth, force_zero_zero, force_monotonic, force_and_slice
     )
@@ -145,154 +145,7 @@ from _05depths._03_gstats import get_a03_gstats_1x
 # data
 #===============================================================================
  
-def plot_rl_raw(
-        tableName='rl_deu_grid_0060', #rl_{country_key}_{asset_type}
-        schema='damage',
-        out_dir=None,
-        figsize=None,
-        figsize_scaler=2,
-        conn_str=None,
-        limit=None,
  
-        ):
-    
-    """plot simple histograms of RL values (for checking)
-    
-    
-    
- 
-    """
-    #===========================================================================
-    # defaults
-    #===========================================================================
- 
-  
-    if out_dir is None:
-        out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
-    if not os.path.exists(out_dir):os.makedirs(out_dir)
-     
-    log = init_log(fp=os.path.join(out_dir, today_str+'.log'), name='rl_raw')
-    if conn_str is None: conn_str=get_conn_str(postgres_d)
-    
-    if 'bldgs' in tableName:
-        asset_type='bldg'
-    else:
-        asset_type='grid'
-        
-    if asset_type=='grid': 
-        keys_l = ['country_key', 'grid_size', 'i', 'j', 'haz_key']
-    elif asset_type=='bldg':
-        keys_l = ['country_key', 'gid', 'id', 'haz_key']
-    
-    
-    
-    
-    #===========================================================================
-    # download
-    #===========================================================================
-    conn =  psycopg2.connect(conn_str)
-    engine = create_engine('postgresql+psycopg2://', creator=lambda:conn)
-    
-    #row_cnt=0
-    
-    """only ~600k rows"""
- 
-    cmd_str = f"""SELECT * FROM {schema}.{tableName}"""
-    if not limit is None:
-        cmd_str+=f'\n    LIMIT {limit}'
-    log.info(cmd_str)
-    df_raw = pd.read_sql(cmd_str, engine, index_col=keys_l)
-    
-    df_raw.columns.name='df_id'
-    serx = df_raw.stack().droplevel([0])
-    
-    mdex = serx.index
-    #===========================================================================
-    # setup indexers
-    #===========================================================================        
-    keys_d = {'row':'df_id',  'col':'haz_key'}
-    kl = list(keys_d.values())     
-    log.info(f' loaded {len(serx)}')
-    
-    #===========================================================================
-    # setup figure
-    #===========================================================================
-    row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
-    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=True, 
-                               constrained_layout=False,
-                               sharex=True, sharey=True, add_subfigLabel=False, 
-                               figsize=figsize,
-                               figsize_scaler=figsize_scaler)
-    
-    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
-    
-    #color_d = _get_cmap(color_keys, name='viridis')
-    
-    
-    #===========================================================================
-    # loop and plot---------
-    #===========================================================================
- 
-    for (row_key, col_key), gdx0 in serx.groupby(kl[:2]):
-        log.info(f'df_id:{row_key} x {col_key} w/ ({len(gdx0)})')
-        ax = ax_d[row_key][col_key]
-        
-        ar = gdx0.droplevel(kl[:2]).reset_index(drop=True).values
-        
- 
-        #=======================================================================
-        # post hist
-        #=======================================================================
-        ax.hist(ar, bins=10, color='black', range=(0, 100), alpha=0.8)
-        
-        #=======================================================================
-        # add text
-        #=======================================================================
-        zero_cnt = (ar==0).sum()
-        tstr = f'cnt: {len(ar)}\nmean:{ar.mean():.1f}\nzeros:{zero_cnt}'
-        ax.text(0.95, 0.05, tstr, 
-                            transform=ax.transAxes, va='bottom', ha='right', 
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
-        
-        
-    #===========================================================================
-    # post------
-    #===========================================================================
-    fig.suptitle(tableName)
-    
-  
-    for row_key, col_key, ax in rc_ax_iter:
- 
-        #ax.grid()
-        
-        # first row
-        #=======================================================================
-        # if row_key == row_keys[0]:
-        #     ax.set_title(f'{col_key}m grid')
-        #=======================================================================
-        
-        # last row
-        if row_key == row_keys[-1]: 
-             
-            ax.set_xlabel(f'WSH (cm)')
-             
-        # first col
-        if col_key == col_keys[0]: 
-            ax.set_ylabel(f'function {row_key}')
-    #===========================================================================
-    # write
-    #===========================================================================
-    ofp = os.path.join(out_dir, f'rl_raw_{env_type}_{tableName}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
-    fig.savefig(ofp, dpi = 300,   transparent=True)
-    
-    plt.close('all')
-    
-    log.info(f'wrote to \n    {ofp}')
-    return ofp
-        
- 
-
 
 def _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l, 
                      dev, use_aoi, log,use_cache=True,
@@ -445,7 +298,7 @@ def plot_TL_agg_v_bldg(
         samp_frac=0.008, #
         use_aoi=False,
         dev=False,
-        min_bldg_cnt=2,
+        min_bldg_cnt=0,
  
         use_cache=True,
         out_dir=None,
@@ -480,7 +333,7 @@ def plot_TL_agg_v_bldg(
     
  
     ylab_d = clean_names_d.copy()
-    cmap = 'viridis'
+    cmap = 'cividis'
     
     if dev: samp_frac=1.0
     #===========================================================================

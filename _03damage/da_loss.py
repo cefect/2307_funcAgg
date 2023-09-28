@@ -120,7 +120,7 @@ from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d, temp_di
 
 from coms import init_log, today_str, view
 from coms_da import get_matrix_fig, _get_cmap, _hide_ax
-from funcMetrics.func_prep import get_funcLib
+from misc.func_prep import get_funcLib
 from funcMetrics.coms_fm import (
     slice_serx, force_max_depth, force_zero_zero, force_monotonic, force_and_slice
     )
@@ -594,7 +594,7 @@ def plot_rl_agg_v_bldg(
         #as density
         x,y = df_sample.index.values, df_sample['bldg'].values
         
-        if not len(df_sample) < 3:
+        if not len(df_sample) < 3 or row_key==946:
             #xy = np.vstack([x,y])
             xy = np.vstack([np.log(x),np.log(y)]) #log transformed
             
@@ -732,7 +732,7 @@ def plot_rl_agg_v_bldg(
             ax.set_title(f'{col_key}m grid') 
 
             if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='center right', frameon=False)
+                ax.legend(ncol=1, loc='upper center', frameon=False)
                 
         
         # last row
@@ -761,29 +761,29 @@ def plot_rl_agg_v_bldg(
     # #add colorbar
     #===========================================================================
     #create the axis
-    if len(row_keys)==3:
+    if not len(row_keys)==1:
         fig.subplots_adjust(bottom=0.15, top=0.95, right=0.98)
         leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
- 
- 
-    
+        
+        
+        
         leg_ax.set_visible(False)
-                
+            
         
         #color scaling from density values
         sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
         
         #add the colorbar
         cbar = fig.colorbar(sm,
-                         ax=leg_ax,  # steal space from here (couldnt get cax to work)
-                         extend='both', #pointed ends
-                         format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                         label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
-                         orientation='horizontal',
-                         fraction=.99,
-                         aspect=50, #make skinny
-     
-                         )
+                     ax=leg_ax,  # steal space from here (couldnt get cax to work)
+                     extend='both', #pointed ends
+                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
+                     label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
+                     orientation='horizontal',
+                     fraction=.99,
+                     aspect=50, #make skinny
+        
+                     )
 
     else:
         fig.subplots_adjust(right=0.98, bottom=0.18)
@@ -845,16 +845,16 @@ if __name__=='__main__':
  
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
-    #===========================================================================
-    # plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
-    #                    samp_frac=0.01,
-    #                    dfid_l=dfunc_curve_l,                
-    #                    )
-    #===========================================================================
+    plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
+                       samp_frac=0.01,
+                       dfid_l=hill_curve_l,                
+                       )
     
     #Koblenz focal area
-    plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
-                       figsize=(18*cm,6*cm))
+    #===========================================================================
+    # plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
+    #                    figsize=(18*cm,6*cm))
+    #===========================================================================
 
     
  

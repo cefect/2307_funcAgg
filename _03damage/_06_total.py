@@ -115,6 +115,31 @@ def get_total_losses(
         #get total loss
         rdx = dx1.multiply(dx1.index.get_level_values('bldg_cnt'), axis=0)
         
+        
+        #=======================================================================
+        # sum check
+        #=======================================================================
+        cdx1 = rdx.xs('bldg', level='rl_type', axis=1).groupby(['grid_size', 'haz_key']).sum().unstack('haz_key')
+        
+        cser1 = cdx1.round(0).nunique()
+        cser2 = cser1[cser1!=1.0]
+        
+        if len(cser2)>0:
+            """something to do with BN_FLEMO not starting at zero"""
+            log.warning(f'got {len(cser2)} events with different building totals\n{cser2}')
+        
+        
+        """
+        
+        cdx2 = pd.concat([cdx1, cdx1.round(1).nunique().to_frame().T])
+        view(cdx1.round(1).nunique())
+        view(cdx2)
+        view(rdx.groupby(['grid_size', 'haz_key']).sum().unstack('haz_key'))
+        
+        bx= dx1.index.get_level_values('wet_cnt')>0
+        view(dx1[bx].head(100))
+        """
+        
         #=======================================================================
         # write
         #=======================================================================
@@ -135,7 +160,7 @@ def get_total_losses(
 if __name__=='__main__':
     
     
-    get_total_losses(dev=False, use_cache=True)
+    get_total_losses(dev=False, use_cache=False)
     
     
     
