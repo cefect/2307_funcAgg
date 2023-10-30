@@ -13,7 +13,7 @@ plot relative loss of bldgs vs. agg
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'present'
+env_type = 'draft'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -620,7 +620,7 @@ if __name__=='__main__':
  
    
     plot_TL_agg_v_bldg(samp_frac=0.001, dfid_l=dfunc_curve_l,
-                       dev=False, use_cache=True)
+                       dev=True, use_cache=True)
  
  
 

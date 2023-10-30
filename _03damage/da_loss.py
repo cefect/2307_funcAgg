@@ -467,7 +467,9 @@ def plot_rl_agg_v_bldg(
     
 
     
-    """plot relative loss agg vs. bldg
+    """plot relative loss agg vs. bldg.
+    
+    data loaded from damage.rl_deu_agg
     
     
     
@@ -1244,10 +1246,8 @@ if __name__=='__main__':
     #plot_rl_agg_v_bldg_single(use_cache=True,dfid_l=[380],samp_frac=0.9)
     
     #Koblenz focal area
-    #===========================================================================
-    # plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
-    #                    figsize=(18*cm,6*cm))
-    #===========================================================================
+    plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
+                       figsize=(18*cm,6*cm))
 
     
  
