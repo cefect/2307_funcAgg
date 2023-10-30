@@ -4,6 +4,17 @@ scripts for computation and data analysis of potential errors arising from aggre
 
 
 
+## Use
+
+### figures
+
+Figure 4: Relative losses for three grid aggregations for the 500-year fluvial undefended hazard scenario and the four selected flood
+damage functions (Table 1).
+`_03damage.da_loss.plot_rl_agg_v_bldg(dfid_l=dfunc_curve_l)`
+
+Figure S2: Relative losses for three grid aggregations and four idealized functions 
+`_03damage.da_loss.plot_rl_agg_v_bldg(dfid_l=hill_curve_l)`
+
 ## install
 build conda environment from ./environment.yml
 

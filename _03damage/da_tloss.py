@@ -13,7 +13,7 @@ plot relative loss of bldgs vs. agg
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'draft'
+env_type = 'present'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 plt.style.use('default')
 font_size=6
 dpi=300
+present=False
 def set_doc_style():
  
     
@@ -71,7 +72,7 @@ elif env_type=='draft':
  
        
 #===============================================================================
-# presentation style    
+# presentation style--------    
 #===============================================================================
 elif env_type=='present': 
  
@@ -79,7 +80,8 @@ elif env_type=='present':
         output_format='svg',add_stamp=True,add_subfigLabel=False,transparent=False
         )   
  
-    font_size=12
+    font_size=14
+    present=True
  
     matplotlib.rc('font', **{'family' : 'sans-serif','sans-serif':'Tahoma','weight' : 'normal','size':font_size})
      
@@ -91,7 +93,7 @@ elif env_type=='present':
         'ytick.labelsize':font_size,
         'figure.titlesize':font_size+4,
         'figure.autolayout':False,
-        'figure.figsize':(34*cm,19*cm), #GFZ template slide size
+        'figure.figsize':(22*cm,18*cm), #GFZ template slide size
         'legend.title_fontsize':'large',
         'text.usetex':usetex,
         }.items():
@@ -375,7 +377,8 @@ def plot_TL_agg_v_bldg(
     
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
                                constrained_layout=False, #needs to be unconstrainted for over label to work
-                               sharex=True, sharey=True, add_subfigLabel=True, figsize=figsize)
+                               sharex=True, sharey=True, add_subfigLabel=np.invert(present), 
+                               figsize=figsize)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
@@ -428,12 +431,21 @@ def plot_TL_agg_v_bldg(
         # Sort the points by density, so that the densest points are plotted last
         indexer = z.argsort()
         x, y, z = x[indexer], y[indexer], z[indexer]
-        cax = ax.scatter(x, y, c=z, s=5, cmap=cmap, alpha=0.9, marker='.', edgecolors='none', rasterized=True)
+        
+        scatter_kwargs=dict(s=5, cmap=cmap, alpha=0.9, marker='.', edgecolors='none', rasterized=True)
+        
+        if present:
+            scatter_kwargs['s']=20
+            
+        
+        cax = ax.scatter(x, y, c=z, **scatter_kwargs)
         
         #===================================================================
         # plot 1:1
         #===================================================================
         c = [0,10e5]
+        
+        
         ax.plot(c,c, color='black', linestyle='dashed', linewidth=0.5)
         
         #===================================================================
@@ -459,25 +471,25 @@ def plot_TL_agg_v_bldg(
         #===================================================================
         # text--------
         #===================================================================
-        
-        bsum, gsum = gdx0.sum()
-        #tstr = f'count: {len(gdx0)}\n'
-        tstr ='$\sum{\overline{RL_{bldg,j}}}*B_{j}}$: %.2e\n'%bsum
-        tstr+='$\sum{RL_{grid,j}*B_{j}}$: %.2e\n'%gsum
-        
-        rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
-        tstr+='RMSE: %.2f\n'%rmse
-        
-        bias =gdx0['grid'].sum()/gdx0['bldg'].sum()
-        tstr+='bias: %.2f'%bias
-         
-        coords = (0.7, 0.05)
- 
-         
-        ax.text(*coords, tstr, 
-                            transform=ax.transAxes, va='bottom', ha='center', 
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
+        if not present:
+            bsum, gsum = gdx0.sum()
+            #tstr = f'count: {len(gdx0)}\n'
+            tstr ='$\sum{\overline{RL_{bldg,j}}}*B_{j}}$: %.2e\n'%bsum
+            tstr+='$\sum{RL_{grid,j}*B_{j}}$: %.2e\n'%gsum
+            
+            rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
+            tstr+='RMSE: %.2f\n'%rmse
+            
+            bias =gdx0['grid'].sum()/gdx0['bldg'].sum()
+            tstr+='bias: %.2f'%bias
+             
+            coords = (0.7, 0.05)
+     
+             
+            ax.text(*coords, tstr, 
+                                transform=ax.transAxes, va='bottom', ha='center', 
+                                bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                                )
         
         #ax.set_aspect('equal')
         
@@ -488,7 +500,7 @@ def plot_TL_agg_v_bldg(
     # get some function meta
     #===========================================================================
     #get model-dfid lookup
- 
+    
     meta_df = fserx_raw.index.to_frame().reset_index(drop=True).loc[:, ['df_id', 'model_id', 'abbreviation']
                                       ].drop_duplicates().set_index('df_id') 
   
@@ -524,11 +536,16 @@ def plot_TL_agg_v_bldg(
     #===========================================================================
     # #macro labelling
     #===========================================================================
+    if present:
+        fig.subplots_adjust(left=0.10)
+        labelpad=30
+    else:
+        labelpad=20
     #plt.subplots_adjust(left=1.0)
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
     macro_ax.set_ylabel('grid relative loss ($RL_{grid,j}$) * child building count ($B_{j}$)', 
-                        labelpad=20, size=font_size+2)
+                        labelpad=labelpad, size=font_size+2)
     macro_ax.set_xlabel('child relative loss mean ($\overline{RL_{bldg,j}}$) * child building count ($B_{j}$)', 
                         size=font_size+2)
     
@@ -539,35 +556,41 @@ def plot_TL_agg_v_bldg(
     # #add colorbar
     #===========================================================================
     #create the axis
-    fig.subplots_adjust(bottom=0.15, top=0.95, right=0.95)
-    leg_ax = fig.add_axes([0.05, 0.00, 0.9, 0.08], frameon=True) #left, bottom, width, height
-    leg_ax.set_visible(False)    
-    
-    #color scaling from density values
-    sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
-    
-    #add the colorbar
-    cbar = fig.colorbar(sm,
-                     ax=leg_ax,  # steal space from here (couldnt get cax to work)
-                     extend='both', #pointed ends
-                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
-                     label='log-transformed gaussian kernel-density estimate of relative losses (RL) * child building count ($B_{j}$)', 
-                     orientation='horizontal',
-                     fraction=.99,
-                     aspect=50, #make skinny
- 
-                     )
+    if not present:
+        fig.subplots_adjust(bottom=0.15, top=0.95, right=0.95)
+        leg_ax = fig.add_axes([0.05, 0.00, 0.9, 0.08], frameon=True) #left, bottom, width, height
+        leg_ax.set_visible(False)    
+        
+        #color scaling from density values
+        sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
+        
+        #add the colorbar
+        cbar = fig.colorbar(sm,
+                         ax=leg_ax,  # steal space from here (couldnt get cax to work)
+                         extend='both', #pointed ends
+                         format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
+                         label='log-transformed gaussian kernel-density estimate of relative losses (RL) * child building count ($B_{j}$)', 
+                         orientation='horizontal',
+                         fraction=.99,
+                         aspect=50, #make skinny
+     
+                         )
+        
+    else:
+        fig.subplots_adjust(top=0.95, right=0.95, left=0.13)
  
  
  
     #===========================================================================
     # write----------
     #===========================================================================
+    fig.patch.set_linewidth(10)  # set the line width of the frame
+    fig.patch.set_edgecolor('cornflowerblue')  # set the color of the frame
     
     
     ofp = os.path.join(out_dir, f'TL_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
     fig.savefig(ofp, dpi = dpi,   transparent=True,
-                edgecolor='black',
+                #edgecolor='black',
                 )
     
     plt.close('all')    
@@ -596,9 +619,9 @@ if __name__=='__main__':
     #plot_rl_raw(tableName='rl_deu_grid_bmean_1020')
  
    
-    plot_TL_agg_v_bldg(samp_frac=0.01, dfid_l=dfunc_curve_l,
+    plot_TL_agg_v_bldg(samp_frac=0.001, dfid_l=dfunc_curve_l,
                        dev=False, use_cache=True)
-    #===========================================================================
+ 
  
 
     
