@@ -13,7 +13,7 @@ plot relative loss of bldgs vs. agg
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'journal'
+env_type = 'present'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 plt.style.use('default')
 font_size=6
 dpi=300
+present=False
 def set_doc_style():
  
     
@@ -57,21 +58,21 @@ def set_doc_style():
             matplotlib.rcParams[k] = v
 
 #===============================================================================
-# journal style
+# journal style------
 #===============================================================================
 if env_type=='journal':
     set_doc_style() 
     dpi=1000
            
 #===============================================================================
-# draft
+# draft-------
 #===============================================================================
 elif env_type=='draft':
     set_doc_style() 
  
        
 #===============================================================================
-# presentation style    
+# presentation style---------
 #===============================================================================
 elif env_type=='present': 
  
@@ -79,7 +80,8 @@ elif env_type=='present':
         output_format='svg',add_stamp=True,add_subfigLabel=False,transparent=False
         )   
  
-    font_size=12
+    font_size=14
+    present=True
  
     matplotlib.rc('font', **{'family' : 'sans-serif','sans-serif':'Tahoma','weight' : 'normal','size':font_size})
      
@@ -91,7 +93,7 @@ elif env_type=='present':
         'ytick.labelsize':font_size,
         'figure.titlesize':font_size+4,
         'figure.autolayout':False,
-        'figure.figsize':(34*cm,19*cm), #GFZ template slide size
+        'figure.figsize':(22*cm,18*cm), #GFZ template slide size (w,h)
         'legend.title_fontsize':'large',
         'text.usetex':usetex,
         }.items():
@@ -465,7 +467,9 @@ def plot_rl_agg_v_bldg(
     
 
     
-    """plot relative loss agg vs. bldg
+    """plot relative loss agg vs. bldg.
+    
+    data loaded from damage.rl_deu_agg
     
     
     
@@ -500,6 +504,8 @@ def plot_rl_agg_v_bldg(
     # load data--------
     #===========================================================================
     dx = _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,   dev, use_aoi, log, use_cache=use_cache)
+    
+ 
     mdex=dx.index 
 
     #===========================================================================
@@ -536,15 +542,19 @@ def plot_rl_agg_v_bldg(
     #drop meta and add zero-zero
     fserx = force_and_slice(fserx_raw, log=log)
     
+
+    
     #===========================================================================
     # setup figure
     #===========================================================================
+ 
     row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+ 
  
     
     fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
                                constrained_layout=False, #needs to be unconstrainted for over label to work
-                               sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
+                               sharex=True, sharey='row', add_subfigLabel=np.invert(present), figsize=figsize)
     
     rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
     
@@ -560,29 +570,33 @@ def plot_rl_agg_v_bldg(
         ax = ax_d[row_key][col_key]
         
         gdx0 = gdx0.droplevel(kl[:2])
-        
  
-        
-        
         #=======================================================================
         # plot function 
         #=======================================================================
         wd_rl_df = fserx.xs(row_key, level='df_id').reset_index('wd').reset_index(drop=True)
         xar, yar = wd_rl_df['wd']*100, wd_rl_df['rl']
-         
-        ax.plot(xar, yar, color='black', marker='o', linestyle='solid', alpha=0.8, 
+        
+        plot_kwargs = dict(color='black', marker='o', linestyle='solid', alpha=0.8, 
                 markersize=3,fillstyle='none', linewidth=0.5, label=f'$f(WSH)$')
         
+        if env_type=='present':
+            plot_kwargs['markersize']=5
+            plot_kwargs['linewidth']=2.0
+            
+        
+         
+        ax.plot(xar, yar, **plot_kwargs)
  
-        
-        
-        #prep data
-        gdx1 = gdx0
-        df= gdx1.reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
+
         
         #===================================================================
         # scatter -------
         #===================================================================
+        
+        #prep data
+  
+        df= gdx0.reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
         
         #geet a sample of hte data
         df_sample = df.copy().sample(min(int(len(dx)*samp_frac), len(df)))
@@ -611,7 +625,14 @@ def plot_rl_agg_v_bldg(
         else:
             #just use dummy values
             z = np.full(x.shape, 1.0)
-        cax = ax.scatter(x, y, c=z, s=10, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+            
+            
+        scatter_kwargs=dict(s=10, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        if present:
+            scatter_kwargs['s']=30
+            scatter_kwargs['alpha']=0.5
+            
+        cax = ax.scatter(x, y, c=z, **scatter_kwargs)
         
         #===================================================================
         # plot binned bldg_mean lines
@@ -620,7 +641,7 @@ def plot_rl_agg_v_bldg(
                                        ).set_index('grid_wd_bin').iloc[:,0]
                            
         ax.plot(bin_serx, color='blue', alpha=1.0, marker=None, linestyle='dashed', 
-                markersize=2, linewidth=1.0,
+                 linewidth=plot_kwargs['linewidth'],
                 label='$\overline{RL_{bldg,j}}(WSH)$')
         
         #===================================================================
@@ -636,73 +657,38 @@ def plot_rl_agg_v_bldg(
         #===================================================================
         # text-------
         #===================================================================
+        if not env_type=='present':
+            bmean, gmean = gdx0.mean()
+            #tstr = f'count: {len(gdx0)}\n'
+            tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
+            tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
+            
+            rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
+            tstr+='\nRMSE: %.2f'%rmse
+            
+            bias = gmean/bmean
+            tstr+='\nbias: %.2f'%(bias)
+            
+            #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
+            
+            coords = (0.8, 0.05)
+            #=======================================================================
+            # if row_key==402:
+            #     coords = (coords[0], 0.5) #move it up
+            #=======================================================================
+     
+            
+            ax.text(*coords, tstr, size=font_size,
+                                transform=ax.transAxes, va='bottom', ha='center', 
+                                bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                                )
+        
+            #=======================================================================
+            # meta
+            #=======================================================================
+            if not row_key in meta_lib: meta_lib[row_key] = dict()
+            meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean, 'bias':bias}
  
-        bmean, gmean = gdx0.mean()
-        #tstr = f'count: {len(gdx0)}\n'
-        tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
-        tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
-        
-        rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
-        tstr+='\nRMSE: %.2f'%rmse
-        
-        bias = gmean/bmean
-        tstr+='\nbias: %.2f'%(bias)
-        
-        #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
-        
-        coords = (0.8, 0.05)
-        #=======================================================================
-        # if row_key==402:
-        #     coords = (coords[0], 0.5) #move it up
-        #=======================================================================
- 
-        
-        ax.text(*coords, tstr, size=6,
-                            transform=ax.transAxes, va='bottom', ha='center', 
-                            bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
-                            )
-        
-        #=======================================================================
-        # meta
-        #=======================================================================
-        if not row_key in meta_lib: meta_lib[row_key] = dict()
-        meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean, 'bias':bias}
-        
- 
-        
-    #===========================================================================
-    # plot histograms---------
-    #===========================================================================
- 
- #==============================================================================
- #    wd_df = dx.unstack(level='df_id').index.to_frame().reset_index(drop=True).drop(['i', 'j'], axis=1)
- #    for grid_size, gdf in wd_df.groupby('grid_size'):
- #        ax = ax_d['hist'][grid_size]
- #        
- #        ax.hist(gdf['grid_wd'], bins = np.linspace(0, 1000, 31 ), color='black', alpha=0.5, density =True)
- #        
- #        #turn off some spines
- #        ax.spines['top'].set_visible(False)
- #        ax.spines['right'].set_visible(False)
- #        ax.spines['left'].set_visible(False)
- #        
- #        #===================================================================
- #        # text
- #        #===================================================================
- # 
- #        tstr = f'n= {len(gdf):.2e}\n'
- #        tstr +='$\overline{WSH}$= %.2f'%gdf['grid_wd'].mean()
- #        #tstr +='\n$\sigma^2$= %.2f'%gdf['grid_wd'].var() #no... we want the asset variance
- #        ax.text(0.6, 0.5, tstr, 
- #                            transform=ax.transAxes, va='bottom', ha='left', 
- #                            #bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
- #                            )
- #        
- #        raise IOError('add building counts')
- #==============================================================================
- 
-        
-        
             
     #===========================================================================
     # get some function meta
@@ -729,10 +715,13 @@ def plot_rl_agg_v_bldg(
         if row_key == row_keys[0]:
             ax.set_xlim(0, 1010)
  
+ 
             ax.set_title(f'{col_key}m grid') 
 
             if col_key==col_keys[0]:
-                ax.legend(ncol=1, loc='upper center', frameon=False)
+                if not present:
+                    loc='upper center'
+                    ax.legend(ncol=1, loc=loc, frameon=False)
                 
         
         # last row
@@ -751,7 +740,9 @@ def plot_rl_agg_v_bldg(
     #===========================================================================
     # #macro labelling
     #===========================================================================
-    #plt.subplots_adjust(left=1.0)
+    if present:
+        fig.subplots_adjust(top=0.95)
+        
     macro_ax = fig.add_subplot(111, frame_on=False)
     _hide_ax(macro_ax) 
     macro_ax.set_ylabel(f'relative loss in % (RL)', labelpad=20, size=font_size+2)
@@ -761,7 +752,7 @@ def plot_rl_agg_v_bldg(
     # #add colorbar
     #===========================================================================
     #create the axis
-    if not len(row_keys)==1:
+    if (not len(row_keys)==1) and (not env_type=='present'):
         fig.subplots_adjust(bottom=0.15, top=0.95, right=0.98)
         leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
         
@@ -786,19 +777,416 @@ def plot_rl_agg_v_bldg(
                      )
 
     else:
-        fig.subplots_adjust(right=0.98, bottom=0.18)
+        if present:
+            fig.subplots_adjust(right=0.92, bottom=0.12, top=0.92)
+        else:
+ 
+            fig.subplots_adjust(right=0.98, bottom=0.18)
+            
  
  
  
     #===========================================================================
     # meta
     #===========================================================================
-    meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
-                        names=['df_id', 'stat'])
+    if not present:
+        meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
+                            names=['df_id', 'stat'])
+        
+        mdf1 = meta_df.stack().unstack(level='stat')
+     
+        log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
+        
+    #===========================================================================
+    # write-------
+    #===========================================================================
+    fig.patch.set_linewidth(10)  # set the line width of the frame
+    fig.patch.set_edgecolor('cornflowerblue')  # set the color of the frame
     
-    mdf1 = meta_df.stack().unstack(level='stat')
+    
+    
+    uuid = hashlib.shake_256(f'{dfid_l}_{dev}'.encode("utf-8"), usedforsecurity=False).hexdigest(6)
+    fnstr=f'{env_type}_{len(col_keys)}x{len(row_keys)}'
+    if present:fnstr+='_present'
+    if use_aoi:fnstr+='_aoi'
+    ofp = os.path.join(out_dir, f'rl_{fnstr}_{today_str}_{uuid}.svg')
+    fig.savefig(ofp, dpi = dpi,   transparent=True,
+                #edgecolor='black'
+                )
+    
+    plt.close('all')
+    
+    
  
-    log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
+    meta_d = {
+                    'tdelta':'%.2f secs'%(datetime.now()-start).total_seconds(),
+                    #'RAM_GB':psutil.virtual_memory () [3]/1000000000,
+                    #'file_GB':get_directory_size(out_dir),
+                    'output_MB':os.path.getsize(ofp)/(1024**2)
+                    }
+     
+    log.info(meta_d)
+    
+    log.info(f'wrote to \n    {ofp}')
+     
+    return ofp
+ 
+
+def plot_rl_agg_v_bldg_single(
+        dx_raw=None,fserx_raw=None,
+        country_key='deu',
+        haz_key='f500_fluvial',
+        out_dir=None,
+        figsize=None,
+        #min_wet_frac=1.0,
+        min_bldg_cnt=2,
+        dfid_l = None, 
+        samp_frac=0.0001, #
+        dev=False,
+        ylab_d = clean_names_d,
+        cmap='PuRd_r',
+        use_cache=True,
+        use_aoi=False,
+        ):
+    
+
+    
+    """plot relative loss agg vs. bldg
+    
+    
+    
+    Params
+    -------------
+    fserx_raw: pd.Series
+        loss functions
+        
+    samp_frac: float
+        for reducing the data sent to gaussian_kde
+        relative to size of complete data set (not the gruops)
+ 
+     use_aoi: bool
+         load the spatially sliced grid ids and only include these
+    """
+ 
+    #===========================================================================
+    # defaults
+    #===========================================================================
+    start=datetime.now()
+  
+    if out_dir is None:
+        out_dir=os.path.join(wrk_dir, 'outs', 'damage', 'da', today_str)
+    if not os.path.exists(out_dir):os.makedirs(out_dir)
+     
+    log = init_log(fp=os.path.join(out_dir, today_str + '.log'), name='rl_agg')
+            
+    if dev: 
+        samp_frac = 1.0
+    
+    #===========================================================================
+    # load data--------
+    #===========================================================================
+    dx = _load_and_filter(dx_raw, country_key, haz_key, min_bldg_cnt, dfid_l,   dev, use_aoi, log, use_cache=use_cache)
+    
+    if env_type=='present':
+        log.info(f'presentation')
+        
+        #just one grid size
+        dx = dx.loc[idx[1020, :, :, :, :, :, :], :]
+        """
+        view(dx.head(100))
+        """
+ 
+        
+    mdex=dx.index 
+
+    #===========================================================================
+    # # get binned means    
+    #===========================================================================
+    
+    keys_l =  ['grid_size',   'df_id', 'grid_wd'] #only keys we preserve   
+ 
+    #get a slice with clean index
+    sx1 = dx['bldg'].reset_index(keys_l).reset_index(drop=True).set_index(keys_l)
+     
+    mean_bin_dx = compute_binned_mean(sx1, log=log, use_cache=use_cache)
+    
+    """
+    view(dx.head(100))
+    """
+ 
+ 
+    #===========================================================================
+    # setup indexers
+    #===========================================================================        
+    keys_d = {'row':'df_id',  'col':'grid_size'}
+    kl = list(keys_d.values())     
+    log.info(f' loaded {len(dx)}')
+    
+    
+    #===========================================================================
+    # prep loss functions---------
+    #===========================================================================
+    if fserx_raw is None: 
+        fserx_raw = get_funcLib() #select functions
+ 
+ 
+    #drop meta and add zero-zero
+    fserx = force_and_slice(fserx_raw, log=log)
+    
+
+    
+    #===========================================================================
+    # setup figure
+    #===========================================================================
+ 
+    row_keys, col_keys = [mdex.unique(e).tolist() for e in keys_d.values()]
+ 
+ 
+    
+    fig, ax_d = get_matrix_fig(row_keys, col_keys, log=log, set_ax_title=False, 
+                               constrained_layout=False, #needs to be unconstrainted for over label to work
+                               sharex=True, sharey='row', add_subfigLabel=True, figsize=figsize)
+    
+    rc_ax_iter = [(row_key, col_key, ax) for row_key, ax_di in ax_d.items() for col_key, ax in ax_di.items()]
+    
+ 
+    #===========================================================================
+    # loop and plot-----
+    #===========================================================================
+ 
+    meta_lib=dict()
+ 
+    for (row_key, col_key), gdx0 in dx.groupby(kl[:2]):
+        log.info(f'df_id:{row_key} x grid_size:{col_key}')
+        ax = ax_d[row_key][col_key]
+        
+        gdx0 = gdx0.droplevel(kl[:2])
+ 
+        #=======================================================================
+        # plot function 
+        #=======================================================================
+        wd_rl_df = fserx.xs(row_key, level='df_id').reset_index('wd').reset_index(drop=True)
+        xar, yar = wd_rl_df['wd']*100, wd_rl_df['rl']
+        
+        plot_kwargs = dict(color='black', marker='o', linestyle='solid', alpha=0.8, 
+                markersize=3,fillstyle='none', linewidth=0.5, label=f'$f(WSH)$')
+        
+        if env_type=='present':
+            plot_kwargs['markersize']=10
+            plot_kwargs['linewidth']=2.0
+            
+        
+         
+        ax.plot(xar, yar, **plot_kwargs)
+ 
+
+        
+        #===================================================================
+        # scatter -------
+        #===================================================================
+        
+        #prep data
+  
+        df= gdx0.reset_index('grid_wd').reset_index(drop=True).set_index('grid_wd')
+        
+        #geet a sample of hte data
+        df_sample = df.copy().sample(min(int(len(dx)*samp_frac), len(df)))
+        assert len(df_sample)>0
+        
+        log.info(f'    w/ {df.size} and sample {df_sample.size}')
+        
+        #ax.plot(df['bldg'], color='black', alpha=0.3,   marker='.', linestyle='none', markersize=3,label='building')
+        #as density
+        x,y = df_sample.index.values, df_sample['bldg'].values
+        
+        if not len(df_sample) < 3 or row_key==946:
+            #xy = np.vstack([x,y])
+            xy = np.vstack([np.log(x),np.log(y)]) #log transformed
+            
+            """need to compute this for each set... should have some common color scale.. but the values dont really matter"""
+            try:
+                pdf = gaussian_kde(xy)
+            except Exception as e:
+                raise IOError(f'failed to build gaussian on\n    {xy} w/\n    w/ {e}')
+            z = pdf(xy) #Evaluate the estimated pdf on a set of points.
+            
+            # Sort the points by density, so that the densest points are plotted last
+            indexer = z.argsort()
+            x, y, z = x[indexer], y[indexer], z[indexer]
+        else:
+            #just use dummy values
+            z = np.full(x.shape, 1.0)
+            
+            
+        scatter_kwargs=dict(s=10, cmap=cmap, alpha=0.3, marker='.', edgecolors='none', rasterized=True)
+        if env_type=='present':
+            scatter_kwargs['s']=40
+            scatter_kwargs['alpha']=0.5
+            
+        cax = ax.scatter(x, y, c=z, **scatter_kwargs)
+        
+        #===================================================================
+        # plot binned bldg_mean lines
+        #===================================================================
+        bin_serx = mean_bin_dx.loc[idx[col_key, row_key, :], :].reset_index(drop=True
+                                       ).set_index('grid_wd_bin').iloc[:,0]
+                           
+        ax.plot(bin_serx, color='blue', alpha=1.0, marker=None, linestyle='dashed', 
+                 linewidth=plot_kwargs['linewidth'],
+                label='$\overline{RL_{bldg,j}}(WSH)$')
+        
+        #===================================================================
+        # plot grid-----
+        #===================================================================
+        #usaeful for debugging
+        #ax.plot(df.index.values, df['grid'], color='green', marker='.', alpha=0.3, markersize=1, fillstyle='none', linestyle='none')
+        """
+        plt.show()
+        """
+ 
+            
+        #===================================================================
+        # text-------
+        #===================================================================
+        if not env_type=='present':
+            bmean, gmean = gdx0.mean()
+            #tstr = f'count: {len(gdx0)}\n'
+            tstr ='$\overline{\overline{RL_{bldg,j}}}$: %.2f'%bmean
+            tstr+='\n$\overline{RL_{grid,j}}$: %.2f'%gmean
+            
+            rmse = np.sqrt(np.mean((gdx0['bldg'] - gdx0['grid'])**2))
+            tstr+='\nRMSE: %.2f'%rmse
+            
+            bias = gmean/bmean
+            tstr+='\nbias: %.2f'%(bias)
+            
+            #tstr+='\n$\overline{wd}$: %.2f'%(gdx0.index.get_level_values('grid_wd').values.mean())
+            
+            coords = (0.8, 0.05)
+            #=======================================================================
+            # if row_key==402:
+            #     coords = (coords[0], 0.5) #move it up
+            #=======================================================================
+     
+            
+            ax.text(*coords, tstr, size=font_size,
+                                transform=ax.transAxes, va='bottom', ha='center', 
+                                bbox=dict(boxstyle="round,pad=0.3", fc="white", lw=0.0,alpha=0.5 ),
+                                )
+        
+            #=======================================================================
+            # meta
+            #=======================================================================
+            if not row_key in meta_lib: meta_lib[row_key] = dict()
+            meta_lib[row_key][col_key] = {'bldg_rl_pop_mean':bmean, 'grid_rl_pop_mean':gmean, 'bias':bias}
+ 
+            
+    #===========================================================================
+    # get some function meta
+    #===========================================================================
+    #get model-dfid lookup
+ 
+    meta_df = fserx_raw.index.to_frame().reset_index(drop=True).loc[:, ['df_id', 'model_id', 'abbreviation']
+                                      ].drop_duplicates().set_index('df_id') 
+  
+    #add defaults and convert to df_id
+    ylab_d1=dict()
+    for i, row in meta_df.iterrows():
+        if not row['model_id'] in ylab_d:
+            ylab_d1[i] = row['abbreviation']
+        else:
+            ylab_d1[i] = ylab_d[row['model_id']]
+ 
+    #===========================================================================
+    # post----
+    #===========================================================================    
+    for row_key, col_key, ax in rc_ax_iter:
+ 
+        # first row
+        if row_key == row_keys[0]:
+            ax.set_xlim(0, 1010)
+ 
+            if not env_type=='present':
+                ax.set_title(f'{col_key}m grid') 
+
+            if col_key==col_keys[0]:
+                if env_type=='present':
+                    loc=0
+                else:
+                    loc='upper center'
+                ax.legend(ncol=1, loc=loc, frameon=False)
+                
+        
+        # last row
+        if row_key == row_keys[-1]: 
+            pass 
+            # ax.set_xlabel(f'WSH (cm)')
+             
+        # first col
+        if col_key == col_keys[0]: 
+            if not row_key=='hist':
+                ax.set_ylabel(ylab_d1[row_key])
+            else:
+                ax.set_ylabel(f'density of WSH')
+ 
+            
+    #===========================================================================
+    # #macro labelling
+    #===========================================================================
+    if env_type=='present':
+        plt.subplots_adjust(left=0.2)
+        
+    macro_ax = fig.add_subplot(111, frame_on=False)
+    _hide_ax(macro_ax) 
+    macro_ax.set_ylabel(f'relative loss in % (RL)', labelpad=20, size=font_size+2)
+    macro_ax.set_xlabel(f'water depth in cm (WSH)', size=font_size+2)
+ 
+    #===========================================================================
+    # #add colorbar
+    #===========================================================================
+    #create the axis
+    if (not len(row_keys)==1) and (not env_type=='present'):
+        fig.subplots_adjust(bottom=0.15, top=0.95, right=0.98)
+        leg_ax = fig.add_axes([0.07, 0, 0.9, 0.08], frameon=True)
+        
+        
+        
+        leg_ax.set_visible(False)
+            
+        
+        #color scaling from density values
+        sm = plt.cm.ScalarMappable(norm=plt.Normalize(min(z), max(z)), cmap=cmap)
+        
+        #add the colorbar
+        cbar = fig.colorbar(sm,
+                     ax=leg_ax,  # steal space from here (couldnt get cax to work)
+                     extend='both', #pointed ends
+                     format = matplotlib.ticker.FuncFormatter(lambda x, p:'%.1e' % x),
+                     label='log-transformed gaussian kernel-density estimate of $\overline{RL_{bldg,j}}[WSH]$', 
+                     orientation='horizontal',
+                     fraction=.99,
+                     aspect=50, #make skinny
+        
+                     )
+
+    else:
+        if env_type=='present':
+            fig.subplots_adjust(right=0.95, bottom=0.1, top=0.98)
+        else:
+            fig.subplots_adjust(right=0.98, bottom=0.18)
+ 
+ 
+ 
+    #===========================================================================
+    # meta
+    #===========================================================================
+    if not env_type=='present':
+        meta_df = pd.concat({k:pd.DataFrame.from_dict(v) for k,v in meta_lib.items()},
+                            names=['df_id', 'stat'])
+        
+        mdf1 = meta_df.stack().unstack(level='stat')
+     
+        log.info(f'meta w/ {meta_df.shape}\n%s'%mdf1['bias'])
         
     #===========================================================================
     # write-------
@@ -835,6 +1223,7 @@ def plot_rl_agg_v_bldg(
  
   
     
+    
 if __name__=='__main__':
     
     hill_curve_l = [942,  944, 945, 946]
@@ -846,15 +1235,19 @@ if __name__=='__main__':
    
     #plot_TL_agg_v_bldg(samp_frac=0.01)
     plot_rl_agg_v_bldg(dev=False,  use_cache=True,  
-                       samp_frac=0.01,
-                       dfid_l=hill_curve_l,                
+                       samp_frac=0.005,
+                       #dfid_l=hill_curve_l, #Figure S2
+                       dfid_l=dfunc_curve_l, #Figure 4
+ 
+                                 
                        )
     
+    #single function presentation
+    #plot_rl_agg_v_bldg_single(use_cache=True,dfid_l=[380],samp_frac=0.9)
+    
     #Koblenz focal area
-    #===========================================================================
-    # plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
-    #                    figsize=(18*cm,6*cm))
-    #===========================================================================
+    plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,
+                       figsize=(18*cm,6*cm))
 
     
  
