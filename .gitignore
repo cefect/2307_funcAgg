@@ -129,6 +129,10 @@ dmypy.json
 .project
 .settings
 
+#VS Code
+.vscode
+*.code-workspace
+
 
 #Qgis temporary files
 *.gpkg-wal
@@ -142,3 +146,4 @@ dmypy.json
 *.lnk
 
 definitions.py
+2307_funcAgg.code-workspace
