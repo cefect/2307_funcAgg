@@ -17,7 +17,8 @@ import matplotlib.pyplot as plt
 
 
 from coms import (
-    init_log, today_str, get_directory_size,dstr, view, pd_mdex_append_level
+    init_log, today_str, get_directory_size,dstr, view, pd_mdex_append_level,
+    get_log_stream
     ) 
 
 from funcMetrics.coms_fm import slice_serx
@@ -841,6 +842,7 @@ def _print_lib(mdex):
 
 def slice_lib(
         lib_fp=None,
+        log=None,
  
         #=======================================================================
         # use_null_coln_d = {
@@ -864,7 +866,7 @@ def slice_lib(
     """
     
 
-    
+    if log is None: log = get_log_stream('slice')
     
     #===========================================================================
     # load
@@ -891,16 +893,20 @@ def slice_lib(
     
     lib_serx1 = lib_serx_raw[bx.values]
     
-    print('global slice w/')
+    log.info('global slice w/')
     _print_lib(lib_serx1.index)
+    """
+    mdf.columns
+    view(mdf)
+    """
     #===========================================================================
     # slice
     #===========================================================================
     res_d = dict()
-    print(f'looping per model_id')
+    log.info(f'looping per model_id')
     for model_id, gserx in lib_serx1.groupby('model_id'):
         dfid_l = gserx.index.unique('df_id')
-        print(f'model_id {model_id} got {len(dfid_l)} funcs %s'%gserx.index.unique('abbreviation').tolist())
+        log.info(f'model_id {model_id} got {len(dfid_l)} funcs %s'%gserx.index.unique('abbreviation').tolist())
         #=======================================================================
         # ammend FLEMO
         #=======================================================================
@@ -1001,7 +1007,7 @@ def get_funcLib(
     if out_dir is None:
         out_dir = os.path.join(temp_dir, 'funcMetrics', 'get_funcLib')
     if not os.path.exists(out_dir):os.makedirs(out_dir)
-    if log is None: log = logging.getLogger('funcLib')
+    if log is None: log = get_log_stream('funcLib')
     
     #===========================================================================
     # get hash
@@ -1014,7 +1020,7 @@ def get_funcLib(
     # build
     #===========================================================================
     if (not os.path.exists(ofp)) or (not use_cache):
-        serx = slice_lib(lib_fp, **kwargs)
+        serx = slice_lib(lib_fp, log=log, **kwargs)
         serx.to_pickle(ofp)
         log.info(f'wrote to\n    {ofp}')
     else:
@@ -1055,7 +1061,7 @@ if __name__ == '__main__':
      
     #slice_lib()
     
-    #get_funcLib(use_cache=False)
+    get_funcLib(use_cache=False)
 
 
 

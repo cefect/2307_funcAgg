@@ -100,6 +100,12 @@ def run_calc_envelopes(fserx_raw=None,
         
     #drop zeros
     fserx = fserx.loc[fserx.index.get_level_values('wd')>=0]
+    
+    #convert to cm
+    index_df = fserx.index.to_frame().reset_index(drop=True)
+    index_df['wd']=index_df['wd']*100
+    fserx.index = pd.MultiIndex.from_frame(index_df)
+ 
  
     
     """
@@ -205,7 +211,7 @@ def run_calc_envelopes(fserx_raw=None,
     
     ofp = os.path.join(out_dir, f'envelopes_{len(df)}_{today_str}')
     
-    log.info(f'finished w/ {df.shape} and wrote to \n    {ofp}')
+    log.info(f'finished w/ {df.shape} and wrote to \n    {ofp}.svg')
     
     
     fig.savefig(ofp+'.svg', dpi = 300,   transparent=True,
