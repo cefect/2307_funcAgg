@@ -13,17 +13,26 @@ Project was originally setup for 6 countries
 ### compute
 Workflow diagram is here: l:\02_WORK\NRC\2307_funcAgg\04_CALC\2307_funcAgg - pipeline.pptx
 
-Much of aggregation and spatial manipulation is carried out on a postgres server using python scripts. All tables can be generated with the provided scripts/workflow; however, this can be slow. Alternatively, a dump of the schemas is here: `j:\10_IO\2307_funcAgg\lib\postgres\pg_dump_2307_funcAgg_j_1030.dump\`. All data analysis/plots should read from postgres. 
+Much of aggregation and spatial manipulation is carried out on a postgres server using python scripts. All tables can be generated with the provided scripts/workflow; however, this can be slow. Alternatively, a dump of the schemas is here: `j:\10_IO\2307_funcAgg\lib\postgres\pg_dump_2307_funcAgg_j_1030.dump\`. 
+All data analysis/plots should read from postgres. 
+
+WARNING: could not get the dump to work.. see readme.txt
 
 
 
 
 ### figures
 
+from `wd_bstats.a03_gstats_{expo_str}_{country_key}`:
+- Figure 2:  Germany-wide child depths mean and standard deviation for three levels of grid-aggregation and four hazard scenarios.: `_05depths.da_gstats.plot_gstats()`
+
 The following plots are made primarily from the table `damage.rl_deu_agg`:
 - Figure 4: Relative losses for three grid aggregations for the 500-year fluvial undefended hazard scenario and the four selected flood damage functions (Table 1):`_03damage.da_loss.plot_rl_agg_v_bldg(dfid_l=dfunc_curve_l)`
 - Figure S2: Relative losses for three grid aggregations and four idealized functions: `_03damage.da_loss.plot_rl_agg_v_bldg(dfid_l=hill_curve_l)`
-- Figure 5: Relative losses for a single damage function for the sub-domain: `plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,figsize=(18*cm,6*cm))`- Figure 6: Building count weighted relative losses for three grid aggregations and four flood damage functions for the 500-year fluvial undefended hazard scenario:  `_03damage.da_loss.plot_TL_agg_v_bldg()`
+- Figure 5: Relative losses for a single damage function for the sub-domain: `plot_rl_agg_v_bldg(use_cache=True,samp_frac=1.0,dfid_l=[26],  use_aoi=True,figsize=(18*cm,6*cm))`
+- Figure 6: Building count weighted relative losses for three grid aggregations and four flood damage functions for the 500-year fluvial undefended hazard scenario:  `_03damage.da_tloss.plot_TL_agg_v_bldg()`
+
+
 
 ## install
 build conda environment from ./environment.yml

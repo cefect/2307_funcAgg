@@ -13,7 +13,7 @@ plot building grouped stats
 #===============================================================================
 # setup matplotlib----------
 #===============================================================================
-env_type = 'draft'
+env_type = 'journal'
 cm = 1 / 2.54
 
 if env_type == 'journal': 
@@ -121,7 +121,7 @@ from definitions import wrk_dir, clean_names_d, haz_label_d, postgres_d
 
 from coms import init_log, today_str, view
 from coms_da import get_matrix_fig, _get_cmap, _hide_ax
-from funcMetrics.func_prep import get_funcLib
+from misc.func_prep import get_funcLib
 from funcMetrics.coms_fm import (
     slice_serx, force_max_depth, force_zero_zero, force_monotonic, force_and_slice
     )
@@ -149,20 +149,21 @@ def plot_gstats(
         #min_wet_frac=0.95,
         min_bldg_cnt=2,
  
-        samp_frac=0.0001, #
+        samp_frac=1.0, #
         dev=False,
  
         cmap='viridis',
         use_aoi=False,
         use_cache=True,
+        ext='svg'
         
         ):
     
  
  
-    """grid centroids vs. child building means 
+    """plot group statistics
     
-    not sure we need thsi for hte paper... but a nice check
+    Figure 2: Germany-wide child depths mean and standard deviation for three levels of grid-aggregation and four hazard scenarios. Histograms show the distribution of their respective axis. 
     
     
     Params
@@ -533,7 +534,7 @@ def plot_gstats(
     #===========================================================================
     
     
-    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.svg')
+    ofp = os.path.join(out_dir, f'gstats_{xcoln}-{ycoln}_{env_type}_{len(col_keys)}x{len(row_keys)}_{today_str}.{ext}')
     fig.savefig(ofp, dpi = dpi,   transparent=True, 
                 #edgecolor=fig.get_edgecolor(),
                 )
@@ -560,16 +561,15 @@ def plot_gstats(
 if __name__=='__main__':
     
     #main variance figure
-    #===========================================================================
-    # plot_gstats(dev=False, 
-    #             samp_frac=0.01,
-    #             #xcoln='wet_frac', #not a strong relation
-    #             #dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl')
-    #             )
-    #===========================================================================
+    plot_gstats(dev=False, 
+                #samp_frac=0.01,
+                #xcoln='wet_frac', #not a strong relation
+                dx_raw = pd.read_pickle(r'l:\\10_IO\\2307_funcAgg\\outs\\depths\\da\\20230926\\dev_dx_raw_10000_20230926.pkl'),
+                ext='pdf', #pdf for tex
+                )
     
     #aoi variance
-    plot_gstats(samp_frac=1.0,use_aoi=True, use_cache=False)
+    #plot_gstats(samp_frac=1.0,use_aoi=True, use_cache=True)
 
     
  

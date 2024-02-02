@@ -297,6 +297,7 @@ def dstr(d,
     return pprint.pformat(d, width=width, indent=indent, compact=compact, sort_dicts =sort_dicts)
 
 def view(df):
+    """view a DataFrame in the system default web browser"""
     if isinstance(df, pd.Series):
         df = pd.DataFrame(df)
     import webbrowser
