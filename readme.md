@@ -2,7 +2,7 @@
 # Flood Damage Function Aggregation Processing Pipeline and Data Analysis Scripts
 scripts for computation and data analysis of potential errors arising from aggregation of different loss functions
 
-
+![Alt text for the image](img/germany_map.png)
 
 ## updates
 - 2023-10-30: compressed and deleted some outputs. dump of postgres tables
