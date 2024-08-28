@@ -10,15 +10,14 @@ scripts for computation and data analysis of potential errors arising from aggre
 ## Use
 Project was originally setup for 6 countries
 
-### compute
+### compute/data
 Workflow diagram is here: l:\02_WORK\NRC\2307_funcAgg\04_CALC\2307_funcAgg - pipeline.pptx
 
-Much of aggregation and spatial manipulation is carried out on a postgres server using python scripts. All tables can be generated with the provided scripts/workflow; however, this can be slow. Alternatively, a dump of the schemas is here: `j:\10_IO\2307_funcAgg\lib\postgres\pg_dump_2307_funcAgg_j_1030.dump\`. 
-All data analysis/plots should read from postgres. 
+Much of aggregation and spatial manipulation is carried out on a postgres server using python scripts. All tables can be generated with the provided scripts/workflow; however, this can be slow. Alternatively, a dump of the db is in the data archive.
+All raw data for analysis/plots are read from 2 postgres tables. cache pickles are used also and provided in the data archive.
 
-WARNING: could not get the dump to work.. see readme.txt
-
-
+### data archive
+2024-08-28: uploaded a zip to [gdrive.cefskillz](https://drive.google.com/drive/folders/1iGgX0MxeIl3PL_jwQCx6xIRBAD29MWHB?usp=drive_link)
 
 
 ### figures
